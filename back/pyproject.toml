@@ -1,0 +1,30 @@
+[project]
+name = "proteo-viewer-backend"
+version = "0.1.0"
+description = "Backend for the histone dataset viewer."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0.32",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.13",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "python-dotenv>=1.0",
+    "typer>=0.12",
+    "rich>=13.7",
+    "orjson>=3.10",
+    "tqdm>=4.66",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
