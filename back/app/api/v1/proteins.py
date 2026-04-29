@@ -1,24 +1,23 @@
-"""某 cutoff 下的蛋白质列表与详情 API。"""
+"""某 cutoff 下的蛋白质列表与详情 API：读取 universal schema。"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import asc, desc, func, or_, select
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_cutoff, get_db
-from app.models import Cutoff, Protein, Proteoform
+from app.api.deps import get_db
+from app.api.v1.universal_compat import require_cutoff, require_dataset
 from app.schemas import Page, ProteinDetailOut, ProteinListItemOut, ProteoformListItemOut
 
 router = APIRouter(tags=["proteins"])
 
-# 允许通过 query 参数 `sort` 排序的列名 → ORM 列映射；未命中时回退到 sequence_id。
 SORT_MAP = {
-    "sequence_id": Protein.sequence_id,
-    "sequence_name": Protein.sequence_name,
-    "compatible_proteoform_number": Protein.compatible_proteoform_number,
-    "prsm_number": Protein.prsm_number,
-    "best_prsm_e_value": Protein.best_prsm_e_value,
+    "sequence_id": "sequence_id",
+    "sequence_name": "sequence_name",
+    "compatible_proteoform_number": "compatible_proteoform_number",
+    "prsm_number": "prsm_number",
+    "best_prsm_e_value": "best_prsm_e_value",
 }
 
 
@@ -33,21 +32,46 @@ def list_proteins(
     sort: str = Query("sequence_id"),
     order: str = Query("asc", pattern="^(asc|desc)$"),
     session: Session = Depends(get_db),
-    cutoff: Cutoff = Depends(get_cutoff),
+    slug: str = "",
+    cutoff: str = "",
 ) -> Page[ProteinListItemOut]:
     """分页列出蛋白质；可选名称/描述模糊搜索。`total` 为过滤后总行数。"""
-    stmt = select(Protein).where(Protein.cutoff_id == cutoff.id)
+    dataset = require_dataset(session, slug)
+    require_cutoff(cutoff)
+    base_sql = """
+        SELECT
+            p.protein_id AS id,
+            CAST(jsonb_extract_path_text(p.extra_metadata, 'source_sequence_id') AS integer) AS sequence_id,
+            COALESCE(jsonb_extract_path_text(p.extra_metadata, 'source_sequence_name'), p.accession) AS sequence_name,
+            p.description AS sequence_description,
+            COALESCE(CAST(jsonb_extract_path_text(p.extra_metadata, 'compatible_proteoform_number') AS integer), 0) AS compatible_proteoform_number,
+            COALESCE(CAST(jsonb_extract_path_text(p.extra_metadata, 'prsm_number') AS integer), 0) AS prsm_number,
+            CAST(jsonb_extract_path_text(p.extra_metadata, 'best_prsm_id') AS integer) AS best_prsm_id,
+            CAST(jsonb_extract_path_text(p.extra_metadata, 'best_prsm_e_value') AS double precision) AS best_prsm_e_value
+        FROM proteins p
+        WHERE p.dataset_id = :dataset_id
+    """
+    params: dict[str, object] = {"dataset_id": dataset["dataset_id"]}
     if search:
-        like = f"%{search}%"
-        stmt = stmt.where(or_(Protein.sequence_name.ilike(like), Protein.sequence_description.ilike(like)))
+        base_sql += """
+            AND (
+                COALESCE(jsonb_extract_path_text(p.extra_metadata, 'source_sequence_name'), p.accession) ILIKE :search
+                OR p.description ILIKE :search
+            )
+        """
+        params["search"] = f"%{search}%"
 
-    sort_col = SORT_MAP.get(sort, Protein.sequence_id)
-    stmt = stmt.order_by(asc(sort_col) if order == "asc" else desc(sort_col))
+    count_sql = f"SELECT count(1) FROM ({base_sql}) AS q"
+    sort_col = SORT_MAP.get(sort, "sequence_id")
+    base_sql += f" ORDER BY {sort_col} {'ASC' if order == 'asc' else 'DESC'} NULLS LAST"
+    base_sql += " OFFSET :offset LIMIT :limit"
+    params["offset"] = (page - 1) * page_size
+    params["limit"] = page_size
 
-    total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows = session.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+    total = session.scalar(text(count_sql), params) or 0
+    rows = session.execute(text(base_sql), params).mappings().all()
     return Page[ProteinListItemOut](
-        items=[ProteinListItemOut.model_validate(r) for r in rows],
+        items=[ProteinListItemOut(**dict(r)) for r in rows],
         total=total,
         page=page,
         page_size=page_size,
@@ -61,32 +85,58 @@ def list_proteins(
 def get_protein(
     protein_id: int,
     session: Session = Depends(get_db),
-    cutoff: Cutoff = Depends(get_cutoff),
+    slug: str = "",
+    cutoff: str = "",
 ) -> ProteinDetailOut:
     """单条蛋白质详情；路径中的 protein_id 为表 ``proteins.id``（主键）。"""
+    dataset = require_dataset(session, slug)
+    require_cutoff(cutoff)
     protein = session.execute(
-        select(Protein).where(Protein.cutoff_id == cutoff.id, Protein.id == protein_id)
-    ).scalar_one_or_none()
+        text(
+            """
+            SELECT
+                p.protein_id AS id,
+                CAST(jsonb_extract_path_text(p.extra_metadata, 'source_sequence_id') AS integer) AS sequence_id,
+                COALESCE(jsonb_extract_path_text(p.extra_metadata, 'source_sequence_name'), p.accession) AS sequence_name,
+                p.description AS sequence_description,
+                COALESCE(CAST(jsonb_extract_path_text(p.extra_metadata, 'compatible_proteoform_number') AS integer), 0) AS compatible_proteoform_number,
+                COALESCE(CAST(jsonb_extract_path_text(p.extra_metadata, 'prsm_number') AS integer), 0) AS prsm_number,
+                CAST(jsonb_extract_path_text(p.extra_metadata, 'best_prsm_id') AS integer) AS best_prsm_id,
+                CAST(jsonb_extract_path_text(p.extra_metadata, 'best_prsm_e_value') AS double precision) AS best_prsm_e_value
+            FROM proteins p
+            WHERE p.dataset_id = :dataset_id AND p.protein_id = :protein_id
+            """
+        ),
+        {"dataset_id": dataset["dataset_id"], "protein_id": protein_id},
+    ).mappings().one_or_none()
     if protein is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "protein not found")
 
-    pfs = (
-        session.execute(
-            select(Proteoform)
-            .where(Proteoform.protein_id == protein.id)
-            .order_by(Proteoform.proteoform_id)
-        )
-        .scalars()
-        .all()
-    )
+    pfs = session.execute(
+        text(
+            """
+            SELECT
+                pf.proteoform_id AS id,
+                CAST(jsonb_extract_path_text(pf.extra_metadata, 'source_proteoform_id') AS integer) AS proteoform_id,
+                CAST(jsonb_extract_path_text(pf.extra_metadata, 'source_sequence_id') AS integer) AS sequence_id,
+                COALESCE(jsonb_extract_path_text(pf.extra_metadata, 'sequence_name'), '') AS sequence_name,
+                pf.theoretical_mass AS proteoform_mass,
+                COALESCE(CAST(jsonb_extract_path_text(pf.extra_metadata, 'prsm_number') AS integer), 0) AS prsm_number,
+                CAST(jsonb_extract_path_text(pf.extra_metadata, 'best_prsm_id') AS integer) AS best_prsm_id,
+                CAST(jsonb_extract_path_text(pf.extra_metadata, 'best_prsm_e_value') AS double precision) AS best_prsm_e_value,
+                NULL::integer AS n_acetylation,
+                NULL::integer AS unexpected_shift_number
+            FROM protein_relation_mapping prm
+            JOIN proteoforms pf ON pf.proteoform_id = prm.entity_id
+            WHERE prm.dataset_id = :dataset_id
+              AND prm.protein_id = :protein_id
+              AND prm.entity_type = 'PROTEOFORM'
+            ORDER BY proteoform_id
+            """
+        ),
+        {"dataset_id": dataset["dataset_id"], "protein_id": protein_id},
+    ).mappings().all()
     return ProteinDetailOut(
-        id=protein.id,
-        sequence_id=protein.sequence_id,
-        sequence_name=protein.sequence_name,
-        sequence_description=protein.sequence_description,
-        compatible_proteoform_number=protein.compatible_proteoform_number,
-        prsm_number=protein.prsm_number,
-        best_prsm_id=protein.best_prsm_id,
-        best_prsm_e_value=protein.best_prsm_e_value,
-        proteoforms=[ProteoformListItemOut.model_validate(pf) for pf in pfs],
+        **dict(protein),
+        proteoforms=[ProteoformListItemOut(**dict(pf)) for pf in pfs],
     )

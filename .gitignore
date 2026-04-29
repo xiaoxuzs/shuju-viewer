@@ -1,0 +1,46 @@
+# ---- 原始数据（体积大、可外部拷贝，勿提交）----
+shuju/
+
+# ---- 凭据与本地环境（勿提交）----
+.env
+.env.*
+!.env.example
+**/.env
+!**/.env.example
+
+# ---- Python 后端 `back/` ----
+back/.venv/
+back/**/__pycache__/
+back/**/*.pyc
+back/.pytest_cache/
+back/.mypy_cache/
+back/.ruff_cache/
+back/**/*.egg-info/
+
+# ---- Node 前端 `front/` ----
+front/node_modules/
+front/dist/
+front/.vite/
+front/.env
+front/.env.local
+front/.env.*.local
+
+# ---- 日志与临时文件 ----
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- IDE / 系统 ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+Thumbs.db
+.DS_Store
+*.swp
+*~
+
+# ---- 其他 ----
+Histone-Viewer-介绍.pptx
