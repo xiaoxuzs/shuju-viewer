@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>mzML + prsm.js Viewer (demo)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+           margin: 0; padding: 16px; background: #fafafa; color: #222; }
+    header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    header h2 { margin: 0; font-size: 18px; }
+    header select, header button {
+      padding: 6px 10px; font-size: 14px;
+      border: 1px solid #ccc; border-radius: 4px; background: white; cursor: pointer;
+    }
+    #status { margin-left: auto; color: #666; font-size: 12px; font-family: monospace; }
+    .panel { background: white; border: 1px solid #e3e3e3; border-radius: 6px;
+             margin-top: 12px; padding: 12px; }
+    .panel h3 { margin: 0 0 8px; font-size: 14px; color: #444; }
+    .summary { font-size: 13px; line-height: 1.7; }
+    .summary b { display: inline-block; min-width: 120px; color: #666; font-weight: 500; }
+    .summary .row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .summary .row > div { flex: 1 1 240px; }
+    .seq-wrap { font-family: Consolas, monospace; font-size: 17px;
+                letter-spacing: 1.5px; line-height: 2.3em; word-wrap: break-word;
+                padding: 8px; background: #f7f7f9; border-radius: 4px;
+                user-select: text; }
+    .seq-res { display: inline-block; padding: 1px 3px; border-radius: 3px;
+               position: relative; min-width: 14px; text-align: center; }
+    .seq-res.n { background: rgba(80, 160, 255, 0.22); }
+    .seq-res.c { background: rgba(255, 110, 80, 0.22); }
+    .seq-res.both {
+      background: linear-gradient(90deg, rgba(80,160,255,0.3) 50%, rgba(255,110,80,0.3) 50%);
+    }
+    .seq-bar { display: inline-block; color: #aaa; font-weight: bold;
+               font-size: 14px; margin: 0 1px; }
+    .seq-bar.n { color: #2a78d3; }
+    .seq-bar.c { color: #d3452a; }
+    .seq-bar.both { color: #9c27b0; }
+    .legend { font-size: 12px; color: #666; margin-top: 6px; }
+    .legend span { display: inline-block; width: 12px; height: 12px;
+                   vertical-align: middle; border-radius: 2px; margin-right: 4px; }
+    .chart { height: 360px; }
+    .err { color: #c33; font-family: monospace; padding: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h2>mzML + prsm.js Viewer</h2>
+    <label>PrSM:&nbsp;
+      <select id="prsm-select"></select>
+    </label>
+    <button id="reload">Load</button>
+    <span id="status">(loading...)</span>
+  </header>
+
+  <div class="panel">
+    <h3>Summary</h3>
+    <div id="summary" class="summary"><em>请选择一个 prsm 文件</em></div>
+  </div>
+
+  <div class="panel">
+    <h3>Sequence annotation</h3>
+    <div id="seq" class="seq-wrap"></div>
+    <div class="legend">
+      <span style="background:rgba(80,160,255,0.3)"></span>N-term ion matched (B)
+      &nbsp;&nbsp;
+      <span style="background:rgba(255,110,80,0.3)"></span>C-term ion matched (Y)
+    </div>
+    <div id="massshift" class="legend"></div>
+  </div>
+
+  <div class="panel">
+    <h3>MS1 spectrum (raw mzML)</h3>
+    <div id="ms1-chart" class="chart"></div>
+    <div id="ms1-msg" class="err"></div>
+  </div>
+
+  <div class="panel">
+    <h3>MS2 spectrum (raw mzML peaks + matched deconvoluted ions)</h3>
+    <div id="ms2-chart" class="chart"></div>
+  </div>
+
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
