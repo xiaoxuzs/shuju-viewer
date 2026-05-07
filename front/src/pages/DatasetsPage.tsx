@@ -5,10 +5,19 @@ import { useCallback, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { ArrowRight, Database, FileText, Layers, ListTree, Trash2, Upload } from "lucide-react";
+import {
+  ArrowRight,
+  Database,
+  FileText,
+  Layers,
+  ListTree,
+  Loader2,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import { deleteDataset, enqueueImport, fetchDatasets, fetchImportJob } from "@/api/client";
-import type { DatasetOut, ImportJobOut } from "@/api/types";
+import type { DatasetOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +44,6 @@ export function DatasetsPage() {
   const [description, setDescription] = useState("");
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [importJob, setImportJob] = useState<ImportJobOut | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Delete dialog state
@@ -69,7 +77,6 @@ export function DatasetsPage() {
     setDsName("");
     setDescription("");
     setImportError(null);
-    setImportJob(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
@@ -80,7 +87,6 @@ export function DatasetsPage() {
     }
     setImportError(null);
     setImportBusy(true);
-    setImportJob(null);
     try {
       const form = new FormData();
       form.append("file", zipFile);
@@ -91,7 +97,6 @@ export function DatasetsPage() {
 
       for (;;) {
         const job = await fetchImportJob(jobId);
-        setImportJob(job);
         if (job.status === "success") {
           await sleep(400);
           await queryClient.invalidateQueries({ queryKey: ["datasets"] });
@@ -185,7 +190,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                         <button
                           type="button"
                           aria-label={`Delete ${ds.slug}`}
-                          title="删除该数据集"
+                          title="Delete this dataset"
                           className={cn(
                             "flex h-7 w-7 items-center justify-center rounded-md",
                             "opacity-60 transition-all hover:bg-destructive/10 hover:text-destructive hover:opacity-100",
@@ -301,27 +306,28 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
               </div>
 
               {importBusy && (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>{importJob?.stage_label || "Importing…"}</span>
-                    <span>{Math.round(importJob?.progress ?? 0)}%</span>
+                <div
+                  className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-3"
+                  aria-busy="true"
+                  aria-live="polite"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Loader2
+                      className="h-4 w-4 shrink-0 animate-spin text-primary"
+                      aria-hidden
+                    />
+                    <span className="text-xs font-medium text-foreground">Importing…</span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="relative h-2 w-full overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-label="Import in progress"
+                  >
                     <div
-                      className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-                      style={{ width: `${Math.round(importJob?.progress ?? 0)}%` }}
+                      className="absolute left-0 top-0 h-full w-2/5 rounded-full bg-primary animate-import-indeterminate"
+                      aria-hidden
                     />
                   </div>
-                  {importJob?.stage === "extract" && (
-                    <p className="text-[11px] leading-tight text-muted-foreground">
-                      解压大型压缩包通常会比较慢，请耐心等待；进度按已解压文件数计算。
-                    </p>
-                  )}
-                  {importJob?.stage_detail && (
-                    <p className="font-mono text-[11px] leading-tight text-muted-foreground/80">
-                      {importJob.stage_detail}
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -364,25 +370,27 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
             <CardHeader>
               <CardTitle id="delete-dialog-title" className="flex items-center gap-2 text-destructive">
                 <Trash2 className="h-5 w-5" />
-                删除数据集
+                Delete dataset
               </CardTitle>
               <CardDescription>
-                确认要永久删除 <span className="font-mono text-foreground">{deleteTarget.slug}</span>{" "}
-                <span className="text-foreground">（{deleteTarget.name}）</span> 吗？此操作不可撤销。
+                Permanently delete <span className="font-mono text-foreground">{deleteTarget.slug}</span>{" "}
+                <span className="text-foreground">({deleteTarget.name})</span>? This action cannot be undone.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
                 <li>
-                  数据库：<code className="font-mono">datasets</code> 及级联清理的{" "}
-                  <code className="font-mono">runs / proteins / proteoforms / identification_matches /
-                  protein_relation_mapping</code> 行；
+                  Database: deletes <code className="font-mono">datasets</code> and cascades to{" "}
+                  <code className="font-mono">
+                    runs / proteins / proteoforms / identification_matches / protein_relation_mapping
+                  </code>
+                  .
                 </li>
                 <li>
-                  磁盘：<code className="font-mono">{deleteTarget.source_path || "—"}</code> 目录（仅当其位于
-                  服务端 <code className="font-mono">DATA_ROOT</code> 子树内）。
+                  Disk: removes folder <code className="font-mono">{deleteTarget.source_path || "—"}</code> (only if it
+                  is under server <code className="font-mono">DATA_ROOT</code>).
                 </li>
-                <li>若该 slug 当前还有正在进行的导入任务，删除会被后端拒绝（409）。</li>
+                <li>If there is an active import job for this slug, the backend will refuse the deletion (409).</li>
               </ul>
 
               {deleteError && (
@@ -402,7 +410,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                     setDeleteError(null);
                   }}
                 >
-                  取消
+                  Cancel
                 </Button>
                 <Button
                   type="button"
@@ -411,7 +419,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                   disabled={deleteBusy}
                   onClick={() => void runDelete()}
                 >
-                  {deleteBusy ? "正在删除…" : "永久删除"}
+                  {deleteBusy ? "Deleting…" : "Delete permanently"}
                 </Button>
               </div>
             </CardContent>

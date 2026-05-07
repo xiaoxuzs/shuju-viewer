@@ -28,8 +28,10 @@ import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime
+import os
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable, Iterable
 
 from sqlalchemy import text
 
@@ -188,24 +190,183 @@ def _validate_zip_paths(zf: zipfile.ZipFile, dest: Path) -> list[zipfile.ZipInfo
     return infos
 
 
+def _collect_zip_entries(
+    zf: zipfile.ZipFile,
+    dest: Path,
+) -> tuple[list[zipfile.ZipInfo], list[Path], list[zipfile.ZipInfo]]:
+    """Return (all_infos, dir_paths, file_infos) after safety validation."""
+    infos = _validate_zip_paths(zf, dest)
+    dir_paths: set[Path] = set()
+    file_infos: list[zipfile.ZipInfo] = []
+
+    for info in infos:
+        rel = PurePosixPath(info.filename)
+        # Some archives don't include explicit dir entries; derive parent dirs from files.
+        if info.is_dir():
+            dir_paths.add(dest.joinpath(*rel.parts))
+        else:
+            file_infos.append(info)
+            parent_rel = rel.parent
+            if parent_rel.parts:
+                dir_paths.add(dest.joinpath(*parent_rel.parts))
+
+    return infos, sorted(dir_paths), file_infos
+
+
+def _default_extract_workers() -> int:
+    # Decompression (zlib) + IO benefits from some parallelism; keep it bounded.
+    cpu = os.cpu_count() or 4
+    return max(4, min(16, cpu * 2))
+
+
+_ZIP_THREAD_LOCAL = threading.local()
+
+
+def _get_thread_zip_handle(zip_path: Path) -> zipfile.ZipFile:
+    """Return a per-thread ZipFile handle (jieya.py style).
+
+    zipfile.ZipFile isn't guaranteed thread-safe, so every worker thread keeps
+    its own instance to avoid internal locks and cross-thread state.
+    """
+    zf = getattr(_ZIP_THREAD_LOCAL, "zf", None)
+    if zf is None:
+        _ZIP_THREAD_LOCAL.zf = zipfile.ZipFile(zip_path, "r")
+        zf = _ZIP_THREAD_LOCAL.zf
+    return zf
+
+
+def _chunk_iterable(items: list[Any], size: int) -> Iterable[list[Any]]:
+    """Split a list into fixed-size chunks."""
+    for i in range(0, len(items), size):
+        yield items[i : i + size]
+
+
+def _extract_chunk(zip_path: Path, infos: list[zipfile.ZipInfo], dest: Path) -> int:
+    """Extract a batch of files in a single thread.
+
+    Important: caller must have pre-created all required directories.
+    This function intentionally does NOT call mkdir to reduce per-file overhead.
+    """
+    zf = _get_thread_zip_handle(zip_path)
+    count = 0
+    for info in infos:
+        rel = PurePosixPath(info.filename)
+        target_path = dest.joinpath(*rel.parts)
+        data = zf.read(info.filename)
+        with open(target_path, "wb") as dst:
+            dst.write(data)
+        count += 1
+    return count
+
+
+def _maybe_unwrap_single_root_folder(dest: Path) -> None:
+    """If ZIP extracted into a single wrapper dir, unwrap it in-place.
+
+    Example:
+      dest/
+        some_outer_folder/
+          topfd/
+          toppic_prsm_cutoff/
+
+    After unwrapping:
+      dest/
+        topfd/
+        toppic_prsm_cutoff/
+
+    We only unwrap when dest has exactly one directory entry and no files.
+    """
+    if not dest.exists() or not dest.is_dir():
+        return
+    entries = list(dest.iterdir())
+    if not entries:
+        return
+    dirs = [p for p in entries if p.is_dir()]
+    files = [p for p in entries if p.is_file()]
+    if files or len(dirs) != 1:
+        return
+
+    wrapper = dirs[0]
+    wrapper_entries = list(wrapper.iterdir())
+    if not wrapper_entries:
+        return
+
+    # Move everything one level up, then remove the wrapper.
+    for child in wrapper_entries:
+        target = dest / child.name
+        if target.exists():
+            # Shouldn't happen for well-formed archives; if it does, fail loud.
+            raise RuntimeError(f"cannot unwrap: target already exists: {target}")
+        shutil.move(str(child), str(target))
+    try:
+        wrapper.rmdir()
+    except OSError:
+        # Best effort; if something still holds a handle, keep it.
+        pass
+
+
 def _extract_zip_with_progress(
     zip_path: Path,
     dest: Path,
     *,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> None:
-    """Safely extract ``zip_path`` into ``dest`` and report per-file progress."""
+    """Safely extract ``zip_path`` into ``dest`` and report per-file progress.
+
+    Optimized implementation:
+    - validate zip-slip once
+    - pre-create directory tree
+    - extract file entries concurrently in chunks (jieya.py style: read -> write)
+    """
     dest = dest.resolve()
     dest.mkdir(parents=True, exist_ok=True)
+
     with zipfile.ZipFile(zip_path, "r") as zf:
-        infos = _validate_zip_paths(zf, dest)
-        n_total = len(infos)
+        infos, dir_paths, file_infos = _collect_zip_entries(zf, dest)
+
+    # Progress semantics are kept consistent with the previous implementation:
+    # it counted all entries (files + dirs) from zf.infolist().
+    n_total = max(len(infos), 1)
+    n_dirs = len(dir_paths)
+    n_files = len(file_infos)
+
+    if on_progress is not None:
+        on_progress(0, n_total)
+
+    # Pre-create all directories in one go (reduces per-file overhead).
+    for d in dir_paths:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # Consider directory entries "done" after pre-creation.
+    done = n_dirs
+    if on_progress is not None and done:
+        on_progress(min(done, n_total), n_total)
+
+    if n_files == 0:
+        # Nothing else to do; we already created dirs.
         if on_progress is not None:
-            on_progress(0, max(n_total, 1))
-        for idx, info in enumerate(infos, start=1):
-            zf.extract(info, dest)
-            if on_progress is not None and (idx % 25 == 0 or idx == n_total):
-                on_progress(idx, max(n_total, 1))
+            on_progress(n_total, n_total)
+        return
+
+    workers = _default_extract_workers()
+
+    # Chunking reduces threadpool scheduling overhead and keeps memory spikes
+    # more predictable for huge archives.
+    chunk_size = 500
+    chunks = list(_chunk_iterable(file_infos, chunk_size))
+    extracted_files = 0
+
+    # Concurrent chunk extraction. Each future returns the number of files written.
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [ex.submit(_extract_chunk, zip_path, chunk, dest) for chunk in chunks]
+        for fut in as_completed(futures):
+            # Propagate exceptions with useful context (job will be marked failed upstream).
+            extracted_files += fut.result()
+            done = n_dirs + extracted_files
+            if on_progress is not None:
+                on_progress(min(done, n_total), n_total)
+
+    if on_progress is not None:
+        on_progress(n_total, n_total)
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +607,7 @@ def run_zip_import_job(
             )
 
         _extract_zip_with_progress(zip_path, incoming_dir, on_progress=_extract_cb)
+        _maybe_unwrap_single_root_folder(incoming_dir)
         ingest_root = _find_ingest_root(incoming_dir)
 
         # ---- Phases: init / proteins / matches / finalize -------------------
@@ -462,7 +624,7 @@ def run_zip_import_job(
             database_url=settings.database_url,
             slug=slug,
             name=name,
-            mode="full",
+            mode="fast",
             replace=True,
             progress_callback=_make_adapter_progress_handler(job_id),
         )
@@ -491,6 +653,28 @@ def run_zip_import_job(
             raise RuntimeError(
                 f"DB import succeeded but renaming {incoming_dir} → {final_dir} failed: {exc}"
             ) from exc
+
+        # The DB row now has source_root pointing into the (no-longer-existing)
+        # ``<slug>.incoming`` path because ingest_universal_toppic was called
+        # before the rename. Translate the path so that source_root reflects
+        # the post-rename location, otherwise downstream code (spectrum loader,
+        # delete_dataset) ends up chasing a stale path.
+        try:
+            rel_to_incoming = ingest_root.relative_to(incoming_dir.resolve())
+        except ValueError:
+            rel_to_incoming = Path()
+        new_source_root = (final_dir / rel_to_incoming).resolve()
+        try:
+            with _db_engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "UPDATE datasets SET source_root = :source_root "
+                        "WHERE dataset_id = :dataset_id"
+                    ),
+                    {"source_root": str(new_source_root), "dataset_id": stats.dataset_id},
+                )
+        except Exception:  # noqa: BLE001 - non-fatal: delete_dataset has a slug-based fallback
+            log.exception("could not refresh datasets.source_root for %s", slug)
 
         log.info(
             "import job %s done dataset_id=%s run_id=%s proteins=%s proteoforms=%s matches=%s",
@@ -609,49 +793,76 @@ def delete_dataset(slug: str) -> DeleteResult:
     # ---- Disk side ---------------------------------------------------------
     data_root = settings.resolved_data_root.resolve()
     expected_dir = (data_root / _slug_dir_name(slug)).resolve()
+    incoming_dir = (data_root / f"{_slug_dir_name(slug)}.incoming").resolve()
 
-    folder_to_remove: Path | None = None
+    # Walk a path up to its top-level directory directly under ``data_root``;
+    # this lets us delete the whole dataset folder even if ``source_root``
+    # happens to point at a nested subdir (e.g. an ingest_root that was a
+    # subfolder of the wrapper).
+    def _top_under_data_root(p: Path) -> Path | None:
+        try:
+            p.relative_to(data_root)
+        except ValueError:
+            return None
+        cur = p
+        while cur.parent != data_root and cur.parent != cur:
+            cur = cur.parent
+        return cur if cur.parent == data_root else None
+
+    # Build an ordered, de-duplicated list of folders to try removing.
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+
+    def _add_candidate(p: Path | None) -> None:
+        if p is None:
+            return
+        if p in seen:
+            return
+        seen.add(p)
+        candidates.append(p)
+
     if source_root:
         try:
-            candidate = Path(source_root).resolve()
-            # Only remove if the path is inside DATA_ROOT (defence in depth so
-            # an accidentally-inserted absolute path elsewhere on disk can't
-            # be deleted by this endpoint).
-            candidate.relative_to(data_root)
-            folder_to_remove = candidate
-        except (OSError, ValueError):
-            folder_to_remove = None
-    if folder_to_remove is None:
-        # Fallback: the conventional slug-derived directory.
-        folder_to_remove = expected_dir
-        try:
-            folder_to_remove.relative_to(data_root)
-        except ValueError as exc:
-            raise ValueError(
-                f"computed dataset folder {folder_to_remove} is outside data_root {data_root}; refusing to remove"
-            ) from exc
-
-    folder_existed = folder_to_remove.exists()
-    deleted_disk = False
-    if folder_existed:
-        try:
-            shutil.rmtree(folder_to_remove)
-            deleted_disk = True
+            _add_candidate(_top_under_data_root(Path(source_root).resolve()))
         except OSError:
-            log.exception("could not remove dataset folder %s", folder_to_remove)
-            deleted_disk = False
+            pass
+    _add_candidate(_top_under_data_root(expected_dir))
+    # Also clean up any leftover ``<slug>.incoming`` from a crashed import.
+    _add_candidate(_top_under_data_root(incoming_dir))
+
+    if not candidates:
+        raise ValueError(
+            f"could not derive any dataset folder under data_root {data_root} for slug {slug!r}"
+        )
+
+    primary = candidates[0]
+    folder_existed = False
+    deleted_disk = False
+    for cand in candidates:
+        if not cand.exists():
+            continue
+        folder_existed = True
+        try:
+            shutil.rmtree(cand)
+            # Mark success the first time anything was actually removed.
+            if cand == primary or not deleted_disk:
+                deleted_disk = True
+        except OSError:
+            log.exception("could not remove dataset folder %s", cand)
 
     log.info(
-        "deleted dataset slug=%s dataset_id=%s folder=%s folder_existed=%s deleted_disk=%s",
+        "deleted dataset slug=%s dataset_id=%s primary=%s candidates=%s "
+        "folder_existed=%s deleted_disk=%s",
         slug,
         dataset_id,
-        folder_to_remove,
+        primary,
+        [str(c) for c in candidates],
         folder_existed,
         deleted_disk,
     )
     return DeleteResult(
         deleted_db=True,
         deleted_disk=deleted_disk,
-        folder=str(folder_to_remove) if folder_to_remove else None,
+        folder=str(primary),
         folder_existed=folder_existed,
     )

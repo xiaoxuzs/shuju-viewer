@@ -26,5 +26,5 @@ set "STAMP=%STAMP: =0%"
 set "LOG_FILE=%REPO_ROOT%\logs\back-%STAMP%.log"
 
 echo [start-back] writing logs to %LOG_FILE%
-".venv\Scripts\python.exe" -m uvicorn app.main:app --reload --port 8000 2>&1 | "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "$input ^| Tee-Object -FilePath '%LOG_FILE%'"
+".venv\Scripts\python.exe" -m uvicorn app.main:app --reload --port 8000 2>&1 | "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "$input | Tee-Object -FilePath '%LOG_FILE%'"
 endlocal

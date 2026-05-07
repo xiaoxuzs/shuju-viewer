@@ -66,10 +66,16 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        /** Sliding chunk for import-dialog indeterminate preview (translate % is of the chunk width). */
+        "import-indeterminate": {
+          "0%": { transform: "translateX(-120%)" },
+          "100%": { transform: "translateX(320%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "import-indeterminate": "import-indeterminate 1.35s ease-in-out infinite",
       },
       fontFamily: {
         sans: [
