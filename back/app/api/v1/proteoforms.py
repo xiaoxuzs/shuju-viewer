@@ -34,12 +34,26 @@ def list_proteoforms(
     slug: str = "",
     cutoff: str = "",
 ) -> Page[ProteoformListItemOut]:
-    """分页列出 proteoform；若传 ``protein_id`` 则仅返回该蛋白质（表主键）下的形式。"""
+    """分页列出 proteoform；若传 ``protein_id`` 则仅返回该蛋白质（``proteins.protein_id``）下的形式。
+
+    Cutoff 维度：仅返回在当前 cutoff 下出现过 ``identification_matches`` 的
+    proteoform —— 这是唯一可靠的归属判据，因为 universal 的 ``proteoforms``
+    表本身是跨 cutoff 共享的。
+    """
     dataset = require_dataset(session, slug)
     require_cutoff(cutoff)
-    params: dict[str, object] = {"dataset_id": dataset["dataset_id"]}
+    params: dict[str, object] = {"dataset_id": dataset["dataset_id"], "cutoff": cutoff}
     join_sql = ""
-    where_sql = "pf.dataset_id = :dataset_id"
+    where_sql = (
+        "pf.dataset_id = :dataset_id"
+        " AND EXISTS ("
+        "   SELECT 1 FROM identification_matches im"
+        "   WHERE im.dataset_id = pf.dataset_id"
+        "     AND im.entity_type = 'PROTEOFORM'"
+        "     AND im.entity_id = pf.proteoform_id"
+        "     AND jsonb_extract_path_text(im.extra_metadata, 'source_cutoff') = :cutoff"
+        " )"
+    )
     if protein_id is not None:
         join_sql = """
             JOIN protein_relation_mapping prm
@@ -93,7 +107,12 @@ def get_proteoform(
     slug: str = "",
     cutoff: str = "",
 ) -> ProteoformDetailOut:
-    """详情路径中的 proteoform_id 为 ``proteoforms.id``（主键），非 TopPIC 的 proteoform 业务号。"""
+    """详情路径中的 proteoform_id 为 ``proteoforms.proteoform_id``（主键），非 TopPIC 的 proteoform 业务号。
+
+    Cutoff 维度：proteoform 行本身是跨 cutoff 共享的，但 URL 里点了 ``cutoff=X``
+    就要求该 proteoform 在 X 这个 cutoff 下至少有一条 ``identification_matches``，
+    否则返回 404，避免在 prsm cutoff 下显示只在 proteoform cutoff 下出现的 form。
+    """
     dataset = require_dataset(session, slug)
     require_cutoff(cutoff)
     pf = session.execute(
@@ -117,10 +136,17 @@ def get_proteoform(
              AND prm.entity_type = 'PROTEOFORM'
              AND prm.dataset_id = pf.dataset_id
             WHERE pf.dataset_id = :dataset_id AND pf.proteoform_id = :proteoform_id
+              AND EXISTS (
+                SELECT 1 FROM identification_matches im
+                WHERE im.dataset_id = pf.dataset_id
+                  AND im.entity_type = 'PROTEOFORM'
+                  AND im.entity_id = pf.proteoform_id
+                  AND jsonb_extract_path_text(im.extra_metadata, 'source_cutoff') = :cutoff
+              )
             LIMIT 1
             """
         ),
-        {"dataset_id": dataset["dataset_id"], "proteoform_id": proteoform_id},
+        {"dataset_id": dataset["dataset_id"], "proteoform_id": proteoform_id, "cutoff": cutoff},
     ).mappings().one_or_none()
     if pf is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "proteoform not found")

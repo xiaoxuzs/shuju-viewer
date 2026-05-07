@@ -22,6 +22,15 @@ export interface CutoffOut {
   prsm_count: number;
 }
 
+/** ``DELETE /datasets/{slug}`` 应答：库 / 磁盘各自的清理结果。 */
+export interface DatasetDeletedOut {
+  slug: string;
+  deleted_db: boolean;
+  deleted_disk: boolean;
+  folder: string | null;
+  folder_existed: boolean;
+}
+
 /** 已导入的数据集元数据及下属 cutoff 列表。 */
 export interface DatasetOut {
   id: number;
@@ -30,8 +39,33 @@ export interface DatasetOut {
   description: string | null;
   source_path: string;
   created_at: string;
-  updated_at: string;
+  /** universal schema 没有 updated_at 列；后端总是返回 null。 */
+  updated_at: string | null;
   cutoffs: CutoffOut[];
+}
+
+/** Background import job status from ``POST /imports`` / ``GET /imports/{job_id}``. */
+export interface ImportJobOut {
+  job_id: string;
+  status: "queued" | "running" | "success" | "failed" | string;
+  message: string | null;
+  error: string | null;
+  dataset_slug: string | null;
+  /** Real progress 0..100. 100 only when status === 'success'. */
+  progress: number;
+  /** Phase code: queued | extract | init | proteins | matches | finalize | success | failed. */
+  stage: string | null;
+  /** Human-readable label for the current phase (Chinese in current build). */
+  stage_label: string | null;
+  /** Free-form detail line, e.g. "1234/4567 PrSM details". */
+  stage_detail: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportJobCreatedOut {
+  job_id: string;
+  status: string;
 }
 
 /** 蛋白质列表行（某 cutoff 下一条记录）。 */

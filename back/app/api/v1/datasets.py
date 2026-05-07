@@ -2,48 +2,65 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.api.v1.universal_compat import cutoff_id, cutoff_label, require_dataset
-from app.schemas import CutoffOut, DatasetOut
+from app.schemas import CutoffOut, DatasetDeletedOut, DatasetOut
+from app.services import import_jobs
 
 router = APIRouter(tags=["datasets"])
 
 
 def _cutoffs_payload(session: Session, dataset_id: int) -> list[CutoffOut]:
-    """Synthesize legacy cutoffs from universal match source_cutoff metadata."""
-    protein_count = session.scalar(
-        text("SELECT count(1) FROM proteins WHERE dataset_id = :dataset_id"),
+    """Synthesize legacy cutoffs from ``identification_matches.source_cutoff``.
+
+    All three counts are filtered by ``extra_metadata.source_cutoff`` so the
+    two virtual cutoffs (``prsm`` / ``proteoform``) get distinct numbers, even
+    though proteins and proteoforms are stored as cutoff-independent rows in
+    the universal schema.
+    """
+    rows = session.execute(
+        text(
+            """
+            WITH cutoff_matches AS (
+                SELECT
+                    jsonb_extract_path_text(im.extra_metadata, 'source_cutoff') AS cutoff,
+                    im.entity_type,
+                    im.entity_id
+                FROM identification_matches im
+                WHERE im.dataset_id = :dataset_id
+            )
+            SELECT
+                cm.cutoff AS cutoff,
+                count(*) AS prsm_count,
+                count(DISTINCT cm.entity_id) FILTER (WHERE cm.entity_type = 'PROTEOFORM')
+                    AS proteoform_count,
+                count(DISTINCT prm.protein_id)
+                    AS protein_count
+            FROM cutoff_matches cm
+            LEFT JOIN protein_relation_mapping prm
+              ON prm.dataset_id = :dataset_id
+             AND prm.entity_type = cm.entity_type
+             AND prm.entity_id = cm.entity_id
+            WHERE cm.cutoff IS NOT NULL
+            GROUP BY cm.cutoff
+            """
+        ),
         {"dataset_id": dataset_id},
-    ) or 0
-    proteoform_count = session.scalar(
-        text("SELECT count(1) FROM proteoforms WHERE dataset_id = :dataset_id"),
-        {"dataset_id": dataset_id},
-    ) or 0
-    prsm_counts = dict(
-        session.execute(
-            text(
-                """
-                SELECT jsonb_extract_path_text(extra_metadata, 'source_cutoff') AS cutoff, count(1)
-                FROM identification_matches
-                WHERE dataset_id = :dataset_id
-                GROUP BY cutoff
-                """
-            ),
-            {"dataset_id": dataset_id},
-        ).all()
-    )
+    ).mappings().all()
+
+    by_cutoff = {row["cutoff"]: row for row in rows}
     return [
         CutoffOut(
             id=cutoff_id(kind),
             kind=kind,
             label=cutoff_label(kind),
-            protein_count=protein_count,
-            proteoform_count=proteoform_count,
-            prsm_count=prsm_counts.get(kind, 0),
+            protein_count=int(by_cutoff.get(kind, {}).get("protein_count") or 0),
+            proteoform_count=int(by_cutoff.get(kind, {}).get("proteoform_count") or 0),
+            prsm_count=int(by_cutoff.get(kind, {}).get("prsm_count") or 0),
         )
         for kind in ("prsm", "proteoform")
     ]
@@ -69,7 +86,7 @@ def list_datasets(session: Session = Depends(get_db)) -> list[DatasetOut]:
             description=d["description"],
             source_path=d["source_root"],
             created_at=d["created_at"],
-            updated_at=d["created_at"],
+            updated_at=None,
             cutoffs=_cutoffs_payload(session, d["dataset_id"]),
         )
         for d in datasets
@@ -90,6 +107,34 @@ def get_dataset_detail(
         description=dataset["description"],
         source_path=dataset["source_root"],
         created_at=dataset["created_at"],
-        updated_at=dataset["created_at"],
+        updated_at=None,
         cutoffs=_cutoffs_payload(session, dataset["dataset_id"]),
+    )
+
+
+@router.delete("/datasets/{slug}", response_model=DatasetDeletedOut)
+def delete_dataset(slug: str) -> DatasetDeletedOut:
+    """删除一个数据集：
+
+    1. 在 ``datasets`` 表上做 ``DELETE`` —— 由 ``ON DELETE CASCADE`` 顺带清掉
+       runs / proteins / proteoforms / identification_matches /
+       protein_relation_mapping 中所有关联行。
+    2. 删掉 ``DATA_ROOT`` 下与该 slug 关联的解压目录（如果存在）；为安全起见
+       只允许在 ``DATA_ROOT`` 子树内执行 ``rmtree``。
+    3. 若有进行中的导入任务还指向同一个 slug，会拒绝删除（防止竞争）。
+    """
+    try:
+        result = import_jobs.delete_dataset(slug)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"dataset not found: {slug}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return DatasetDeletedOut(
+        slug=slug,
+        deleted_db=result.deleted_db,
+        deleted_disk=result.deleted_disk,
+        folder=result.folder,
+        folder_existed=result.folder_existed,
     )

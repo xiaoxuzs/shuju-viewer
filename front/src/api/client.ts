@@ -4,7 +4,10 @@
  */
 import axios from "axios";
 import type {
+  DatasetDeletedOut,
   DatasetOut,
+  ImportJobCreatedOut,
+  ImportJobOut,
   Page,
   PrsmDetailOut,
   PrsmListItemOut,
@@ -37,9 +40,33 @@ export async function fetchDatasets(): Promise<DatasetOut[]> {
   return data;
 }
 
+/** Upload a ZIP of a TopPIC output tree; returns a job id to poll. */
+export async function enqueueImport(formData: FormData): Promise<ImportJobCreatedOut> {
+  const { data } = await api.post<ImportJobCreatedOut>("/imports", formData, {
+    timeout: 600_000,
+  });
+  return data;
+}
+
+export async function fetchImportJob(jobId: string): Promise<ImportJobOut> {
+  const { data } = await api.get<ImportJobOut>(`/imports/${jobId}`);
+  return data;
+}
+
 /** 按 slug 获取单个数据集详情。 */
 export async function fetchDataset(slug: string): Promise<DatasetOut> {
   const { data } = await api.get<DatasetOut>(`/datasets/${slug}`);
+  return data;
+}
+
+/**
+ * 永久删除一个数据集：联动清掉库里的所有相关行（cascade）和磁盘上的解压目录。
+ * 失败原因常见两类：
+ *   - 404：slug 不存在；
+ *   - 409：当前 slug 还有正在跑的 import job（拒绝删除以防竞争）。
+ */
+export async function deleteDataset(slug: string): Promise<DatasetDeletedOut> {
+  const { data } = await api.delete<DatasetDeletedOut>(`/datasets/${slug}`);
   return data;
 }
 

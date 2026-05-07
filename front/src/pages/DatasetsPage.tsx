@@ -1,27 +1,129 @@
 /**
- * 数据集列表：展示已导入项目卡片，空状态时提示 CLI 导入命令。
+ * 数据集列表：展示已导入项目卡片；支持上传 ZIP 导入，空状态时仍提示 CLI 备选。
  */
+import { useCallback, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Database, FileText, Layers, ListTree } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
+import { ArrowRight, Database, FileText, Layers, ListTree, Trash2, Upload } from "lucide-react";
 
-import { fetchDatasets } from "@/api/client";
+import { deleteDataset, enqueueImport, fetchDatasets, fetchImportJob } from "@/api/client";
+import type { DatasetOut, ImportJobOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export function DatasetsPage() {
+  const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ["datasets"],
     queryFn: fetchDatasets,
   });
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [slug, setSlug] = useState("");
+  const [dsName, setDsName] = useState("");
+  const [description, setDescription] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importJob, setImportJob] = useState<ImportJobOut | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Delete dialog state
+  const [deleteTarget, setDeleteTarget] = useState<DatasetOut | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const runDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleteError(null);
+    setDeleteBusy(true);
+    try {
+      await deleteDataset(deleteTarget.slug);
+      await queryClient.invalidateQueries({ queryKey: ["datasets"] });
+      setDeleteTarget(null);
+    } catch (e) {
+      let msg = (e as Error).message || "Delete failed.";
+      if (axios.isAxiosError(e)) {
+        const detail = (e.response?.data as { detail?: string } | undefined)?.detail;
+        if (detail) msg = detail;
+      }
+      setDeleteError(msg);
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [deleteTarget, queryClient]);
+
+  const resetImportForm = useCallback(() => {
+    setZipFile(null);
+    setSlug("");
+    setDsName("");
+    setDescription("");
+    setImportError(null);
+    setImportJob(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  const runImport = useCallback(async () => {
+    if (!zipFile || !slug.trim() || !dsName.trim()) {
+      setImportError("Choose a .zip file and fill slug and name.");
+      return;
+    }
+    setImportError(null);
+    setImportBusy(true);
+    setImportJob(null);
+    try {
+      const form = new FormData();
+      form.append("file", zipFile);
+      form.append("slug", slug.trim());
+      form.append("name", dsName.trim());
+      if (description.trim()) form.append("description", description.trim());
+      const { job_id: jobId } = await enqueueImport(form);
+
+      for (;;) {
+        const job = await fetchImportJob(jobId);
+        setImportJob(job);
+        if (job.status === "success") {
+          await sleep(400);
+          await queryClient.invalidateQueries({ queryKey: ["datasets"] });
+          setImportBusy(false);
+          setImportOpen(false);
+          resetImportForm();
+          return;
+        }
+        if (job.status === "failed") {
+          setImportError(job.error || job.message || "Import failed.");
+          setImportBusy(false);
+          return;
+        }
+        await sleep(900);
+      }
+    } catch (e) {
+      setImportError((e as Error).message || "Request failed.");
+      setImportBusy(false);
+    }
+  }, [description, dsName, queryClient, resetImportForm, slug, zipFile]);
 
   return (
     <>
       <PageHeader
         title="Datasets"
         description="Pick a dataset to start exploring proteins, proteoforms, PrSMs and spectra."
+        actions={
+          <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4" />
+            Import from ZIP
+          </Button>
+        }
       />
 
       {isLoading && (
@@ -43,13 +145,16 @@ export function DatasetsPage() {
       {data && data.length === 0 && (
         <Card>
           <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            No datasets ingested yet. Run the backend CLI to load one:
+            No datasets ingested yet. Zip your TopPIC output folder and use &quot;Import from ZIP&quot;, or run the
+            universal-schema ingest CLI:
             <pre className="mt-3 overflow-x-auto rounded-md bg-muted/50 p-3 text-left text-xs">
 {`cd back
-uv run python -m app.ingest.cli ingest \\
+uv run python -m app.ingest.universal_toppic_adapter ingest \\
     --root ..\\shuju\\MZ20160222DS_histone48_html \\
+    --database-url "postgresql+psycopg://USER:PASS@localhost:5432/Universal_Viewer" \\
     --slug mz20160222ds_histone48 \\
-    --name "MZ20160222DS_histone48"`}
+    --name "MZ20160222DS_histone48" \\
+    --mode full --replace`}
             </pre>
           </CardContent>
         </Card>
@@ -76,7 +181,27 @@ uv run python -m app.ingest.cli ingest \\
                         </div>
                         <Badge variant="outline">{ds.slug}</Badge>
                       </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <button
+                          type="button"
+                          aria-label={`Delete ${ds.slug}`}
+                          title="删除该数据集"
+                          className={cn(
+                            "flex h-7 w-7 items-center justify-center rounded-md",
+                            "opacity-60 transition-all hover:bg-destructive/10 hover:text-destructive hover:opacity-100",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive",
+                          )}
+                          onClick={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            setDeleteError(null);
+                            setDeleteTarget(ds);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                      </div>
                     </div>
                     <CardTitle className="mt-3 text-xl">{ds.name}</CardTitle>
                     {ds.description && <CardDescription>{ds.description}</CardDescription>}
@@ -99,6 +224,198 @@ uv run python -m app.ingest.cli ingest \\
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {importOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="import-dialog-title"
+        >
+          <Card className="w-full max-w-md border-border/80 shadow-xl">
+            <CardHeader>
+              <CardTitle id="import-dialog-title">Import dataset</CardTitle>
+              <CardDescription>
+                Upload a <span className="font-mono text-foreground">.zip</span> of one TopPIC result tree (contains{" "}
+                <span className="font-mono">topfd</span> and <span className="font-mono">toppic_*_cutoff</span>). Files
+                are unpacked under the server <span className="font-mono">shuju</span> folder, then ingested.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Archive (.zip)</label>
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".zip,application/zip"
+                  disabled={importBusy}
+                  onChange={(ev) => {
+                    const f = ev.target.files?.[0];
+                    setZipFile(f ?? null);
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="import-slug">
+                  Slug (URL id)
+                </label>
+                <Input
+                  id="import-slug"
+                  placeholder="e.g. mz20160222ds_histone48"
+                  value={slug}
+                  disabled={importBusy}
+                  onChange={(e) => setSlug(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="import-name">
+                  Display name
+                </label>
+                <Input
+                  id="import-name"
+                  placeholder="Human-readable name"
+                  value={dsName}
+                  disabled={importBusy}
+                  onChange={(e) => setDsName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="import-desc">
+                  Description (optional)
+                </label>
+                <textarea
+                  id="import-desc"
+                  rows={2}
+                  placeholder="Optional notes"
+                  value={description}
+                  disabled={importBusy}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className={cn(
+                    "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm",
+                    "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                  )}
+                />
+              </div>
+
+              {importBusy && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{importJob?.stage_label || "Importing…"}</span>
+                    <span>{Math.round(importJob?.progress ?? 0)}%</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                      style={{ width: `${Math.round(importJob?.progress ?? 0)}%` }}
+                    />
+                  </div>
+                  {importJob?.stage === "extract" && (
+                    <p className="text-[11px] leading-tight text-muted-foreground">
+                      解压大型压缩包通常会比较慢，请耐心等待；进度按已解压文件数计算。
+                    </p>
+                  )}
+                  {importJob?.stage_detail && (
+                    <p className="font-mono text-[11px] leading-tight text-muted-foreground/80">
+                      {importJob.stage_detail}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {importError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {importError}
+                </p>
+              )}
+
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={importBusy}
+                  onClick={() => {
+                    setImportOpen(false);
+                    resetImportForm();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" size="sm" disabled={importBusy} onClick={() => void runImport()}>
+                  {importBusy ? "Working…" : "Start import"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-dialog-title"
+        >
+          <Card className="w-full max-w-md border-destructive/40 shadow-xl">
+            <CardHeader>
+              <CardTitle id="delete-dialog-title" className="flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" />
+                删除数据集
+              </CardTitle>
+              <CardDescription>
+                确认要永久删除 <span className="font-mono text-foreground">{deleteTarget.slug}</span>{" "}
+                <span className="text-foreground">（{deleteTarget.name}）</span> 吗？此操作不可撤销。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                <li>
+                  数据库：<code className="font-mono">datasets</code> 及级联清理的{" "}
+                  <code className="font-mono">runs / proteins / proteoforms / identification_matches /
+                  protein_relation_mapping</code> 行；
+                </li>
+                <li>
+                  磁盘：<code className="font-mono">{deleteTarget.source_path || "—"}</code> 目录（仅当其位于
+                  服务端 <code className="font-mono">DATA_ROOT</code> 子树内）。
+                </li>
+                <li>若该 slug 当前还有正在进行的导入任务，删除会被后端拒绝（409）。</li>
+              </ul>
+
+              {deleteError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {deleteError}
+                </p>
+              )}
+
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={deleteBusy}
+                  onClick={() => {
+                    setDeleteTarget(null);
+                    setDeleteError(null);
+                  }}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  disabled={deleteBusy}
+                  onClick={() => void runDelete()}
+                >
+                  {deleteBusy ? "正在删除…" : "永久删除"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </>

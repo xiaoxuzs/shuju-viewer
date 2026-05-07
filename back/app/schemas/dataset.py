@@ -21,7 +21,11 @@ class CutoffOut(BaseModel):
 
 
 class DatasetOut(BaseModel):
-    """数据集卡片/详情：基本字段 + 嵌套 cutoff 列表。"""
+    """数据集卡片/详情：基本字段 + 嵌套 cutoff 列表。
+
+    universal schema 的 ``datasets`` 表只有 ``created_at``，没有 ``updated_at``
+    列；该字段保留为可选，前端用到时按 None 处理。
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -31,5 +35,17 @@ class DatasetOut(BaseModel):
     description: str | None
     source_path: str
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None
     cutoffs: list[CutoffOut] = []
+
+
+class DatasetDeletedOut(BaseModel):
+    """`DELETE /datasets/{slug}` 的应答：标识库 / 磁盘两部分是否成功清理。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    slug: str
+    deleted_db: bool
+    deleted_disk: bool
+    folder: str | None = None
+    folder_existed: bool = False

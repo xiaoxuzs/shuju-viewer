@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import typer
 from rich.console import Console
@@ -51,20 +51,56 @@ class UniversalImportStats:
     skipped_matches: int = 0
 
 
+@dataclass
+class ProgressEvent:
+    """Raw progress event emitted by :func:`ingest_universal_toppic`.
+
+    The caller (e.g. :mod:`app.services.import_jobs`) translates these into a
+    global percentage. The adapter itself only knows about local progress
+    inside a phase / cutoff.
+    """
+
+    phase: str  # "init" | "proteins" | "matches" | "finalize"
+    cutoff: str | None  # cutoff_kind for per-cutoff phases, else None
+    current: int  # progress within this phase+cutoff
+    total: int  # total within this phase+cutoff (>=1 once known, 0 when unknown)
+    message: str | None = None
+
+
+ProgressCallback = Callable[[ProgressEvent], None]
+
+
+def _emit(callback: ProgressCallback | None, event: ProgressEvent) -> None:
+    if callback is not None:
+        try:
+            callback(event)
+        except Exception:  # noqa: BLE001 - never let progress reporting break ingest
+            pass
+
+
 @app.command()
 def ingest(
     root: Path = typer.Option(..., "--root", "-r", help="TopPIC / TopFD HTML output directory."),
-    database_url: str = typer.Option(
-        ...,
+    slug: str = typer.Option(..., "--slug", "-s", help="Unique dataset slug (used in URLs)."),
+    name: str = typer.Option(..., "--name", "-n", help="Human-readable dataset name."),
+    database_url: str | None = typer.Option(
+        None,
         "--database-url",
-        help="SQLAlchemy database URL, e.g. postgresql+psycopg://postgres:postgres@localhost:5432/Universal_Viewer",
+        help=(
+            "SQLAlchemy database URL. Defaults to the value of DATABASE_URL in back/.env "
+            "(i.e. settings.database_url) so the CLI hits the same database as the API."
+        ),
     ),
-    slug: str = typer.Option("mz20160222ds_histone48", "--slug", "-s"),
-    name: str = typer.Option("MZ20160222DS_histone48_html", "--name", "-n"),
     mode: str = typer.Option("fast", "--mode", help="Import mode: fast or full."),
     replace: bool = typer.Option(False, "--replace", help="Delete existing dataset with the same slug first."),
 ) -> None:
     """Import a TopPIC / TopFD dataset into the universal schema."""
+    if database_url is None:
+        # Local import keeps the CLI usable when settings would otherwise fail
+        # (e.g. a missing .env) only when the caller explicitly passes
+        # --database-url. With no flag we fall back to settings.
+        from app.core.config import settings  # noqa: WPS433 - intentional local import
+        database_url = settings.database_url
     stats = ingest_universal_toppic(
         root=root,
         database_url=database_url,
@@ -87,6 +123,75 @@ def ingest(
     )
 
 
+class _RunRegistry:
+    """Lazy resolver from a PrSM's ``spectrum_file_name`` to a ``runs.run_id``.
+
+    Behaviour:
+
+    * ``get_default()`` returns the run id used for fast imports and any
+      record that does not carry a spectrum file name. Created on first use,
+      with ``runs.file_name`` falling back to the dataset folder name.
+    * ``get_or_create(file_name)`` is used by full imports: each distinct
+      ``spectrum_file_name`` from a ``prsm*.js`` header gets its own
+      ``runs`` row, so ``identification_matches.run_id`` properly distinguishes
+      different mzML / raw files inside one dataset.
+
+    Both code paths share the same in-memory cache; same ``file_name`` always
+    maps to the same run id.
+    """
+
+    def __init__(self, conn: Connection, dataset_id: int, root: Path) -> None:
+        self.conn = conn
+        self.dataset_id = dataset_id
+        self.dataset_root = root
+        self._cache: dict[str, int] = {}
+        self._default_run_id: int | None = None
+
+    def get_default(self) -> int:
+        if self._default_run_id is None:
+            self._default_run_id = self._insert_run(self.dataset_root.name, str(self.dataset_root))
+            self._cache[""] = self._default_run_id
+        return self._default_run_id
+
+    def get_or_create(self, file_name: str | None) -> int:
+        key = (file_name or "").strip()
+        if key == "":
+            return self.get_default()
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        run_id = self._insert_run(key, str(self.dataset_root))
+        self._cache[key] = run_id
+        return run_id
+
+    def _insert_run(self, file_name: str, file_path: str) -> int:
+        row = self.conn.execute(
+            text(
+                """
+                INSERT INTO runs (
+                    dataset_id, file_path, file_name,
+                    analysis_mode, software, status
+                )
+                VALUES (
+                    :dataset_id, :file_path, :file_name,
+                    'TOP_DOWN', 'TopPIC_TopFD', 'IMPORTED'
+                )
+                RETURNING run_id
+                """
+            ),
+            {
+                "dataset_id": self.dataset_id,
+                "file_path": file_path,
+                "file_name": file_name,
+            },
+        ).one()
+        return int(row.run_id)
+
+    @property
+    def created_count(self) -> int:
+        return len(self._cache)
+
+
 def ingest_universal_toppic(
     *,
     root: Path,
@@ -95,13 +200,28 @@ def ingest_universal_toppic(
     name: str,
     mode: str = "fast",
     replace: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> UniversalImportStats:
-    """Run the universal-schema TopPIC / TopFD import."""
+    """Run the universal-schema TopPIC / TopFD import.
+
+    ``progress_callback`` (optional) is invoked with :class:`ProgressEvent`
+    instances at key checkpoints so callers (e.g. the ZIP import job runner)
+    can render a real progress bar. Exceptions raised by the callback are
+    swallowed and never abort the ingest.
+
+    Multi-run handling: in ``mode=full`` the importer reads each PrSM's
+    ``ms_header.spectrum_file_name`` and creates one ``runs`` row per distinct
+    file name (lazily, on first occurrence). In ``mode=fast`` we only have
+    summary records that don't carry the spectrum filename, so a single
+    default run is created.
+    """
     root = root.resolve()
     if not root.exists():
         raise FileNotFoundError(root)
     if mode not in {"fast", "full"}:
         raise ValueError("mode must be 'fast' or 'full'")
+
+    _emit(progress_callback, ProgressEvent("init", None, 0, 0, "Connecting to database…"))
 
     engine = create_engine(database_url, future=True)
     with engine.begin() as conn:
@@ -109,8 +229,12 @@ def ingest_universal_toppic(
             conn.execute(text("DELETE FROM datasets WHERE slug = :slug"), {"slug": slug})
 
         dataset_id = _create_dataset(conn, root=root, slug=slug, name=name)
-        run_id = _create_run(conn, dataset_id=dataset_id, root=root)
-        stats = UniversalImportStats(dataset_id=dataset_id, run_id=run_id)
+        runs = _RunRegistry(conn, dataset_id=dataset_id, root=root)
+        # Always create the default run upfront so ``stats.run_id`` is
+        # populated even if the dataset has zero PrSMs (rare but possible).
+        default_run_id = runs.get_default()
+        stats = UniversalImportStats(dataset_id=dataset_id, run_id=default_run_id)
+        _emit(progress_callback, ProgressEvent("init", None, 1, 1, "Dataset record created"))
 
         protein_by_source_seq: dict[int, int] = {}
         proteoform_by_source_key: dict[tuple[int, int], int] = {}
@@ -129,7 +253,7 @@ def ingest_universal_toppic(
                 dataset_id=dataset_id,
                 cutoff_kind=cutoff_kind,
                 cutoff_root=cutoff_root,
-                run_id=run_id,
+                runs=runs,
                 mode=mode,
                 proteins_file=proteins_file,
                 protein_by_source_seq=protein_by_source_seq,
@@ -137,26 +261,34 @@ def ingest_universal_toppic(
                 relation_keys=relation_keys,
                 fast_match_keys=fast_match_keys,
                 stats=stats,
+                progress_callback=progress_callback,
             )
             if mode == "full":
                 _import_prsm_matches(
                     conn,
                     dataset_id=dataset_id,
-                    run_id=run_id,
+                    runs=runs,
                     cutoff_kind=cutoff_kind,
                     cutoff_root=cutoff_root,
                     proteoform_by_source_key=proteoform_by_source_key,
                     stats=stats,
+                    progress_callback=progress_callback,
                 )
 
+        _emit(progress_callback, ProgressEvent("finalize", None, 0, 2, "Marking dataset READY"))
         conn.execute(
             text("UPDATE datasets SET status = 'READY' WHERE dataset_id = :dataset_id"),
             {"dataset_id": dataset_id},
         )
-        conn.execute(
-            text("UPDATE runs SET status = 'READY' WHERE run_id = :run_id"),
-            {"run_id": run_id},
+        _emit(
+            progress_callback,
+            ProgressEvent("finalize", None, 1, 2, f"Marking {runs.created_count} run(s) READY"),
         )
+        conn.execute(
+            text("UPDATE runs SET status = 'READY' WHERE dataset_id = :dataset_id"),
+            {"dataset_id": dataset_id},
+        )
+        _emit(progress_callback, ProgressEvent("finalize", None, 2, 2, "Done"))
         return stats
 
 
@@ -201,45 +333,13 @@ def _create_dataset(conn: Connection, *, root: Path, slug: str, name: str) -> in
     return int(row.dataset_id)
 
 
-def _create_run(conn: Connection, *, dataset_id: int, root: Path) -> int:
-    row = conn.execute(
-        text(
-            """
-            INSERT INTO runs (
-                dataset_id,
-                file_path,
-                file_name,
-                analysis_mode,
-                software,
-                status
-            )
-            VALUES (
-                :dataset_id,
-                :file_path,
-                :file_name,
-                'TOP_DOWN',
-                'TopPIC_TopFD',
-                'IMPORTED'
-            )
-            RETURNING run_id
-            """
-        ),
-        {
-            "dataset_id": dataset_id,
-            "file_path": str(root),
-            "file_name": root.name,
-        },
-    ).one()
-    return int(row.run_id)
-
-
 def _import_proteins_and_forms(
     conn: Connection,
     *,
     dataset_id: int,
     cutoff_kind: str,
     cutoff_root: Path,
-    run_id: int,
+    runs: _RunRegistry,
     mode: str,
     proteins_file: Path,
     protein_by_source_seq: dict[int, int],
@@ -247,6 +347,7 @@ def _import_proteins_and_forms(
     relation_keys: set[tuple[int, str, int]],
     fast_match_keys: set[tuple[str, int]],
     stats: UniversalImportStats,
+    progress_callback: ProgressCallback | None = None,
 ) -> None:
     doc = load_js_object(proteins_file)
     protein_list = (
@@ -254,7 +355,25 @@ def _import_proteins_and_forms(
         or doc.get("prsm_data", {}).get("protein_list", {}).get("proteins", {}).get("protein")
     )
 
-    for protein_doc in ensure_list(protein_list or []):
+    proteins_iter = list(ensure_list(protein_list or []))
+    n_total = len(proteins_iter)
+    _emit(
+        progress_callback,
+        ProgressEvent("proteins", cutoff_kind, 0, max(n_total, 1), f"{cutoff_kind}: 0/{n_total} proteins"),
+    )
+
+    for protein_idx, protein_doc in enumerate(proteins_iter, start=1):
+        if progress_callback is not None and (protein_idx % 25 == 0 or protein_idx == n_total):
+            _emit(
+                progress_callback,
+                ProgressEvent(
+                    "proteins",
+                    cutoff_kind,
+                    protein_idx,
+                    max(n_total, 1),
+                    f"{cutoff_kind}: {protein_idx}/{n_total} proteins",
+                ),
+            )
         source_seq_id = to_int(protein_doc.get("sequence_id"))
         if source_seq_id is None:
             continue
@@ -301,7 +420,7 @@ def _import_proteins_and_forms(
                 _import_fast_prsm_summaries(
                     conn,
                     dataset_id=dataset_id,
-                    run_id=run_id,
+                    run_id=runs.get_default(),
                     cutoff_kind=cutoff_kind,
                     cutoff_root=cutoff_root,
                     source_seq_id=source_seq_id,
@@ -599,19 +718,36 @@ def _import_prsm_matches(
     conn: Connection,
     *,
     dataset_id: int,
-    run_id: int,
+    runs: _RunRegistry,
     cutoff_kind: str,
     cutoff_root: Path,
     proteoform_by_source_key: dict[tuple[int, int], int],
     stats: UniversalImportStats,
+    progress_callback: ProgressCallback | None = None,
 ) -> None:
     prsms_dir = cutoff_root / "prsms"
     if not prsms_dir.exists():
         return
 
     files = sorted(prsms_dir.glob("prsm*.js"), key=_prsm_sort_key)
+    n_total = len(files)
+    _emit(
+        progress_callback,
+        ProgressEvent("matches", cutoff_kind, 0, max(n_total, 1), f"{cutoff_kind}: 0/{n_total} PrSM details"),
+    )
     bar = tqdm(files, desc=f"{cutoff_kind} universal matches", unit="prsm", ascii=True)
-    for path in bar:
+    for file_idx, path in enumerate(bar, start=1):
+        if progress_callback is not None and (file_idx % 50 == 0 or file_idx == n_total):
+            _emit(
+                progress_callback,
+                ProgressEvent(
+                    "matches",
+                    cutoff_kind,
+                    file_idx,
+                    max(n_total, 1),
+                    f"{cutoff_kind}: {file_idx}/{n_total} PrSM details",
+                ),
+            )
         try:
             doc = load_js_object(path)
         except Exception:
@@ -637,6 +773,15 @@ def _import_prsm_matches(
         if ms2_scan is None:
             stats.skipped_matches += 1
             continue
+
+        # Resolve (or create) the run row for this PrSM's spectrum file.
+        # Datasets with a single mzML degrade gracefully: every PrSM hits the
+        # default run; with multiple mzMLs we lazily insert one runs row per
+        # distinct spectrum_file_name as we walk the prsm*.js files.
+        spectrum_file_name = header.get("spectrum_file_name")
+        run_id = runs.get_or_create(
+            str(spectrum_file_name) if spectrum_file_name else None
+        )
 
         conn.execute(
             text(

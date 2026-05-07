@@ -9,7 +9,6 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "sqlalchemy>=2.0.32",
     "psycopg[binary]>=3.2",
-    "alembic>=1.13",
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
     "python-dotenv>=1.0",
@@ -17,6 +16,7 @@ dependencies = [
     "rich>=13.7",
     "orjson>=3.10",
     "tqdm>=4.66",
+    "python-multipart>=0.0.9",
 ]
 
 [tool.uv]

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
+from app.services.import_jobs import ensure_jobs_table
 
 log = get_logger(__name__)
 
@@ -18,6 +19,7 @@ log = get_logger(__name__)
 async def lifespan(app: FastAPI):
     configure_logging()
     log.info("starting proteo-viewer backend (data_root=%s)", settings.resolved_data_root)
+    ensure_jobs_table()
     yield
 
 

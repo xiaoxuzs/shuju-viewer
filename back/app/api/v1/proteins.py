@@ -35,7 +35,12 @@ def list_proteins(
     slug: str = "",
     cutoff: str = "",
 ) -> Page[ProteinListItemOut]:
-    """分页列出蛋白质；可选名称/描述模糊搜索。`total` 为过滤后总行数。"""
+    """分页列出蛋白质；可选名称/描述模糊搜索。`total` 为过滤后总行数。
+
+    Cutoff 维度通过 ``EXISTS (identification_matches WHERE source_cutoff = :cutoff)``
+    在 protein → proteoform → match 链路上过滤；仅在该 cutoff 下产生过鉴定的
+    蛋白才会出现在列表里。
+    """
     dataset = require_dataset(session, slug)
     require_cutoff(cutoff)
     base_sql = """
@@ -50,8 +55,19 @@ def list_proteins(
             CAST(jsonb_extract_path_text(p.extra_metadata, 'best_prsm_e_value') AS double precision) AS best_prsm_e_value
         FROM proteins p
         WHERE p.dataset_id = :dataset_id
+          AND EXISTS (
+            SELECT 1
+            FROM protein_relation_mapping prm
+            JOIN identification_matches im
+              ON im.dataset_id = prm.dataset_id
+             AND im.entity_type = prm.entity_type
+             AND im.entity_id = prm.entity_id
+            WHERE prm.dataset_id = p.dataset_id
+              AND prm.protein_id = p.protein_id
+              AND jsonb_extract_path_text(im.extra_metadata, 'source_cutoff') = :cutoff
+          )
     """
-    params: dict[str, object] = {"dataset_id": dataset["dataset_id"]}
+    params: dict[str, object] = {"dataset_id": dataset["dataset_id"], "cutoff": cutoff}
     if search:
         base_sql += """
             AND (
@@ -88,7 +104,11 @@ def get_protein(
     slug: str = "",
     cutoff: str = "",
 ) -> ProteinDetailOut:
-    """单条蛋白质详情；路径中的 protein_id 为表 ``proteins.id``（主键）。"""
+    """单条蛋白质详情；路径中的 protein_id 为表 ``proteins.protein_id``（主键）。
+
+    Cutoff 维度：要求该蛋白在当前 cutoff 下至少有一条 ``identification_matches``
+    记录；下属 proteoform 列表也会按同一 cutoff 过滤。
+    """
     dataset = require_dataset(session, slug)
     require_cutoff(cutoff)
     protein = session.execute(
@@ -105,9 +125,20 @@ def get_protein(
                 CAST(jsonb_extract_path_text(p.extra_metadata, 'best_prsm_e_value') AS double precision) AS best_prsm_e_value
             FROM proteins p
             WHERE p.dataset_id = :dataset_id AND p.protein_id = :protein_id
+              AND EXISTS (
+                SELECT 1
+                FROM protein_relation_mapping prm
+                JOIN identification_matches im
+                  ON im.dataset_id = prm.dataset_id
+                 AND im.entity_type = prm.entity_type
+                 AND im.entity_id = prm.entity_id
+                WHERE prm.dataset_id = p.dataset_id
+                  AND prm.protein_id = p.protein_id
+                  AND jsonb_extract_path_text(im.extra_metadata, 'source_cutoff') = :cutoff
+              )
             """
         ),
-        {"dataset_id": dataset["dataset_id"], "protein_id": protein_id},
+        {"dataset_id": dataset["dataset_id"], "protein_id": protein_id, "cutoff": cutoff},
     ).mappings().one_or_none()
     if protein is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "protein not found")
@@ -131,10 +162,17 @@ def get_protein(
             WHERE prm.dataset_id = :dataset_id
               AND prm.protein_id = :protein_id
               AND prm.entity_type = 'PROTEOFORM'
+              AND EXISTS (
+                SELECT 1 FROM identification_matches im
+                WHERE im.dataset_id = prm.dataset_id
+                  AND im.entity_type = prm.entity_type
+                  AND im.entity_id = prm.entity_id
+                  AND jsonb_extract_path_text(im.extra_metadata, 'source_cutoff') = :cutoff
+              )
             ORDER BY proteoform_id
             """
         ),
-        {"dataset_id": dataset["dataset_id"], "protein_id": protein_id},
+        {"dataset_id": dataset["dataset_id"], "protein_id": protein_id, "cutoff": cutoff},
     ).mappings().all()
     return ProteinDetailOut(
         **dict(protein),

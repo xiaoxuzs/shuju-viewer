@@ -94,12 +94,17 @@ def get_prsm(
 ) -> PrsmDetailOut:
     """Look up a PrSM by its **business** ``prsm_id`` inside the given cutoff.
 
-    The composite ``(cutoff_id, prsm_id)`` is unique (see
-    :class:`app.models.protein.Prsm` ``__table_args__``). Using the business id
-    here means the URL shown in the UI (``PrSM #4534``) matches the navigation
-    URL (``/prsms/4534``), and it allows links coming from
-    ``Protein.best_prsm_id`` / ``Proteoform.best_prsm_id`` (which store the
-    business id, not the DB primary key) to resolve correctly.
+    Universal schema has no ``prsms`` table; PrSMs live in
+    ``identification_matches`` and the original TopPIC numeric id is stored as
+    ``extra_metadata.source_prsm_id`` (with cutoff in
+    ``extra_metadata.source_cutoff``). The composite
+    ``(dataset_id, source_cutoff, source_prsm_id)`` is treated as unique by the
+    universal adapter (see ``app.ingest.universal_toppic_adapter``).
+
+    Using the business id here means the URL shown in the UI (``PrSM #4534``)
+    matches the navigation URL (``/prsms/4534``), and links coming from
+    ``best_prsm_id`` (stored as the TopPIC business id, not a DB primary key)
+    resolve correctly.
     """
     dataset = require_dataset(session, slug)
     require_cutoff(cutoff)

@@ -12,7 +12,34 @@ from sqlalchemy.orm import Session
 from app.services.js_parser import load_js_object
 
 
-VALID_CUTOFFS = {"prsm", "proteoform"}
+# ---------------------------------------------------------------------------
+# Cutoff registry
+# ---------------------------------------------------------------------------
+#
+# The universal schema has no ``cutoffs`` table; cutoff is just a string in
+# ``identification_matches.extra_metadata.source_cutoff`` ("prsm" /
+# "proteoform"). The frontend still wants integer ids and labels, so we keep
+# a small in-memory registry here. Order is significant — it sets the visual
+# order of cutoff cards/tabs.
+
+_CUTOFF_KIND_ORDER: tuple[str, ...] = ("prsm", "proteoform")
+
+_CUTOFF_LABELS: dict[str, str] = {
+    "prsm": "TopPIC PrSM cutoff",
+    "proteoform": "TopPIC Proteoform cutoff",
+}
+
+# Stable synthetic ids the frontend uses as React keys / URL fragments.
+# DO NOT change these numbers; they are part of the public API contract with
+# the frontend (``cutoff.id`` is rendered as-is in dataset cards).
+_CUTOFF_IDS: dict[str, int] = {kind: idx + 1 for idx, kind in enumerate(_CUTOFF_KIND_ORDER)}
+
+VALID_CUTOFFS: frozenset[str] = frozenset(_CUTOFF_KIND_ORDER)
+
+
+def cutoff_kinds() -> tuple[str, ...]:
+    """Ordered tuple of cutoff kinds (``("prsm", "proteoform")``)."""
+    return _CUTOFF_KIND_ORDER
 
 
 def require_dataset(session: Session, slug: str) -> dict[str, Any]:
@@ -44,11 +71,13 @@ def require_cutoff(cutoff: str) -> str:
 
 
 def cutoff_id(cutoff: str) -> int:
-    return 1 if cutoff == "prsm" else 2
+    """Synthetic stable id for a cutoff kind (1=prsm, 2=proteoform)."""
+    return _CUTOFF_IDS[cutoff]
 
 
 def cutoff_label(cutoff: str) -> str:
-    return "TopPIC PrSM cutoff" if cutoff == "prsm" else "TopPIC Proteoform cutoff"
+    """Human-readable label rendered in the frontend."""
+    return _CUTOFF_LABELS[cutoff]
 
 
 def source_cutoff_filter_sql() -> str:

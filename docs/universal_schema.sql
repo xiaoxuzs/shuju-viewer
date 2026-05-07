@@ -253,3 +253,44 @@ CREATE INDEX IF NOT EXISTS ix_protein_relation_mapping_entity
 
 CREATE INDEX IF NOT EXISTS ix_protein_relation_mapping_is_unique
     ON protein_relation_mapping(is_unique);
+
+
+CREATE TABLE IF NOT EXISTS import_jobs (
+    job_id UUID PRIMARY KEY,
+    status VARCHAR(20) NOT NULL,
+    stage VARCHAR(40) NULL,
+    stage_label TEXT NULL,
+    stage_detail TEXT NULL,
+    message TEXT NULL,
+    error TEXT NULL,
+    progress DOUBLE PRECISION NOT NULL DEFAULT 0,
+    dataset_slug VARCHAR(160) NULL,
+    dataset_name VARCHAR(255) NULL,
+    description TEXT NULL,
+    source_zip_name TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT ck_import_jobs_status
+        CHECK (status IN ('queued', 'running', 'success', 'failed'))
+);
+
+COMMENT ON TABLE import_jobs IS '导入任务表：记录前端 ZIP 上传后台任务的状态、阶段、进度、关联的 dataset slug 与失败原因；支持 uvicorn 重启后继续轮询。';
+COMMENT ON COLUMN import_jobs.job_id IS '任务 UUID（前端轮询凭据）。';
+COMMENT ON COLUMN import_jobs.status IS '任务状态：queued / running / success / failed。';
+COMMENT ON COLUMN import_jobs.stage IS '当前阶段代码：queued / extract / init / proteins / matches / finalize / success / failed。';
+COMMENT ON COLUMN import_jobs.stage_label IS '阶段中文标签，前端直接展示。';
+COMMENT ON COLUMN import_jobs.stage_detail IS '阶段细节，例如 "1234/4567 PrSM details"。';
+COMMENT ON COLUMN import_jobs.progress IS '0..100 的真实进度百分比。';
+COMMENT ON COLUMN import_jobs.dataset_slug IS '成功后绑定的数据集 slug，便于跳转。';
+COMMENT ON COLUMN import_jobs.dataset_name IS '导入时填写的数据集展示名称。';
+COMMENT ON COLUMN import_jobs.description IS '导入时填写的可选描述。';
+COMMENT ON COLUMN import_jobs.source_zip_name IS '上传的 zip 原始文件名。';
+COMMENT ON COLUMN import_jobs.created_at IS '任务创建时间。';
+COMMENT ON COLUMN import_jobs.updated_at IS '任务最近一次更新时间，用于 TTL 清理。';
+
+CREATE INDEX IF NOT EXISTS ix_import_jobs_status_updated_at
+    ON import_jobs(status, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS ix_import_jobs_dataset_slug
+    ON import_jobs(dataset_slug);
