@@ -28,12 +28,12 @@ import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime
-import os
 from pathlib import Path, PurePosixPath
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Iterable
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.api.v1.universal_compat import cutoff_kinds
 from app.core.config import settings
@@ -79,6 +79,16 @@ _BOOTSTRAP_SQL: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS ix_import_jobs_dataset_slug ON import_jobs(dataset_slug)",
 )
 
+# ``datasets`` lives in ``docs/universal_schema.sql``; older DBs need the column + index.
+_DATASET_ZIP_FINGERPRINT_SQL: tuple[str, ...] = (
+    "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS source_zip_sha256 CHAR(64) NULL",
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_datasets_source_zip_sha256
+    ON datasets (source_zip_sha256)
+    WHERE source_zip_sha256 IS NOT NULL
+    """,
+)
+
 
 def ensure_jobs_table() -> None:
     """Create ``import_jobs`` (and indexes) if they don't exist yet.
@@ -91,6 +101,51 @@ def ensure_jobs_table() -> None:
                 conn.execute(text(stmt))
     except Exception:  # noqa: BLE001
         log.exception("could not bootstrap import_jobs table; jobs API will fail until DB is reachable")
+
+
+def ensure_dataset_zip_fingerprint_schema() -> None:
+    """Add ``datasets.source_zip_sha256`` and partial unique index if missing."""
+    try:
+        with _db_engine.begin() as conn:
+            for stmt in _DATASET_ZIP_FINGERPRINT_SQL:
+                conn.execute(text(stmt))
+    except Exception:  # noqa: BLE001
+        log.exception(
+            "could not bootstrap datasets.source_zip_sha256; duplicate-ZIP checks may fail until DB is fixed"
+        )
+
+
+@dataclass
+class ExistingDatasetFingerprintMatch:
+    slug: str
+    dataset_name: str
+
+
+def find_dataset_with_zip_sha256(zip_sha256_hex: str) -> ExistingDatasetFingerprintMatch | None:
+    """If a row already has this digest, return it; otherwise ``None``."""
+    row = None
+    try:
+        with _db_engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT slug, dataset_name
+                    FROM datasets
+                    WHERE source_zip_sha256 = :h
+                    LIMIT 1
+                    """
+                ),
+                {"h": zip_sha256_hex.lower()},
+            ).mappings().one_or_none()
+    except Exception:  # noqa: BLE001
+        log.exception("find_dataset_with_zip_sha256 failed")
+        return None
+    if row is None:
+        return None
+    return ExistingDatasetFingerprintMatch(
+        slug=str(row["slug"]),
+        dataset_name=str(row["dataset_name"]),
+    )
 
 
 def _gc_old_jobs(conn: Any) -> None:
@@ -213,11 +268,8 @@ def _collect_zip_entries(
     return infos, sorted(dir_paths), file_infos
 
 
-def _default_extract_workers() -> int:
-    # Decompression (zlib) + IO benefits from some parallelism; keep it bounded.
-    cpu = os.cpu_count() or 4
-    return max(4, min(16, cpu * 2))
-
+# Fixed ThreadPoolExecutor size for ZIP extract (parallel chunk read -> write).
+ZIP_EXTRACT_WORKERS = 12
 
 _ZIP_THREAD_LOCAL = threading.local()
 
@@ -347,7 +399,7 @@ def _extract_zip_with_progress(
             on_progress(n_total, n_total)
         return
 
-    workers = _default_extract_workers()
+    workers = ZIP_EXTRACT_WORKERS
 
     # Chunking reduces threadpool scheduling overhead and keeps memory spikes
     # more predictable for huge archives.
@@ -569,6 +621,7 @@ def run_zip_import_job(
     slug: str,
     name: str,
     description: str | None,
+    source_zip_sha256_hex: str,
 ) -> None:
     data_root = settings.resolved_data_root
     folder_name = _slug_dir_name(slug)
@@ -664,17 +717,43 @@ def run_zip_import_job(
         except ValueError:
             rel_to_incoming = Path()
         new_source_root = (final_dir / rel_to_incoming).resolve()
+        zip_hash = source_zip_sha256_hex.lower()
         try:
             with _db_engine.begin() as conn:
                 conn.execute(
                     text(
-                        "UPDATE datasets SET source_root = :source_root "
+                        "UPDATE datasets SET source_root = :source_root, "
+                        "source_zip_sha256 = :zip_hash "
                         "WHERE dataset_id = :dataset_id"
                     ),
-                    {"source_root": str(new_source_root), "dataset_id": stats.dataset_id},
+                    {
+                        "source_root": str(new_source_root),
+                        "dataset_id": stats.dataset_id,
+                        "zip_hash": zip_hash,
+                    },
                 )
-        except Exception:  # noqa: BLE001 - non-fatal: delete_dataset has a slug-based fallback
-            log.exception("could not refresh datasets.source_root for %s", slug)
+        except IntegrityError as exc:
+            log.warning(
+                "duplicate source_zip_sha256 after ingest slug=%s dataset_id=%s: %s",
+                slug,
+                stats.dataset_id,
+                exc,
+            )
+            try:
+                delete_dataset(slug, bypass_active_job_guard=True)
+            except Exception:  # noqa: BLE001
+                log.exception("rollback after duplicate ZIP fingerprint failed for slug=%s", slug)
+            raise RuntimeError(
+                "This ZIP matches an already-imported dataset (concurrent import collision was rolled back). Please keep only one copy or try again."
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            log.exception(
+                "could not finalize datasets row (source_root / source_zip_sha256) for %s",
+                slug,
+            )
+            raise RuntimeError(
+                f"Import finished, but failed to persist dataset path / ZIP fingerprint: {exc}"
+            ) from exc
 
         log.info(
             "import job %s done dataset_id=%s run_id=%s proteins=%s proteoforms=%s matches=%s",
@@ -730,6 +809,7 @@ def start_zip_import_background(
     slug: str,
     name: str,
     description: str | None,
+    source_zip_sha256_hex: str,
 ) -> None:
     thread = threading.Thread(
         target=run_zip_import_job,
@@ -739,6 +819,7 @@ def start_zip_import_background(
             "slug": slug,
             "name": name,
             "description": description,
+            "source_zip_sha256_hex": source_zip_sha256_hex,
         },
         name=f"import-{job_id}",
         daemon=True,
@@ -759,16 +840,17 @@ class DeleteResult:
     folder_existed: bool
 
 
-def delete_dataset(slug: str) -> DeleteResult:
+def delete_dataset(slug: str, *, bypass_active_job_guard: bool = False) -> DeleteResult:
     """Delete a dataset row (DB) and its on-disk folder (under DATA_ROOT).
 
     Raises:
         LookupError: slug doesn't exist.
-        RuntimeError: an active import job still targets this slug.
+        RuntimeError: an active import job still targets this slug (unless
+            ``bypass_active_job_guard`` is set for internal rollback only).
         ValueError: dataset's source_root is outside DATA_ROOT (refused to rm
             an unexpected path).
     """
-    if has_active_job_for_slug(slug):
+    if not bypass_active_job_guard and has_active_job_for_slug(slug):
         raise RuntimeError(
             "Refusing to delete: an import job for this slug is still queued or running."
         )

@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS datasets (
     capabilities JSONB NOT NULL DEFAULT '{}'::jsonb,
     extra_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    source_zip_sha256 CHAR(64) NULL,
 
     CONSTRAINT ck_datasets_analysis_mode
         CHECK (analysis_mode IN ('BOTTOM_UP', 'TOP_DOWN')),
@@ -35,6 +36,12 @@ COMMENT ON COLUMN datasets.description IS '数据集说明。';
 COMMENT ON COLUMN datasets.capabilities IS '能力声明，例如是否有 MS1、MS2、PrSM、谱图文件。';
 COMMENT ON COLUMN datasets.extra_metadata IS '额外元数据。';
 COMMENT ON COLUMN datasets.created_at IS '数据集创建或导入时间。';
+COMMENT ON COLUMN datasets.source_zip_sha256 IS '导入源 ZIP 的 SHA-256（hex）；删库后为空占用，可再次导入同一文件。';
+
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_datasets_source_zip_sha256
+    ON datasets (source_zip_sha256)
+    WHERE source_zip_sha256 IS NOT NULL;
 
 
 CREATE TABLE IF NOT EXISTS runs (

@@ -15,6 +15,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.schemas.imports import ImportJobCreatedOut, ImportJobOut
 from app.services import import_jobs
+from app.services.zip_source_fingerprint import sha256_hex_of_file
 
 router = APIRouter(tags=["imports"])
 
@@ -60,6 +61,27 @@ async def enqueue_import(
         except Exception:  # noqa: BLE001
             pass
 
+    if zip_path is None:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not store upload; retry.",
+        )
+    zip_sha256_hex = sha256_hex_of_file(zip_path)
+    dup = import_jobs.find_dataset_with_zip_sha256(zip_sha256_hex)
+    if dup is not None:
+        try:
+            zip_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "message": "This ZIP has already been imported as an existing dataset. Delete that dataset first to re-import, or upload a different archive.",
+                "slug": dup.slug,
+                "dataset_name": dup.dataset_name,
+            },
+        )
+
     job = import_jobs.create_job(
         slug=slug.strip(),
         name=name.strip(),
@@ -72,6 +94,7 @@ async def enqueue_import(
         slug=slug.strip(),
         name=name.strip(),
         description=description.strip() if description else None,
+        source_zip_sha256_hex=zip_sha256_hex,
     )
     return ImportJobCreatedOut(job_id=job.job_id, status="queued")
 

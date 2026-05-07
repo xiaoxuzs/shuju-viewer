@@ -35,22 +35,75 @@ mzml-demo/
 
 ## 本地运行（Windows / PowerShell）
 
-### 1. 建一个独立的 venv 并装依赖
+下面所有命令默认当前目录是 **`mzml-demo/`**（例如 `E:\viewer\mzml-demo`）。路径请按你本机数据位置替换；下文以仓库旁的 `xzx_PXD045330` 为例。
+
+### 流程概览（按顺序）
+
+| 步骤 | 是否必做 | 做什么 |
+|------|----------|--------|
+| A. 虚拟环境 + 依赖 | **必做**（首次或换机器） | 安装 FastAPI、pyteomics 等，`app.py` 才能跑 |
+| B. `data/prsm*.js` | 若 `data/` 里已有可**跳过** | 否则用 `prsmup.py` 从 `prsm.xml` + `msalign` 生成 |
+| C. `python app.py --mzml ...` | **必做** | 读入 mzML、挂 HTTP，供浏览器访问 |
+| D. 浏览器打开 | **必做** | 选 PrSM、看图 |
+
+**关键约定**：`app.py` 必须用**装过 `requirements.txt` 的那个 Python** 运行。最常见错误是在未激活 venv 时执行了系统自带的 `python`，会得到 `ModuleNotFoundError: No module named 'fastapi'`。
+
+**日常最短命令**（`.venv` 已存在、`data/` 里已有 `prsm*.js`、只需换 mzML 路径时）：
 
 ```powershell
 cd E:\viewer\mzml-demo
-python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python app.py --mzml "你的同实验.mzML" --port 8765
 ```
 
-### 2. 用数据集里已有的 TopPIC 结果，生成配套的 `prsm*.js`
+`--data` 省略时即为当前目录下的 `data/`。
 
-因为你本机没有 `MZ20160222DS_histone48.mzML`，所以我们用手头这份
-`xzx_PXD045330` 数据集：以它的 mzML 为基础，把 `prsm.xml` 里最优的前 10
-条 PrSM 转成 `prsm*.js`（格式和 `prsm0.js` 完全一致）。
+### A. 虚拟环境与依赖（必做）
+
+1. 进入目录：
+
+   ```powershell
+   cd E:\viewer\mzml-demo
+   ```
+
+2. 若还没有 `.venv`，创建一次（已有则跳过）：
+
+   ```powershell
+   python -m venv .venv
+   ```
+
+3. **二选一**使用 venv 里的解释器（不要混用系统 `python` 跑 `app.py`）：
+
+   - **推荐**：激活后再敲 `python`：
+
+     ```powershell
+     .\.venv\Scripts\Activate.ps1
+     pip install -r requirements.txt
+     ```
+
+   - **不激活**：全程写全路径（适合脚本或 CI）：
+
+     ```powershell
+     .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+     ```
+
+4. 若 `Activate.ps1` 报「无法加载，因为在此系统上禁止运行脚本」，仅当前窗口放开执行策略即可：
+
+   ```powershell
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+激活成功后，提示符前一般会出现 `(.venv)`；此时后面的 `python` 都指向本项目的 venv。
+
+### B. 准备 `prsm*.js`（无现成文件时必做）
+
+`app.py` 会从 `--data` 目录（默认 `mzml-demo/data`）扫描 `prsm*.js`。若你已有 TopPIC HTML 包里的 `prsms/prsm*.js`，复制到 `data/` 即可，**不必**跑脚本。
+
+若没有 HTML、只有 TopPIC `prsm.xml` 和 TopFD `*_ms2.msalign`，用 `scripts/prsmup.py` 生成（**仅标准库**，可用系统 `python` 或 venv 的 `python`，效果相同）。示例：从 `prsm.xml` 里按 `e_value` 取最优的前 10 条，写出 `prsm*.js`（文件名里的数字是 PrSM ID，不一定连续）：
 
 ```powershell
+# 若已 Activate.ps1，用 python；否则用 .\.venv\Scripts\python.exe
 python scripts\prsmup.py `
   --prsm-xml "E:\viewer\shuju\xzx_PXD045330\xzx_PXD045330\toppic\20191118_rvg262_LT_110516-13_1000-1100_Techrep01_ms2_toppic_prsm.xml" `
   --msalign  "E:\viewer\shuju\xzx_PXD045330\xzx_PXD045330\topfd\20191118_rvg262_LT_110516-13_1000-1100_Techrep01_ms2.msalign" `
@@ -58,9 +111,20 @@ python scripts\prsmup.py `
   --limit    10
 ```
 
-跑完 `data/` 下应该有 `prsm0.js ... prsm9.js`。
+常用参数：`--limit` 条数；`--tolerance-ppm` 默认 `10`，控制 b/y 与去卷积峰的 ppm 匹配窗口。
 
-### 3. 起服务
+### C. 启动 `app.py`（必做）
+
+**必须用已安装依赖的解释器**（激活 venv 后的 `python`，或 `.\.venv\Scripts\python.exe`）。
+
+| 参数 | 必填 | 默认 | 说明 |
+|------|------|------|------|
+| `--mzml` | 是 | 无 | 与本次 PrSM **同一次实验、同一文件** 的 `.mzML` 路径 |
+| `--data` | 否 | `mzml-demo/data` | 含 `prsm*.js` 的目录 |
+| `--host` | 否 | `127.0.0.1` | 监听地址 |
+| `--port` | 否 | `8765` | 端口被占用时可改成 `8766` 等 |
+
+示例（路径按你本机 mzML 调整）：
 
 ```powershell
 python app.py `
@@ -69,12 +133,17 @@ python app.py `
   --port 8765
 ```
 
-启动时会打印 `[mzml] loading: ...` 和最终加载了多少张谱（这份数据是
-2048 张）。mzML 大约 30MB，加载大概 10 秒左右。
+未激活 venv 时的等价写法：
 
-### 4. 打开浏览器
+```powershell
+.\.venv\Scripts\python.exe app.py --mzml "..." --data "data" --port 8765
+```
 
-<http://127.0.0.1:8765/>
+启动后终端会打印 `[mzml] loading: ...` 和已加载谱图数量。示例数据约 2048 张谱、mzML 约 30MB，加载常在数秒到十余秒量级。
+
+### D. 打开浏览器
+
+在浏览器访问：<http://127.0.0.1:8765/>（若改了 `--port`，请改 URL 端口。）
 
 左上角下拉选一个 `prsm*.js`，下方会出现：
 
@@ -86,6 +155,20 @@ python app.py `
   的半透明矩形，并标出前体 m/z 和电荷
 - **MS2 spectrum**：mzML 里那张 MS2 的原始峰（灰色），叠加 `prsm.js`
   里匹配到的 b/y 离子（红色柱 + 离子标签 + hover 显示 ppm）
+
+### 启动常见问题
+
+- **`ModuleNotFoundError: No module named 'fastapi'`**  
+  当前 `python` 不是 venv 里的。请先 `Activate.ps1`，或改用 `.\.venv\Scripts\python.exe app.py ...`，并在该解释器下执行过一次 `pip install -r requirements.txt`。
+
+- **下拉列表为空**  
+  `--data` 指向的目录里没有 `prsm*.js`。完成上文步骤 B，或把已有 `prsm*.js` 放进该目录。
+
+- **谱图对不上或 MS1/MS2 异常**  
+  `--mzml` 必须与生成这些 PrSM 的那次运行、那份原始谱一致；换 mzML 需重启 `app.py`。
+
+- **端口已被占用**  
+  换一个 `--port`（例如 `8766`），浏览器 URL 同步改端口。
 
 ---
 

@@ -113,7 +113,21 @@ export function DatasetsPage() {
         await sleep(900);
       }
     } catch (e) {
-      setImportError((e as Error).message || "Request failed.");
+      let msg = (e as Error).message || "Request failed.";
+      if (axios.isAxiosError(e)) {
+        const data = e.response?.data as
+          | { detail?: string | { message?: string; slug?: string; dataset_name?: string } }
+          | undefined;
+        const detail = data?.detail;
+        if (typeof detail === "object" && detail !== null && typeof detail.message === "string") {
+          msg = detail.message;
+          if (detail.dataset_name) msg += ` — ${detail.dataset_name}`;
+          else if (detail.slug) msg += ` (${detail.slug})`;
+        } else if (typeof detail === "string") {
+          msg = detail;
+        }
+      }
+      setImportError(msg);
       setImportBusy(false);
     }
   }, [description, dsName, queryClient, resetImportForm, slug, zipFile]);
