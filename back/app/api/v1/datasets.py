@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -12,6 +14,14 @@ from app.schemas import CutoffOut, DatasetDeletedOut, DatasetOut
 from app.services import import_jobs
 
 router = APIRouter(tags=["datasets"])
+
+
+def _capabilities_out(raw: Any, *, source_software: str | None) -> dict[str, Any]:
+    """Normalize JSONB + infer ``spectra_source`` for legacy prsm*.js-only rows."""
+    caps: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
+    if caps.get("spectra_source") is None and (source_software or "").strip() == "TopPIC_prsm_js":
+        caps = {**caps, "spectra_source": "mzml_memory"}
+    return caps
 
 
 def _cutoffs_payload(session: Session, dataset_id: int) -> list[CutoffOut]:
@@ -72,7 +82,9 @@ def list_datasets(session: Session = Depends(get_db)) -> list[DatasetOut]:
     datasets = session.execute(
         text(
             """
-            SELECT dataset_id, slug, dataset_name, description, source_root, created_at
+            SELECT
+                dataset_id, slug, dataset_name, description,
+                source_software, source_root, created_at, capabilities
             FROM datasets
             ORDER BY dataset_id
             """
@@ -85,6 +97,7 @@ def list_datasets(session: Session = Depends(get_db)) -> list[DatasetOut]:
             name=d["dataset_name"],
             description=d["description"],
             source_path=d["source_root"],
+            capabilities=_capabilities_out(d.get("capabilities"), source_software=d.get("source_software")),
             created_at=d["created_at"],
             updated_at=None,
             cutoffs=_cutoffs_payload(session, d["dataset_id"]),
@@ -106,6 +119,10 @@ def get_dataset_detail(
         name=dataset["dataset_name"],
         description=dataset["description"],
         source_path=dataset["source_root"],
+        capabilities=_capabilities_out(
+            dataset.get("capabilities"),
+            source_software=dataset.get("source_software"),
+        ),
         created_at=dataset["created_at"],
         updated_at=None,
         cutoffs=_cutoffs_payload(session, dataset["dataset_id"]),

@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS runs (
     status VARCHAR(20) NOT NULL DEFAULT 'IMPORTED',
     instrument_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     sample_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    run_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT ck_runs_analysis_mode

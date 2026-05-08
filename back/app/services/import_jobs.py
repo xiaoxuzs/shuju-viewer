@@ -22,8 +22,10 @@ polls. Progress is split into 4 weighted phases:
 from __future__ import annotations
 
 import re
+import json
 import shutil
 import threading
+import time
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -42,6 +44,12 @@ from app.core.logging import get_logger
 from app.ingest.universal_toppic_adapter import (
     ProgressEvent,
     ingest_universal_toppic,
+)
+from app.ingest.universal_prsm_js_adapter import ingest_universal_prsm_js
+from app.services.mzml_mapping import (
+    MzmlMappingError,
+    build_mapping_from_extracted_dataset,
+    normalize_spectrum_file_name,
 )
 
 log = get_logger(__name__)
@@ -89,6 +97,13 @@ _DATASET_ZIP_FINGERPRINT_SQL: tuple[str, ...] = (
     """,
 )
 
+_RUNS_METADATA_SQL: tuple[str, ...] = (
+    """
+    ALTER TABLE runs
+    ADD COLUMN IF NOT EXISTS run_metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+    """,
+)
+
 
 def ensure_jobs_table() -> None:
     """Create ``import_jobs`` (and indexes) if they don't exist yet.
@@ -113,6 +128,19 @@ def ensure_dataset_zip_fingerprint_schema() -> None:
         log.exception(
             "could not bootstrap datasets.source_zip_sha256; duplicate-ZIP checks may fail until DB is fixed"
         )
+
+
+def ensure_runs_metadata_schema() -> None:
+    """Add ``runs.run_metadata`` JSONB column if missing.
+
+    Used for strict run ↔ mzML file mapping (lazy mzML loading by run id).
+    """
+    try:
+        with _db_engine.begin() as conn:
+            for stmt in _RUNS_METADATA_SQL:
+                conn.execute(text(stmt))
+    except Exception:  # noqa: BLE001
+        log.exception("could not bootstrap runs.run_metadata; mzML mapping will fail until DB is fixed")
 
 
 @dataclass
@@ -213,6 +241,7 @@ def _has_dataset_layout(path: Path) -> bool:
         (path / "toppic_prsm_cutoff").is_dir()
         or (path / "topfd").is_dir()
         or (path / "toppic_proteoform_cutoff").is_dir()
+        or (path / "data").is_dir()
     )
 
 
@@ -663,6 +692,32 @@ def run_zip_import_job(
         _maybe_unwrap_single_root_folder(incoming_dir)
         ingest_root = _find_ingest_root(incoming_dir)
 
+        # Determine if this is a TopPIC HTML tree or a prsm*.js-only bundle.
+        is_toppic_html_tree = (ingest_root / "toppic_prsm_cutoff" / "data_js" / "proteins.js").exists()
+        is_prsm_js_bundle = (ingest_root / "data").is_dir() and any((ingest_root / "data").glob("prsm*.js"))
+
+        # ---- Detect spectra source (TopFD JS vs mzML-memory) ----------------
+        # IMPORTANT: Must not read mzML into memory here; only validate mapping.
+        spectra_source = "topfd_js"
+        mzml_mapping: dict[str, Path] | None = None
+
+        topfd_ms1_dir = ingest_root / "topfd" / "ms1_json"
+        topfd_ms2_dir = ingest_root / "topfd" / "ms2_json"
+        has_topfd_ms1 = topfd_ms1_dir.is_dir() and any(topfd_ms1_dir.glob("spectrum*.js"))
+        has_topfd_ms2 = topfd_ms2_dir.is_dir() and any(topfd_ms2_dir.glob("spectrum*.js"))
+        if not (has_topfd_ms1 and has_topfd_ms2):
+            spectra_source = "mzml_memory"
+            _update_job(
+                job_id,
+                stage_detail="Validating mzML mapping…",
+                message="Validating mzML mapping…",
+            )
+            try:
+                mapping_result = build_mapping_from_extracted_dataset(ingest_root=ingest_root)
+            except MzmlMappingError as exc:
+                raise RuntimeError(f"mzML mapping validation failed: {exc}") from exc
+            mzml_mapping = mapping_result.mapping
+
         # ---- Phases: init / proteins / matches / finalize -------------------
         _update_job(
             job_id,
@@ -672,15 +727,33 @@ def run_zip_import_job(
             message="Importing into database…",
             progress=_PHASE_RANGES["init"][0],
         )
-        stats = ingest_universal_toppic(
-            root=ingest_root,
-            database_url=settings.database_url,
-            slug=slug,
-            name=name,
-            mode="fast",
-            replace=True,
-            progress_callback=_make_adapter_progress_handler(job_id),
-        )
+        if is_toppic_html_tree:
+            ingest_mode = "full" if spectra_source == "mzml_memory" else "fast"
+            stats = ingest_universal_toppic(
+                root=ingest_root,
+                database_url=settings.database_url,
+                slug=slug,
+                name=name,
+                mode=ingest_mode,
+                replace=True,
+                progress_callback=_make_adapter_progress_handler(job_id),
+            )
+        elif is_prsm_js_bundle:
+            # prsm*.js-only import: always needs mzML mapping + run-per-file.
+            if spectra_source != "mzml_memory":
+                raise RuntimeError("prsm*.js bundle requires mzML mode (no TopFD spectrum*.js found)")
+            stats = ingest_universal_prsm_js(
+                root=ingest_root,
+                database_url=settings.database_url,
+                slug=slug,
+                name=name,
+                replace=True,
+            )
+        else:
+            raise RuntimeError(
+                "Unsupported ZIP layout. Provide either a TopPIC HTML output tree "
+                "(toppic_prsm_cutoff/data_js/...) or a prsm*.js bundle under data/."
+            )
 
         # description is not part of the universal datasets table INSERT
         # template today; if the caller passed one we attach it via a
@@ -699,13 +772,28 @@ def run_zip_import_job(
         # in ``incoming`` for inspection rather than rolling back the DB.
         if final_dir.exists():
             shutil.rmtree(final_dir)
-        try:
-            incoming_dir.rename(final_dir)
-        except OSError as exc:
+        final_dir_used = final_dir
+        rename_error: OSError | None = None
+        # Retry a few times on Windows: AV scanners / Explorer can briefly lock files.
+        for attempt in range(1, 9):
+            try:
+                incoming_dir.rename(final_dir)
+                rename_error = None
+                break
+            except OSError as exc:
+                rename_error = exc
+                time.sleep(0.35 * attempt)
+        if rename_error is not None:
+            # Degrade gracefully: keep .incoming as the dataset folder so the DB
+            # import remains usable. Downstream code uses datasets.source_root.
             keep_incoming_on_error = True
-            raise RuntimeError(
-                f"DB import succeeded but renaming {incoming_dir} → {final_dir} failed: {exc}"
-            ) from exc
+            final_dir_used = incoming_dir
+            log.warning(
+                "rename incoming→final failed; keeping incoming dir. incoming=%s final=%s err=%s",
+                incoming_dir,
+                final_dir,
+                rename_error,
+            )
 
         # The DB row now has source_root pointing into the (no-longer-existing)
         # ``<slug>.incoming`` path because ingest_universal_toppic was called
@@ -716,7 +804,7 @@ def run_zip_import_job(
             rel_to_incoming = ingest_root.relative_to(incoming_dir.resolve())
         except ValueError:
             rel_to_incoming = Path()
-        new_source_root = (final_dir / rel_to_incoming).resolve()
+        new_source_root = (final_dir_used / rel_to_incoming).resolve()
         zip_hash = source_zip_sha256_hex.lower()
         try:
             with _db_engine.begin() as conn:
@@ -732,6 +820,85 @@ def run_zip_import_job(
                         "zip_hash": zip_hash,
                     },
                 )
+
+                # Persist spectra source capability for frontend routing.
+                conn.execute(
+                    text(
+                        "UPDATE datasets "
+                        "SET capabilities = capabilities || CAST(:cap_patch AS jsonb) "
+                        "WHERE dataset_id = :dataset_id"
+                    ),
+                    {
+                        "dataset_id": stats.dataset_id,
+                        "cap_patch": (
+                            '{"spectra_source": "mzml_memory"}'
+                            if spectra_source == "mzml_memory"
+                            else '{"spectra_source": "topfd_js"}'
+                        ),
+                    },
+                )
+
+                # For mzML-memory datasets, write strict run_id → mzML path mapping.
+                if spectra_source == "mzml_memory":
+                    if mzml_mapping is None:
+                        raise RuntimeError("internal error: mzml_mapping is missing for mzml_memory dataset")
+
+                    # Remove unused default run created by the adapter (full mode)
+                    # if it has no identification_matches.
+                    conn.execute(
+                        text(
+                            """
+                            DELETE FROM runs r
+                            WHERE r.dataset_id = :dataset_id
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM identification_matches im
+                                  WHERE im.dataset_id = r.dataset_id
+                                    AND im.run_id = r.run_id
+                              )
+                            """
+                        ),
+                        {"dataset_id": stats.dataset_id},
+                    )
+
+                    run_rows = conn.execute(
+                        text(
+                            """
+                            SELECT run_id, file_name
+                            FROM runs
+                            WHERE dataset_id = :dataset_id
+                            ORDER BY run_id
+                            """
+                        ),
+                        {"dataset_id": stats.dataset_id},
+                    ).mappings().all()
+
+                    missing_runs: list[str] = []
+                    for r in run_rows:
+                        run_id = int(r["run_id"])
+                        file_name = str(r["file_name"] or "")
+                        key = normalize_spectrum_file_name(file_name)
+                        mzml_path = mzml_mapping.get(key)
+                        if mzml_path is None:
+                            missing_runs.append(file_name)
+                            continue
+                        conn.execute(
+                            text(
+                                """
+                                UPDATE runs
+                                SET run_metadata = run_metadata || CAST(:patch AS jsonb)
+                                WHERE run_id = :run_id
+                                """
+                            ),
+                            {
+                                "run_id": run_id,
+                                "patch": json.dumps({"mzml_file_path": str(mzml_path)}, ensure_ascii=False),
+                            },
+                        )
+
+                    if missing_runs:
+                        raise RuntimeError(
+                            "mzML mapping did not cover run.file_name: " + ", ".join(missing_runs[:10])
+                        )
         except IntegrityError as exc:
             log.warning(
                 "duplicate source_zip_sha256 after ingest slug=%s dataset_id=%s: %s",

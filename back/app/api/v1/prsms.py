@@ -113,6 +113,8 @@ def get_prsm(
             """
             SELECT
                 im.match_id AS id,
+                im.dataset_id AS dataset_id,
+                im.run_id AS run_id,
                 CAST(jsonb_extract_path_text(im.extra_metadata, 'source_prsm_id') AS integer) AS prsm_id,
                 CAST(jsonb_extract_path_text(im.extra_metadata, 'source_sequence_id') AS integer) AS sequence_id,
                 CAST(jsonb_extract_path_text(im.extra_metadata, 'p_value') AS double precision) AS p_value,
@@ -156,6 +158,8 @@ def get_prsm(
     spectrum_file_name = ms_header.get("spectrum_file_name") if ms_header else None
     return PrsmDetailOut(
         **item,
+        dataset_id=row["dataset_id"],
+        run_id=row["run_id"],
         proteoform_id=row["db_proteoform_id"],
         spectrum_file_name=spectrum_file_name,
         ms1_ids=row["ms1_ids"] or (_as_text(ms_header.get("ms1_ids")) if ms_header else None),

@@ -34,6 +34,7 @@ class DatasetOut(BaseModel):
     name: str
     description: str | None
     source_path: str
+    capabilities: dict[str, object] = {}
     created_at: datetime
     updated_at: datetime | None = None
     cutoffs: list[CutoffOut] = []

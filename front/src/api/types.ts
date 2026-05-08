@@ -38,6 +38,7 @@ export interface DatasetOut {
   name: string;
   description: string | null;
   source_path: string;
+  capabilities: Record<string, unknown>;
   created_at: string;
   /** universal schema 没有 updated_at 列；后端总是返回 null。 */
   updated_at: string | null;
@@ -128,6 +129,8 @@ export interface ProteoformDetailOut extends ProteoformListItemOut {
  * 由前端 `parse.ts` 再解析为作图与表格结构。
  */
 export interface PrsmDetailOut extends PrsmListItemOut {
+  dataset_id: number;
+  run_id: number;
   proteoform_id: number;
   spectrum_file_name: string | null;
   ms1_ids: string | null;

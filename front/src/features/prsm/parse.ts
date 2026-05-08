@@ -231,6 +231,33 @@ export interface RawSpectrum {
 
 export function parseRawSpectrum(raw: Record<string, unknown> | null | undefined): RawSpectrum | null {
   if (!raw) return null;
+  // mzML-memory API (`/datasets/{id}/runs/{run}/spectra/{scan}`): parallel vectors at top level.
+  const mzVec = (raw as any).mz;
+  const intVec = (raw as any).intensity;
+  if (Array.isArray(mzVec) && Array.isArray(intVec)) {
+    const peaks: RawPeak[] = [];
+    const n = Math.min(mzVec.length, intVec.length);
+    for (let i = 0; i < n; i++) {
+      const mz = Number(mzVec[i]);
+      const intensity = Number(intVec[i]);
+      if (Number.isFinite(mz) && Number.isFinite(intensity)) {
+        peaks.push({ mz, intensity });
+      }
+    }
+    return {
+      id: Number((raw as any).id ?? (raw as any).scan ?? 0),
+      scan: Number((raw as any).scan ?? 0),
+      retentionTime: num((raw as any).rt_seconds ?? (raw as any).retention_time),
+      targetMz: num((raw as any).target_mz),
+      minMz: num((raw as any).min_mz),
+      maxMz: num((raw as any).max_mz),
+      nIonType: ((raw as any).n_ion_type as string | null) ?? null,
+      cIonType: ((raw as any).c_ion_type as string | null) ?? null,
+      peaks,
+      envelopes: [],
+    };
+  }
+
   const peaks = asList((raw as any).peaks).map(
     (p: any): RawPeak => ({
       mz: Number(p.mz),

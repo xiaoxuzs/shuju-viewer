@@ -51,7 +51,9 @@ def require_dataset(session: Session, slug: str) -> dict[str, Any]:
                 dataset_name,
                 slug,
                 description,
+                source_software,
                 source_root,
+                capabilities,
                 created_at
             FROM datasets
             WHERE slug = :slug

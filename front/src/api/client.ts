@@ -159,3 +159,13 @@ export async function fetchMs2Spectrum(slug: string, specId: number): Promise<Re
   const { data } = await api.get(`/datasets/${slug}/spectra/ms2/${specId}`);
   return data;
 }
+
+/** mzML-memory 模式：按 (dataset_id, run_id, scan_number) 动态取谱图（首次请求会触发后端加载 mzML 到内存）。 */
+export async function fetchMzmlSpectrum(
+  datasetId: number,
+  runId: number,
+  scanNumber: number,
+): Promise<Record<string, unknown>> {
+  const { data } = await api.get(`/datasets/${datasetId}/runs/${runId}/spectra/${scanNumber}`);
+  return data;
+}

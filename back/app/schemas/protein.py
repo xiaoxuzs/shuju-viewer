@@ -76,6 +76,8 @@ class PrsmListItemOut(BaseModel):
 class PrsmDetailOut(PrsmListItemOut):
     """PrSM 详情：附加谱图元数据及 ``annotated_protein`` / ``ms_peaks`` 原始 JSON。"""
 
+    dataset_id: int
+    run_id: int
     proteoform_id: int
     spectrum_file_name: str | None
     ms1_ids: str | None

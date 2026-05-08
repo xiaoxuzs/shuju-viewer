@@ -7,7 +7,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
-import { fetchMs1Spectrum, fetchMs2Spectrum, fetchPrsm } from "@/api/client";
+import { fetchDataset, fetchMs1Spectrum, fetchMs2Spectrum, fetchMzmlSpectrum, fetchPrsm } from "@/api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -62,6 +62,15 @@ export function PrsmDetailPage() {
   });
 
   const prsm = prsmQuery.data;
+  const datasetQuery = useQuery({
+    queryKey: ["dataset", slug],
+    queryFn: () => fetchDataset(slug),
+    enabled: Boolean(slug),
+    // Always fresh: backend may infer ``spectra_source`` for legacy imports; avoid stale TopFD routing.
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const spectraSource = (datasetQuery.data?.capabilities?.["spectra_source"] as string | undefined) ?? "topfd_js";
 
   const parsed = useMemo(() => {
     if (!prsm) return null;
@@ -73,16 +82,40 @@ export function PrsmDetailPage() {
 
   const ms1Id = prsm?.ms1_ids ? Number(prsm.ms1_ids.split(/[;, ]+/)[0]) : null;
   const ms2Id = prsm?.ms2_ids ? Number(prsm.ms2_ids.split(/[;, ]+/)[0]) : null;
+  const ms1Scan = prsm?.ms1_scans ? Number(prsm.ms1_scans.split(/[;, ]+/)[0]) : null;
+  const ms2Scan = prsm?.ms2_scans ? Number(prsm.ms2_scans.split(/[;, ]+/)[0]) : null;
 
   const ms1Query = useQuery({
-    queryKey: ["ms1", slug, ms1Id],
-    queryFn: () => fetchMs1Spectrum(slug, ms1Id as number),
-    enabled: ms1Id != null && Number.isFinite(ms1Id),
+    queryKey: ["ms1", spectraSource, slug, prsm?.run_id, ms1Id, ms1Scan],
+    queryFn: () => {
+      if (!prsm) throw new Error("missing prsm");
+      if (spectraSource === "mzml_memory") {
+        if (ms1Scan == null || !Number.isFinite(ms1Scan)) throw new Error("missing ms1 scan");
+        return fetchMzmlSpectrum(prsm.dataset_id, prsm.run_id, ms1Scan);
+      }
+      return fetchMs1Spectrum(slug, ms1Id as number);
+    },
+    enabled:
+      Boolean(prsm) &&
+      (spectraSource === "mzml_memory"
+        ? ms1Scan != null && Number.isFinite(ms1Scan)
+        : ms1Id != null && Number.isFinite(ms1Id)),
   });
   const ms2Query = useQuery({
-    queryKey: ["ms2", slug, ms2Id],
-    queryFn: () => fetchMs2Spectrum(slug, ms2Id as number),
-    enabled: ms2Id != null && Number.isFinite(ms2Id),
+    queryKey: ["ms2", spectraSource, slug, prsm?.run_id, ms2Id, ms2Scan],
+    queryFn: () => {
+      if (!prsm) throw new Error("missing prsm");
+      if (spectraSource === "mzml_memory") {
+        if (ms2Scan == null || !Number.isFinite(ms2Scan)) throw new Error("missing ms2 scan");
+        return fetchMzmlSpectrum(prsm.dataset_id, prsm.run_id, ms2Scan);
+      }
+      return fetchMs2Spectrum(slug, ms2Id as number);
+    },
+    enabled:
+      Boolean(prsm) &&
+      (spectraSource === "mzml_memory"
+        ? ms2Scan != null && Number.isFinite(ms2Scan)
+        : ms2Id != null && Number.isFinite(ms2Id)),
   });
 
   // Memoize the chart-peak arrays so the inline and modal charts share the
@@ -125,12 +158,12 @@ export function PrsmDetailPage() {
   useEffect(() => {
     setMs1InlineZoom(DEFAULT_ZOOM);
     setMs1ModalZoom(DEFAULT_ZOOM);
-  }, [ms1Id]);
+  }, [spectraSource === "mzml_memory" ? ms1Scan : ms1Id]);
   useEffect(() => {
     setMs2InlineZoom(DEFAULT_ZOOM);
     setMs2ModalZoom(DEFAULT_ZOOM);
     setPeakDetail(null);
-  }, [ms2Id]);
+  }, [spectraSource === "mzml_memory" ? ms2Scan : ms2Id]);
 
   useEffect(() => {
     setPeakDetail(null);

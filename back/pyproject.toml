@@ -17,6 +17,9 @@ dependencies = [
     "orjson>=3.10",
     "tqdm>=4.66",
     "python-multipart>=0.0.9",
+    "pyteomics>=4.7.5",
+    "numpy>=2.0.0",
+    "lxml>=6.1.0",
 ]
 
 [tool.uv]
