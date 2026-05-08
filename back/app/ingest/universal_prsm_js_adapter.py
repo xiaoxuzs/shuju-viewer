@@ -1,16 +1,16 @@
-"""Import prsm*.js-only datasets (plus mzML mapping) into universal schema.
+"""Import PrSM-detail-only datasets (plus mzML mapping) into universal schema.
 
 This adapter exists for ZIPs that do NOT contain TopPIC HTML output trees
 (`toppic_prsm_cutoff/data_js/...`). Instead, the archive provides:
 
-- data/prsm*.js  (TopPIC prsm_data JS objects)
+- data/prsm*.[js|json|txt]  (TopPIC prsm_data / JSON objects)
 - one or more mzML(.gz) files (referenced by ms_header.spectrum_file_name)
 
 We import a minimal yet usable subset for the main viewer:
 - datasets (capabilities include has_prsms, etc.)
 - runs (one per spectrum_file_name)
 - proteins / proteoforms / protein_relation_mapping (derived from annotated_protein)
-- identification_matches (one per prsm*.js, entity_type='PROTEOFORM')
+- identification_matches (one per PrSM detail file, entity_type='PROTEOFORM')
 
 Spectrum peak arrays remain on-demand via mzML in-memory store.
 """
@@ -25,7 +25,7 @@ from typing import Any
 from sqlalchemy import create_engine, text
 
 from app.ingest.utils import to_float, to_int
-from app.services.js_parser import load_js_object
+from app.services.prsm_files import get_prsm_root, iter_prsm_files, load_prsm_document
 
 
 @dataclass
@@ -59,9 +59,9 @@ def ingest_universal_prsm_js(
     prsms_dir = root / "data"
     if not prsms_dir.exists():
         raise FileNotFoundError(prsms_dir)
-    files = sorted(prsms_dir.glob("prsm*.js"), key=lambda p: p.name)
+    files = iter_prsm_files(prsms_dir)
     if not files:
-        raise ValueError(f"no prsm*.js under {prsms_dir}")
+        raise ValueError(f"no supported PrSM files under {prsms_dir}")
 
     engine = create_engine(database_url, future=True)
     with engine.begin() as conn:
@@ -79,7 +79,7 @@ def ingest_universal_prsm_js(
                 VALUES (
                     :name, :slug, 'TOP_DOWN', 'TopPIC_prsm_js',
                     :source_root, 'IMPORTED',
-                    'Dataset imported from prsm*.js (no TopPIC HTML tree)',
+                    'Dataset imported from PrSM detail files (no TopPIC HTML tree)',
                     CAST(:capabilities AS jsonb)
                 )
                 RETURNING dataset_id
@@ -203,8 +203,8 @@ def ingest_universal_prsm_js(
 
         # Insert matches.
         for path in files:
-            doc = load_js_object(path)
-            prsm_root = doc.get("prsm") or doc.get("prsm_data", {}).get("prsm") or doc
+            doc = load_prsm_document(path)
+            prsm_root = get_prsm_root(doc)
             annotated = prsm_root.get("annotated_protein", {}) or {}
             ms = prsm_root.get("ms", {}) or {}
             header = ms.get("ms_header", {}) or {}

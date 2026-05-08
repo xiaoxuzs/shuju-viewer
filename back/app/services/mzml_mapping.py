@@ -4,7 +4,7 @@ This module runs at import time (after ZIP extraction) and MUST NOT read mzML
 content into memory. It only discovers mzML files on disk and builds a strict
 one-to-one mapping between:
 
-- expected spectrum file names from PrSM detail JS files (ms_header.spectrum_file_name)
+- expected spectrum file names from PrSM detail files (ms_header.spectrum_file_name)
 - actual *.mzML/*.mzml files extracted from the ZIP
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.services.js_parser import load_js_object
+from app.services.prsm_files import extract_spectrum_file_name, iter_prsm_files
 
 
 @dataclass(frozen=True)
@@ -76,21 +76,14 @@ def extract_spectrum_file_names_from_prsms(prsms_dir: Path) -> set[str]:
     if not prsms_dir.exists() or not prsms_dir.is_dir():
         raise MzmlMappingError(f"missing prsms directory: {prsms_dir}")
     names: set[str] = set()
-    files = sorted(prsms_dir.glob("prsm*.js"), key=lambda p: p.name)
+    files = iter_prsm_files(prsms_dir)
     if not files:
-        raise MzmlMappingError(f"no prsm*.js found under: {prsms_dir}")
+        raise MzmlMappingError(f"no supported PrSM files found under: {prsms_dir}")
     for path in files:
-        doc = load_js_object(path)
-        prsm_root = doc.get("prsm") or doc.get("prsm_data", {}).get("prsm") or doc
-        ms = prsm_root.get("ms", {}) or {}
-        header = ms.get("ms_header", {}) or {}
-        raw_name = header.get("spectrum_file_name")
-        if raw_name is None:
-            raise MzmlMappingError(f"missing ms_header.spectrum_file_name in {path}")
-        raw_text = str(raw_name).strip()
-        if raw_text == "":
-            raise MzmlMappingError(f"empty ms_header.spectrum_file_name in {path}")
-        names.add(raw_text)
+        try:
+            names.add(extract_spectrum_file_name(path))
+        except ValueError as exc:
+            raise MzmlMappingError(str(exc)) from exc
     return names
 
 
@@ -100,7 +93,7 @@ def build_one_to_one_mapping(
     mzml_files: list[Path],
 ) -> dict[str, Path]:
     if not spectrum_file_names:
-        raise MzmlMappingError("no spectrum_file_name extracted from prsm*.js")
+        raise MzmlMappingError("no spectrum_file_name extracted from supported PrSM files")
     if not mzml_files:
         raise MzmlMappingError("no mzML files found in extracted archive")
 
@@ -172,7 +165,7 @@ def build_mapping_from_extracted_dataset(*, ingest_root: Path) -> MzmlMappingRes
             last_error = exc
             continue
     if spectrum_file_names is None:
-        raise MzmlMappingError(f"could not locate prsm*.js directory under ingest root: {last_error}")
+        raise MzmlMappingError(f"could not locate supported PrSM files under ingest root: {last_error}")
     mapping = build_one_to_one_mapping(
         spectrum_file_names=spectrum_file_names,
         mzml_files=mzml_files,

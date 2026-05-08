@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.services.js_parser import load_js_object
+from app.services.prsm_files import get_prsm_root, load_prsm_document
 
 
 # ---------------------------------------------------------------------------
@@ -151,8 +151,8 @@ def load_prsm_detail(detail_path: str | None) -> tuple[dict[str, Any] | None, di
     path = Path(detail_path)
     if not path.exists():
         return None, None, None
-    doc = load_js_object(path)
-    prsm_root = doc.get("prsm") or doc
+    doc = load_prsm_document(path)
+    prsm_root = get_prsm_root(doc)
     annotated = prsm_root.get("annotated_protein") or None
     ms = prsm_root.get("ms", {}) or {}
     header = ms.get("ms_header") or None

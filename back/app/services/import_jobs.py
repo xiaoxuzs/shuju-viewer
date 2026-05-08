@@ -51,6 +51,7 @@ from app.services.mzml_mapping import (
     build_mapping_from_extracted_dataset,
     normalize_spectrum_file_name,
 )
+from app.services.prsm_files import has_prsm_files
 
 log = get_logger(__name__)
 
@@ -692,9 +693,9 @@ def run_zip_import_job(
         _maybe_unwrap_single_root_folder(incoming_dir)
         ingest_root = _find_ingest_root(incoming_dir)
 
-        # Determine if this is a TopPIC HTML tree or a prsm*.js-only bundle.
+        # Determine if this is a TopPIC HTML tree or a PrSM detail bundle.
         is_toppic_html_tree = (ingest_root / "toppic_prsm_cutoff" / "data_js" / "proteins.js").exists()
-        is_prsm_js_bundle = (ingest_root / "data").is_dir() and any((ingest_root / "data").glob("prsm*.js"))
+        is_prsm_js_bundle = has_prsm_files(ingest_root / "data")
 
         # ---- Detect spectra source (TopFD JS vs mzML-memory) ----------------
         # IMPORTANT: Must not read mzML into memory here; only validate mapping.
@@ -739,9 +740,9 @@ def run_zip_import_job(
                 progress_callback=_make_adapter_progress_handler(job_id),
             )
         elif is_prsm_js_bundle:
-            # prsm*.js-only import: always needs mzML mapping + run-per-file.
+            # PrSM-detail-only import: always needs mzML mapping + run-per-file.
             if spectra_source != "mzml_memory":
-                raise RuntimeError("prsm*.js bundle requires mzML mode (no TopFD spectrum*.js found)")
+                raise RuntimeError("PrSM detail bundle requires mzML mode (no TopFD spectrum*.js found)")
             stats = ingest_universal_prsm_js(
                 root=ingest_root,
                 database_url=settings.database_url,
@@ -752,7 +753,7 @@ def run_zip_import_job(
         else:
             raise RuntimeError(
                 "Unsupported ZIP layout. Provide either a TopPIC HTML output tree "
-                "(toppic_prsm_cutoff/data_js/...) or a prsm*.js bundle under data/."
+                "(toppic_prsm_cutoff/data_js/...) or supported PrSM detail files under data/."
             )
 
         # description is not part of the universal datasets table INSERT

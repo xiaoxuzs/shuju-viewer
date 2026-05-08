@@ -29,6 +29,7 @@ from tqdm import tqdm
 
 from app.ingest.utils import best_prsm, ensure_list, to_float, to_int
 from app.services.js_parser import load_js_object
+from app.services.prsm_files import get_prsm_root, iter_prsm_files, load_prsm_document, prsm_detail_path
 
 
 console = Console()
@@ -132,7 +133,7 @@ class _RunRegistry:
       record that does not carry a spectrum file name. Created on first use,
       with ``runs.file_name`` falling back to the dataset folder name.
     * ``get_or_create(file_name)`` is used by full imports: each distinct
-      ``spectrum_file_name`` from a ``prsm*.js`` header gets its own
+      ``spectrum_file_name`` from a PrSM detail header gets its own
       ``runs`` row, so ``identification_matches.run_id`` properly distinguishes
       different mzML / raw files inside one dataset.
 
@@ -615,15 +616,15 @@ def _import_fast_prsm_summaries(
     fast_match_keys: set[tuple[str, int]],
     stats: UniversalImportStats,
 ) -> None:
-    """Register PrSM rows from proteins.js summaries without opening prsm*.js files."""
+    """Register PrSM rows from proteins.js summaries without opening detail files."""
     prsms_dir = cutoff_root / "prsms"
     for prsm_summary in ensure_list(form_doc.get("prsm")):
         source_prsm_id = to_int(prsm_summary.get("prsm_id"))
         if source_prsm_id is None:
             stats.skipped_matches += 1
             continue
-        detail_path = prsms_dir / f"prsm{source_prsm_id}.js"
-        if not detail_path.exists():
+        detail_path = prsm_detail_path(prsms_dir, source_prsm_id)
+        if detail_path is None:
             stats.skipped_matches += 1
             continue
         match_key = (cutoff_kind, source_prsm_id)
@@ -729,7 +730,7 @@ def _import_prsm_matches(
     if not prsms_dir.exists():
         return
 
-    files = sorted(prsms_dir.glob("prsm*.js"), key=_prsm_sort_key)
+    files = iter_prsm_files(prsms_dir, key=_prsm_sort_key)
     n_total = len(files)
     _emit(
         progress_callback,
@@ -749,12 +750,12 @@ def _import_prsm_matches(
                 ),
             )
         try:
-            doc = load_js_object(path)
+            doc = load_prsm_document(path)
         except Exception:
             stats.skipped_matches += 1
             continue
 
-        prsm_root = doc.get("prsm") or doc
+        prsm_root = get_prsm_root(doc)
         annotated = prsm_root.get("annotated_protein", {}) or {}
         source_seq_id = to_int(annotated.get("sequence_id"))
         source_form_id = to_int(annotated.get("proteoform_id"))
@@ -777,7 +778,7 @@ def _import_prsm_matches(
         # Resolve (or create) the run row for this PrSM's spectrum file.
         # Datasets with a single mzML degrade gracefully: every PrSM hits the
         # default run; with multiple mzMLs we lazily insert one runs row per
-        # distinct spectrum_file_name as we walk the prsm*.js files.
+        # distinct spectrum_file_name as we walk the PrSM detail files.
         spectrum_file_name = header.get("spectrum_file_name")
         run_id = runs.get_or_create(
             str(spectrum_file_name) if spectrum_file_name else None
