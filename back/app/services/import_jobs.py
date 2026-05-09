@@ -14,8 +14,8 @@ polls. Progress is split into 4 weighted phases:
 
 * ``extract`` – ZIP unpacking (counted by file entries).
 * ``proteins`` – inserting proteins / proteoforms / relations (per cutoff).
-* ``matches`` – inserting ``identification_matches`` (per cutoff, the slowest
-  phase for ``--mode full`` imports).
+* ``matches`` – inserting ``identification_matches`` (per cutoff; TopPIC uses
+  fast summaries plus optional PrSM-header run assignment for mzML).
 * ``finalize`` – marking dataset / run rows ``READY`` and writing description.
 """
 
@@ -43,6 +43,7 @@ from app.core.db import engine as _db_engine
 from app.core.logging import get_logger
 from app.ingest.universal_toppic_adapter import (
     ProgressEvent,
+    assign_toppic_runs_from_prsm_headers,
     ingest_universal_toppic,
 )
 from app.ingest.universal_prsm_js_adapter import ingest_universal_prsm_js
@@ -51,7 +52,8 @@ from app.services.mzml_mapping import (
     build_mapping_from_extracted_dataset,
     normalize_spectrum_file_name,
 )
-from app.services.prsm_files import has_prsm_files
+from app.services.import_planner import ImportLayoutError, plan_zip_ingest
+from app.services.import_planner.types import DatasetShape
 
 log = get_logger(__name__)
 
@@ -692,22 +694,17 @@ def run_zip_import_job(
         _extract_zip_with_progress(zip_path, incoming_dir, on_progress=_extract_cb)
         _maybe_unwrap_single_root_folder(incoming_dir)
         ingest_root = _find_ingest_root(incoming_dir)
+        incoming_dir_abs = str(incoming_dir.resolve())
 
-        # Determine if this is a TopPIC HTML tree or a PrSM detail bundle.
-        is_toppic_html_tree = (ingest_root / "toppic_prsm_cutoff" / "data_js" / "proteins.js").exists()
-        is_prsm_js_bundle = has_prsm_files(ingest_root / "data")
+        try:
+            plan = plan_zip_ingest(ingest_root)
+        except ImportLayoutError as exc:
+            raise RuntimeError(str(exc)) from exc
 
-        # ---- Detect spectra source (TopFD JS vs mzML-memory) ----------------
-        # IMPORTANT: Must not read mzML into memory here; only validate mapping.
-        spectra_source = "topfd_js"
+        # ---- mzML mapping (validate on disk only; do not load spectra) -----
         mzml_mapping: dict[str, Path] | None = None
-
-        topfd_ms1_dir = ingest_root / "topfd" / "ms1_json"
-        topfd_ms2_dir = ingest_root / "topfd" / "ms2_json"
-        has_topfd_ms1 = topfd_ms1_dir.is_dir() and any(topfd_ms1_dir.glob("spectrum*.js"))
-        has_topfd_ms2 = topfd_ms2_dir.is_dir() and any(topfd_ms2_dir.glob("spectrum*.js"))
-        if not (has_topfd_ms1 and has_topfd_ms2):
-            spectra_source = "mzml_memory"
+        spectra_source = plan.spectra_source
+        if spectra_source == "mzml_memory":
             _update_job(
                 job_id,
                 stage_detail="Validating mzML mapping…",
@@ -728,21 +725,29 @@ def run_zip_import_job(
             message="Importing into database…",
             progress=_PHASE_RANGES["init"][0],
         )
-        if is_toppic_html_tree:
-            ingest_mode = "full" if spectra_source == "mzml_memory" else "fast"
+        if plan.shape == DatasetShape.TOPPIC_HTML:
             stats = ingest_universal_toppic(
                 root=ingest_root,
                 database_url=settings.database_url,
                 slug=slug,
                 name=name,
-                mode=ingest_mode,
+                mode="fast",
                 replace=True,
                 progress_callback=_make_adapter_progress_handler(job_id),
             )
-        elif is_prsm_js_bundle:
-            # PrSM-detail-only import: always needs mzML mapping + run-per-file.
-            if spectra_source != "mzml_memory":
-                raise RuntimeError("PrSM detail bundle requires mzML mode (no TopFD spectrum*.js found)")
+            if plan.need_toppic_multirun_pass:
+                _update_job(
+                    job_id,
+                    stage_detail="Assigning runs from PrSM headers…",
+                    message="Assigning runs from PrSM headers…",
+                )
+                assign_toppic_runs_from_prsm_headers(
+                    database_url=settings.database_url,
+                    dataset_id=stats.dataset_id,
+                    root=ingest_root,
+                    progress_callback=_make_adapter_progress_handler(job_id),
+                )
+        elif plan.shape == DatasetShape.PRSM_BUNDLE:
             stats = ingest_universal_prsm_js(
                 root=ingest_root,
                 database_url=settings.database_url,
@@ -751,10 +756,7 @@ def run_zip_import_job(
                 replace=True,
             )
         else:
-            raise RuntimeError(
-                "Unsupported ZIP layout. Provide either a TopPIC HTML output tree "
-                "(toppic_prsm_cutoff/data_js/...) or supported PrSM detail files under data/."
-            )
+            raise RuntimeError("internal error: unsupported import plan shape")
 
         # description is not part of the universal datasets table INSERT
         # template today; if the caller passed one we attach it via a
@@ -806,6 +808,7 @@ def run_zip_import_job(
         except ValueError:
             rel_to_incoming = Path()
         new_source_root = (final_dir_used / rel_to_incoming).resolve()
+        final_dir_abs = str(final_dir_used.resolve())
         zip_hash = source_zip_sha256_hex.lower()
         try:
             with _db_engine.begin() as conn:
@@ -821,6 +824,26 @@ def run_zip_import_job(
                         "zip_hash": zip_hash,
                     },
                 )
+
+                # After rename, PrSM ``detail_path`` strings still point at the
+                # ``*.incoming`` directory; rewrite the prefix so API reads work.
+                if incoming_dir_abs != final_dir_abs:
+                    conn.execute(
+                        text(
+                            """
+                            UPDATE identification_matches
+                            SET detail_path = REPLACE(detail_path, :oldb, :newb)
+                            WHERE dataset_id = :dataset_id
+                              AND detail_path LIKE :pfx
+                            """
+                        ),
+                        {
+                            "oldb": incoming_dir_abs,
+                            "newb": final_dir_abs,
+                            "pfx": incoming_dir_abs + "%",
+                            "dataset_id": stats.dataset_id,
+                        },
+                    )
 
                 # Persist spectra source capability for frontend routing.
                 conn.execute(

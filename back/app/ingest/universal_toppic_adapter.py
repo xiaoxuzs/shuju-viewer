@@ -25,11 +25,9 @@ import typer
 from rich.console import Console
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
-from tqdm import tqdm
-
 from app.ingest.utils import best_prsm, ensure_list, to_float, to_int
 from app.services.js_parser import load_js_object
-from app.services.prsm_files import get_prsm_root, iter_prsm_files, load_prsm_document, prsm_detail_path
+from app.services.prsm_files import get_prsm_root, load_prsm_document, prsm_detail_path
 
 
 console = Console()
@@ -92,7 +90,7 @@ def ingest(
             "(i.e. settings.database_url) so the CLI hits the same database as the API."
         ),
     ),
-    mode: str = typer.Option("fast", "--mode", help="Import mode: fast or full."),
+    mode: str = typer.Option("fast", "--mode", help="Import mode (only ``fast`` is supported)."),
     replace: bool = typer.Option(False, "--replace", help="Delete existing dataset with the same slug first."),
 ) -> None:
     """Import a TopPIC / TopFD dataset into the universal schema."""
@@ -102,13 +100,28 @@ def ingest(
         # --database-url. With no flag we fall back to settings.
         from app.core.config import settings  # noqa: WPS433 - intentional local import
         database_url = settings.database_url
+    if mode.strip().lower() != "fast":
+        console.print("[red]Only --mode fast is supported (full import was removed).[/red]")
+        raise typer.Exit(code=2)
+
+    def _cli_progress(event: ProgressEvent) -> None:
+        """Echo adapter phases to the terminal (ZIP import uses DB job rows instead)."""
+        parts = [event.phase]
+        if event.cutoff:
+            parts.append(str(event.cutoff))
+        parts.append(f"{event.current}/{event.total}")
+        if event.message:
+            parts.append(event.message)
+        console.print(" | ".join(parts))
+
     stats = ingest_universal_toppic(
         root=root,
         database_url=database_url,
         slug=slug,
         name=name,
-        mode=mode,
+        mode="fast",
         replace=replace,
+        progress_callback=_cli_progress,
     )
     console.print("[green]universal import done[/green]")
     console.print(f"  dataset_id={stats.dataset_id}  run_id={stats.run_id}")
@@ -127,18 +140,12 @@ def ingest(
 class _RunRegistry:
     """Lazy resolver from a PrSM's ``spectrum_file_name`` to a ``runs.run_id``.
 
-    Behaviour:
+    * ``get_default()`` is used for fast summary inserts and for PrSMs without
+      a spectrum file name; ``runs.file_name`` falls back to the dataset folder name.
+    * ``get_or_create(file_name)`` creates one ``runs`` row per distinct file name
+      (used when assigning runs from PrSM detail headers for mzML-backed imports).
 
-    * ``get_default()`` returns the run id used for fast imports and any
-      record that does not carry a spectrum file name. Created on first use,
-      with ``runs.file_name`` falling back to the dataset folder name.
-    * ``get_or_create(file_name)`` is used by full imports: each distinct
-      ``spectrum_file_name`` from a PrSM detail header gets its own
-      ``runs`` row, so ``identification_matches.run_id`` properly distinguishes
-      different mzML / raw files inside one dataset.
-
-    Both code paths share the same in-memory cache; same ``file_name`` always
-    maps to the same run id.
+    Same ``file_name`` always maps to the same run id within this registry instance.
     """
 
     def __init__(self, conn: Connection, dataset_id: int, root: Path) -> None:
@@ -203,24 +210,23 @@ def ingest_universal_toppic(
     replace: bool = False,
     progress_callback: ProgressCallback | None = None,
 ) -> UniversalImportStats:
-    """Run the universal-schema TopPIC / TopFD import.
+    """Run the universal-schema TopPIC / TopFD import (fast summaries only).
 
     ``progress_callback`` (optional) is invoked with :class:`ProgressEvent`
     instances at key checkpoints so callers (e.g. the ZIP import job runner)
     can render a real progress bar. Exceptions raised by the callback are
     swallowed and never abort the ingest.
 
-    Multi-run handling: in ``mode=full`` the importer reads each PrSM's
-    ``ms_header.spectrum_file_name`` and creates one ``runs`` row per distinct
-    file name (lazily, on first occurrence). In ``mode=fast`` we only have
-    summary records that don't carry the spectrum filename, so a single
-    default run is created.
+    PrSM rows are created from ``proteins.js`` summaries with ``detail_path``
+    pointing at PrSM detail files. Multi-run assignment for mzML-backed
+    datasets is performed separately by
+    :func:`assign_toppic_runs_from_prsm_headers`.
     """
     root = root.resolve()
     if not root.exists():
         raise FileNotFoundError(root)
-    if mode not in {"fast", "full"}:
-        raise ValueError("mode must be 'fast' or 'full'")
+    if mode != "fast":
+        raise ValueError("mode must be 'fast'")
 
     _emit(progress_callback, ProgressEvent("init", None, 0, 0, "Connecting to database…"))
 
@@ -264,17 +270,6 @@ def ingest_universal_toppic(
                 stats=stats,
                 progress_callback=progress_callback,
             )
-            if mode == "full":
-                _import_prsm_matches(
-                    conn,
-                    dataset_id=dataset_id,
-                    runs=runs,
-                    cutoff_kind=cutoff_kind,
-                    cutoff_root=cutoff_root,
-                    proteoform_by_source_key=proteoform_by_source_key,
-                    stats=stats,
-                    progress_callback=progress_callback,
-                )
 
         _emit(progress_callback, ProgressEvent("finalize", None, 0, 2, "Marking dataset READY"))
         conn.execute(
@@ -363,8 +358,16 @@ def _import_proteins_and_forms(
         ProgressEvent("proteins", cutoff_kind, 0, max(n_total, 1), f"{cutoff_kind}: 0/{n_total} proteins"),
     )
 
+    # Emit often enough that long imports do not look "stuck" (many PrSM INSERTs
+    # can run between proteins when step was 25-only).
+    _protein_progress_step = 25 if n_total > 200 else (5 if n_total > 40 else 1)
+
     for protein_idx, protein_doc in enumerate(proteins_iter, start=1):
-        if progress_callback is not None and (protein_idx % 25 == 0 or protein_idx == n_total):
+        if progress_callback is not None and (
+            protein_idx == 1
+            or protein_idx == n_total
+            or protein_idx % _protein_progress_step == 0
+        ):
             _emit(
                 progress_callback,
                 ProgressEvent(
@@ -715,161 +718,139 @@ def _import_fast_prsm_summaries(
         stats.matches += 1
 
 
-def _import_prsm_matches(
-    conn: Connection,
+def assign_toppic_runs_from_prsm_headers(
     *,
+    database_url: str,
     dataset_id: int,
-    runs: _RunRegistry,
-    cutoff_kind: str,
-    cutoff_root: Path,
-    proteoform_by_source_key: dict[tuple[int, int], int],
-    stats: UniversalImportStats,
+    root: Path,
     progress_callback: ProgressCallback | None = None,
-) -> None:
-    prsms_dir = cutoff_root / "prsms"
-    if not prsms_dir.exists():
-        return
+) -> int:
+    """Re-read PrSM detail headers to set ``run_id``, scan, and header-derived columns.
 
-    files = iter_prsm_files(prsms_dir, key=_prsm_sort_key)
-    n_total = len(files)
-    _emit(
-        progress_callback,
-        ProgressEvent("matches", cutoff_kind, 0, max(n_total, 1), f"{cutoff_kind}: 0/{n_total} PrSM details"),
-    )
-    bar = tqdm(files, desc=f"{cutoff_kind} universal matches", unit="prsm", ascii=True)
-    for file_idx, path in enumerate(bar, start=1):
-        if progress_callback is not None and (file_idx % 50 == 0 or file_idx == n_total):
-            _emit(
-                progress_callback,
-                ProgressEvent(
-                    "matches",
-                    cutoff_kind,
-                    file_idx,
-                    max(n_total, 1),
-                    f"{cutoff_kind}: {file_idx}/{n_total} PrSM details",
-                ),
-            )
-        try:
-            doc = load_prsm_document(path)
-        except Exception:
-            stats.skipped_matches += 1
-            continue
-
-        prsm_root = get_prsm_root(doc)
-        annotated = prsm_root.get("annotated_protein", {}) or {}
-        source_seq_id = to_int(annotated.get("sequence_id"))
-        source_form_id = to_int(annotated.get("proteoform_id"))
-        if source_seq_id is None or source_form_id is None:
-            stats.skipped_matches += 1
-            continue
-
-        proteoform_id = proteoform_by_source_key.get((source_seq_id, source_form_id))
-        if proteoform_id is None:
-            stats.skipped_matches += 1
-            continue
-
-        ms = prsm_root.get("ms", {}) or {}
-        header = ms.get("ms_header", {}) or {}
-        ms2_scan = _first_int(header.get("scans"))
-        if ms2_scan is None:
-            stats.skipped_matches += 1
-            continue
-
-        # Resolve (or create) the run row for this PrSM's spectrum file.
-        # Datasets with a single mzML degrade gracefully: every PrSM hits the
-        # default run; with multiple mzMLs we lazily insert one runs row per
-        # distinct spectrum_file_name as we walk the PrSM detail files.
-        spectrum_file_name = header.get("spectrum_file_name")
-        run_id = runs.get_or_create(
-            str(spectrum_file_name) if spectrum_file_name else None
-        )
-
-        conn.execute(
+    Call after :func:`ingest_universal_toppic` when ``spectra_source`` is ``mzml_memory``.
+    Requires each ``identification_matches.detail_path`` file to exist and to contain
+    parseable ``ms_header.scans`` (MS2 scan number).
+    """
+    root = root.resolve()
+    engine = create_engine(database_url, future=True)
+    updated = 0
+    with engine.begin() as conn:
+        rows = conn.execute(
             text(
                 """
-                INSERT INTO identification_matches (
-                    dataset_id,
-                    run_id,
-                    scan_number,
-                    spectrum_native_id,
-                    retention_time,
-                    ms_level,
-                    entity_type,
-                    entity_id,
-                    modified_sequence,
-                    experimental_mass,
-                    precursor_mz,
-                    precursor_charge,
-                    intensity,
-                    score,
-                    e_value,
-                    q_value,
-                    pep,
-                    is_decoy_match,
-                    search_engine,
-                    detail_path,
-                    detail_cache,
-                    extra_metadata
-                )
-                VALUES (
-                    :dataset_id,
-                    :run_id,
-                    :scan_number,
-                    :spectrum_native_id,
-                    NULL,
-                    2,
-                    'PROTEOFORM',
-                    :entity_id,
-                    :modified_sequence,
-                    :experimental_mass,
-                    :precursor_mz,
-                    :precursor_charge,
-                    :intensity,
-                    NULL,
-                    :e_value,
-                    :q_value,
-                    NULL,
-                    :is_decoy_match,
-                    'TopPIC',
-                    :detail_path,
-                    NULL,
-                    CAST(:extra_metadata AS jsonb)
-                )
+                SELECT match_id, detail_path, extra_metadata
+                FROM identification_matches
+                WHERE dataset_id = :dataset_id AND detail_path IS NOT NULL
+                ORDER BY match_id
                 """
             ),
-            {
-                "dataset_id": dataset_id,
-                "run_id": run_id,
-                "scan_number": ms2_scan,
-                "spectrum_native_id": _first_text(header.get("ids")),
-                "entity_id": proteoform_id,
-                "modified_sequence": _annotation_summary(annotated),
-                "experimental_mass": to_float(header.get("precursor_mono_mass")),
-                "precursor_mz": to_float(header.get("precursor_mz")),
-                "precursor_charge": to_int(header.get("precursor_charge")),
-                "intensity": to_float(header.get("feature_inte")),
-                "e_value": to_float(prsm_root.get("e_value")),
-                "q_value": to_float(prsm_root.get("fdr")),
-                "is_decoy_match": _looks_decoy(annotated.get("sequence_name"), None),
-                "detail_path": str(path),
-                "extra_metadata": _json_dumps(
-                    {
-                        "source_cutoff": cutoff_kind,
-                        "source_prsm_id": to_int(prsm_root.get("prsm_id")),
-                        "p_value": to_float(prsm_root.get("p_value")),
-                        "matched_fragment_number": to_int(prsm_root.get("matched_fragment_number")),
-                        "matched_peak_number": to_int(prsm_root.get("matched_peak_number")),
-                        "ms1_ids": _as_text(header.get("ms1_ids")),
-                        "ms2_ids": _as_text(header.get("ids")),
-                        "ms1_scans": _as_text(header.get("ms1_scans")),
-                        "ms2_scans": _as_text(header.get("scans")),
-                        "source_sequence_id": source_seq_id,
-                        "source_proteoform_id": source_form_id,
-                    }
-                ),
-            },
+            {"dataset_id": dataset_id},
+        ).mappings().all()
+        n_total = len(rows)
+        if n_total == 0:
+            return 0
+
+        runs = _RunRegistry(conn, dataset_id=dataset_id, root=root)
+        _emit(
+            progress_callback,
+            ProgressEvent("matches", None, 0, max(n_total, 1), "Assigning runs from PrSM headers…"),
         )
-        stats.matches += 1
+        for idx, row in enumerate(rows, start=1):
+            detail = row.get("detail_path")
+            if not detail:
+                raise RuntimeError("assign_toppic_runs_from_prsm_headers: row missing detail_path")
+            path = Path(str(detail))
+            if not path.is_file():
+                raise RuntimeError(f"missing PrSM file: {path}")
+            try:
+                doc = load_prsm_document(path)
+            except Exception as exc:
+                raise RuntimeError(f"cannot read {path}: {exc}") from exc
+
+            prsm_root = get_prsm_root(doc)
+            annotated = prsm_root.get("annotated_protein", {}) or {}
+            ms = prsm_root.get("ms", {}) or {}
+            header = ms.get("ms_header", {}) or {}
+            ms2_scan = _first_int(header.get("scans"))
+            if ms2_scan is None:
+                raise RuntimeError(f"missing ms_header.scans in {path}")
+
+            spectrum_file_name = header.get("spectrum_file_name")
+            run_id = runs.get_or_create(
+                str(spectrum_file_name) if spectrum_file_name is not None else None
+            )
+
+            meta_raw = row.get("extra_metadata")
+            if isinstance(meta_raw, dict):
+                meta = dict(meta_raw)
+            elif isinstance(meta_raw, str):
+                try:
+                    meta = json.loads(meta_raw)
+                except json.JSONDecodeError:
+                    meta = {}
+            else:
+                meta = {}
+
+            meta["ms1_ids"] = _as_text(header.get("ms1_ids"))
+            meta["ms2_ids"] = _as_text(header.get("ids"))
+            meta["ms1_scans"] = _as_text(header.get("ms1_scans"))
+            meta["ms2_scans"] = _as_text(header.get("scans"))
+            meta["import_mode"] = "fast_multirun"
+
+            conn.execute(
+                text(
+                    """
+                    UPDATE identification_matches
+                    SET
+                        run_id = :run_id,
+                        scan_number = :scan_number,
+                        spectrum_native_id = :spectrum_native_id,
+                        modified_sequence = :modified_sequence,
+                        experimental_mass = :experimental_mass,
+                        precursor_mz = :precursor_mz,
+                        precursor_charge = :precursor_charge,
+                        intensity = :intensity,
+                        e_value = :e_value,
+                        q_value = :q_value,
+                        is_decoy_match = :is_decoy_match,
+                        extra_metadata = CAST(:extra_metadata AS jsonb)
+                    WHERE match_id = :match_id
+                    """
+                ),
+                {
+                    "match_id": int(row["match_id"]),
+                    "run_id": run_id,
+                    "scan_number": ms2_scan,
+                    "spectrum_native_id": _first_text(header.get("ids")),
+                    "modified_sequence": _annotation_summary(annotated),
+                    "experimental_mass": to_float(header.get("precursor_mono_mass")),
+                    "precursor_mz": to_float(header.get("precursor_mz")),
+                    "precursor_charge": to_int(header.get("precursor_charge")),
+                    "intensity": to_float(header.get("feature_inte")),
+                    "e_value": to_float(prsm_root.get("e_value")),
+                    "q_value": to_float(prsm_root.get("fdr")),
+                    "is_decoy_match": _looks_decoy(annotated.get("sequence_name"), None),
+                    "extra_metadata": _json_dumps(meta),
+                },
+            )
+            updated += 1
+            if progress_callback is not None and (idx % 50 == 0 or idx == n_total):
+                _emit(
+                    progress_callback,
+                    ProgressEvent(
+                        "matches",
+                        None,
+                        idx,
+                        max(n_total, 1),
+                        f"PrSM headers {idx}/{n_total}",
+                    ),
+                )
+
+    if updated != n_total:
+        raise RuntimeError(
+            f"assign_toppic_runs_from_prsm_headers: expected {n_total} updates, got {updated}"
+        )
+    return updated
 
 
 def _extract_proteoform_mass(form_prsms: list[dict[str, Any]]) -> float | None:
@@ -900,13 +881,6 @@ def _annotation_summary(annotated: dict[str, Any]) -> str | None:
     if isinstance(annotation, str):
         return annotation
     return annotated.get("sequence_name")
-
-
-def _prsm_sort_key(path: Path) -> int:
-    try:
-        return int(path.stem.removeprefix("prsm"))
-    except ValueError:
-        return 1 << 30
 
 
 def _first_text(value: Any) -> str | None:

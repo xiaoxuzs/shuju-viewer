@@ -232,7 +232,7 @@
 
 - `item = prsm_list_item(dict(row))`：先按列表形状构造基础字段
 - `annotated, ms_header, ms_peaks = load_prsm_detail(detail_path)`：
-  - 从磁盘读取三块大 JSON
+  - 从磁盘读取三块大 JSON（支持 `.js/.json/.txt` 的 PrSM 明细文件；解析与 wrapper 归一化见 `universal_compat.load_prsm_detail` 与 `services/prsm_files.py`）
 - 若 `ms_header` 存在：
   - 用 `ms_header` 中的 precursor/ms1/ms2 信息补齐数据库里为空的字段（兼容 fast 导入）
   - `ms2_scans` 的 key 用 `ms_header["scans"]`（TopPIC 原始字段名）

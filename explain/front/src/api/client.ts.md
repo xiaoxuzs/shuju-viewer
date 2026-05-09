@@ -138,3 +138,5 @@
 
 同样返回原始 JSON，前端再解析/归一化。
 
+补充：当数据集导入时选择 `spectra_source="mzml_memory"`，后端会在 finalize 阶段把每个 `run_id` 对应的 `run_metadata.mzml_file_path` 写入 `runs.run_metadata`，从而保证这里的 `(datasetId, runId, scanNumber)` 能被严格定位到唯一 mzML 文件。
+

@@ -14,7 +14,9 @@
 
 - `dataclass`：返回结果结构体
 - `Path`：文件遍历与路径处理
-- `load_js_object`：解析 `prsm*.js` 提取 `spectrum_file_name`
+- `app.services.prsm_files`：
+  - `iter_prsm_files`：列出 `prsm*` 明细文件（支持 `.js/.json/.txt`）
+  - `extract_spectrum_file_name`：从 PrSM 明细中抽取 `ms_header.spectrum_file_name`（缺失/空字符串会抛错）
 
 ## L19-L26：`MzmlMappingResult`
 
@@ -43,21 +45,16 @@
   - 全部转小写
 - 目的：抵抗来源软件写出的路径差异、大小写差异、是否带扩展名差异
 
-## L68-L88：`extract_spectrum_file_names_from_prsms(prsms_dir)`
+## L74-L88：`extract_spectrum_file_names_from_prsms(prsms_dir)`
 
-- 在某个目录下找 `prsm*.js`：
+- 在某个目录下找支持的 `prsm*` 明细文件（由 `iter_prsm_files` 决定，后缀支持 `.js/.json/.txt`）：
   - 找不到目录/找不到文件 → 抛 `MzmlMappingError`
-- 对每个 `prsm*.js`：
-  - `load_js_object(path)` 解析成 dict
-  - 兼容三种根形状：
-    - `doc["prsm"]`
-    - `doc["prsm_data"]["prsm"]`
-    - 或 doc 本身就是 prsm root
-  - 读取 `ms.ms_header.spectrum_file_name`：
-    - 缺失/空字符串 → 抛错误（这是 strict 映射的硬要求）
+- 对每个明细文件：
+  - 用 `extract_spectrum_file_name(path)` 抽取 `spectrum_file_name`（内部会负责解析与 wrapper 归一化）
+  - 缺失/空字符串 → 抛错误（这是 strict 映射的硬要求）
 - 返回 set（去重后的原始 file name 集合）
 
-## L91-L137：`build_one_to_one_mapping(spectrum_file_names, mzml_files)`
+## L90-L147：`build_one_to_one_mapping(spectrum_file_names, mzml_files)`
 
 - 前置校验：
   - spectrum_file_names 为空 → 失败
@@ -67,7 +64,10 @@
   - 规范化 key
   - 查 hits：
     - 0 个 → missing
-    - >1 个 → conflicts（同一个 key 匹配到多个 mzML，歧义）
+    - >1 个 → 先尝试“自动消歧”：
+      - 常见打包问题：同名文件被嵌套在同名目录下（如 `A.mzML` 与 `A.mzML/A.mzML`）
+      - 策略：优先选**路径更浅**（parts 更少、字符串更短）的那个；若不能唯一胜出，则归类为 conflicts
+    - 仍然 >1 个 → conflicts（同一个 key 匹配到多个 mzML，歧义）
     - 1 个 → 写入 out[key] = path
 - 若有 missing/conflicts：
   - 组装可读错误信息（截断列表，避免异常太长）

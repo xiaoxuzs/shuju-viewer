@@ -21,6 +21,7 @@
   - `_db_engine`：直接用 engine.begin() 执行 SQL（导入/任务更新都不通过 ORM）
   - `ingest_universal_toppic` / `ingest_universal_prsm_js`：两条导入 adapter
   - `mzml_mapping`：导入期 strict 校验（只做文件映射，不读 mzML）
+  - `prsm_files.has_prsm_files`：用于判断 `ingest_root/data/` 下是否存在可识别的 `prsm*` 明细文件（目前支持 `.js/.json/.txt`），从而识别“prsm bundle”导入形态
 
 ## L57-L143（启动时补 schema）
 
@@ -142,12 +143,12 @@
 - `_maybe_unwrap_single_root_folder(...)`：必要时 unwrap
 - `_find_ingest_root(...)`：定位真正 ingest 根目录
 
-### L694-L697（识别输入形态）
+### L694-L699（识别输入形态）
 
 - `is_toppic_html_tree`：
   - 以 `toppic_prsm_cutoff/data_js/proteins.js` 是否存在作为判据
 - `is_prsm_js_bundle`：
-  - 以 `data/` 下是否存在 `prsm*.js` 为判据
+  - 用 `has_prsm_files(ingest_root / "data")` 判定：只要存在支持的 `prsm*` 明细文件即可（目前后缀支持 `.js/.json/.txt`），不再只认 `prsm*.js`
 
 ### L698-L719（识别谱图来源：TopFD JS vs mzML memory）
 

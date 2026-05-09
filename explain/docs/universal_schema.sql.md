@@ -60,6 +60,8 @@
 
 后端 `mzml_spectra.py` 会按 `(run_id, dataset_id)` 查询 `run_metadata` 并取 `mzml_file_path`。
 
+补充：`run_metadata` 在本项目里是“mzML-memory 模式的关键契约字段”，导入流程会在 finalize 阶段写入 `{"mzml_file_path": ".../xxx.mzML"}`，并在运行期由 `back/app/services/mzml_store.py` 按 run_id 懒加载到内存。
+
 ---
 
 ## `proteins` 表（L80-L103）
@@ -109,6 +111,7 @@
 - `experimental_mass` / `precursor_mz` / `precursor_charge` / `intensity`
 - `score` / `e_value` / `q_value`
 - `detail_path`：指向 prsm*.js（后端 `load_prsm_detail` 使用）
+- 当前实现中 `detail_path` 可指向 `prsm*.(js|json|txt)`，读取逻辑由后端 `services/prsm_files.py` 做兼容与 wrapper 归一化
 - `extra_metadata`：存 TopPIC 的 `source_cutoff/source_prsm_id/source_sequence_id` 等业务字段
 
 当前 API：

@@ -20,7 +20,11 @@
 - `Console/tqdm`：用于 CLI 进度输出（与后台任务的 progress_callback 是两套体系，但复用同一导入逻辑）
 - `create_engine/text/Connection`：写入 universal schema（raw SQL）
 - `best_prsm/ensure_list/to_int/to_float`：解析 TopPIC 的字符串数字与“单元素数组压扁”
-- `load_js_object`：解析 `proteins.js` / `prsm*.js`
+- `load_js_object`：解析 `proteins.js` 与 PrSM 明细文件（可能是 JS 赋值包裹 JSON，也可能是纯 JSON）
+- `app.services.prsm_files`（新补充）：
+  - `iter_prsm_files`：列出 `prsms/` 或 `data/` 下的 `prsm*` 明细文件（支持 `.js/.json/.txt`）
+  - `load_prsm_document` / `get_prsm_root`：把不同 wrapper 形态统一成 PrSM root（避免到处写 `doc["prsm_data"]["prsm"]`）
+  - `prsm_detail_path`：在 fast 模式只拿摘要时，用它按后缀优先级解析 `detail_path` 对应的真实文件（`.js` 优先，其次 `.json/.txt`）
 
 ## L37-L40：`CUTOFF_DIRS`
 
@@ -160,7 +164,7 @@
 ## L717-...：`_import_prsm_matches`（full 模式逐个打开 prsm*.js）
 
 - full 模式会：
-  - 遍历 `prsms/prsm*.js`
+  - 遍历 `prsms/` 下支持的 `prsm*` 明细文件（通过 `iter_prsm_files`，后缀支持 `.js/.json/.txt`）
   - 解析 `annotated_protein` 得到 `sequence_id/proteoform_id` 并映射到 DB proteoform_id
   - 从 `ms_header` 取 scan/precursor/ms ids
   - 用 `_RunRegistry.get_or_create(spectrum_file_name)` 做多 run 映射

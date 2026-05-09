@@ -26,7 +26,7 @@
   - `slug`：URL/唯一标识
   - `name/description`
   - `source_path`：通常是 `datasets.source_root`
-  - `capabilities`：JSON（例如 `{"spectra_source":"mzml_memory"}`）
+  - `capabilities`：JSON 能力声明（例如 `{"spectra_source":"mzml_memory"}`，用于前端选择谱图 API 路径）
   - `created_at`
   - `updated_at`：universal schema 没有该列，所以后端通常返回 None，但模型保留以兼容旧前端形状
   - `cutoffs`：嵌套 `CutoffOut[]`

@@ -14,14 +14,16 @@
 
 ---
 
-### L3-L12：依赖
+### L3-L13：依赖
 
 - **L3**：future annotations。
 - **L5**：`Path`：用于定位 detail_path 并检查文件存在性。
 - **L6**：`Any`：表示 JSON-like 字典值类型。
 - **L8**：FastAPI HTTPException/status：在 helper 中直接抛 API 层的错误码。
 - **L9-L10**：SQLAlchemy text + Session：用原生 SQL 查询 datasets。
-- **L12**：`load_js_object`：解析 TopPIC/TopFD 输出的 `*.js` 数据文件（去掉 `var xxx =` 外壳，解析 JSON），实现见 `app/services/js_parser.py`。
+- **L12**：`app.services.prsm_files`：
+  - `load_prsm_document`：读取 `detail_path` 指向的 PrSM 明细文件（兼容 `.js/.json/.txt`，并处理 JS 赋值包裹）
+  - `get_prsm_root`：把 wrapper 形态统一成 PrSM root（避免到处写 `doc["prsm_data"]["prsm"]`）
 
 ---
 
@@ -120,21 +122,19 @@
 
 ---
 
-## `load_prsm_detail`（L146-L158）
+## `load_prsm_detail`（L148-L160）
 
 ### 功能
 
 - 从 `identification_matches.detail_path` 指向的文件加载 prsm 详情 JSON。
 
-### 细节（L146-L158）
+### 细节（L148-L160）
 
 - **L147-L148**：detail_path 为空 → 返回三段 None（annotated/header/peaks）。
 - **L149-L151**：文件不存在 → 返回 None（不抛错，表示“无细节可用”，由上层决定如何处理）。
-- **L152**：`load_js_object(path)`：解析 js 数据文件。
-- **L153**：兼容两种根结构：
-  - 有的文件是 `{ prsm: {...} }`
-  - 有的文件直接就是 prsm 对象
-  因此用 `prsm_root = doc.get("prsm") or doc`。
+- **读取与归一化**：
+  - 用 `load_prsm_document(path)` 解析文件内容（支持 `.js/.json/.txt`）。
+  - 用 `get_prsm_root(doc)` 统一 wrapper，得到 `prsm_root`。
 - **L154-L157**：
   - annotated：`prsm_root["annotated_protein"]`
   - ms：`prsm_root["ms"]`
@@ -154,12 +154,12 @@
 
 - 模块 docstring：该文件是 universal schema 的“兼容层”，把数据库里的真实结构转换成前端期望的旧形状（尤其是 cutoff、PrSM 列表 SQL 等）。
 
-## L3-L12（导入）
+## L3-L13（导入）
 
 - `Path`：用于读取 `detail_path` 指向的 `prsm*.js` 文件
 - FastAPI 异常：`HTTPException/status`，用于 `require_dataset/require_cutoff` 的 404/错误提示
 - SQLAlchemy：`text` + `Session`（统一用 raw SQL 查 universal schema）
-- `load_js_object`：解析 `.js` 文件里导出的对象（PrSM 详情文件、谱图文件等）
+- `load_prsm_document/get_prsm_root`：用于读取并归一化 `detail_path` 指向的 PrSM 明细文件（支持 `.js/.json/.txt`）
 
 ## L15-L37（cutoff registry）
 
@@ -223,13 +223,13 @@
   - 保持列表/详情构造一致
   - 避免多个 API 复制粘贴相同 mapping
 
-## L146-L158：`load_prsm_detail(detail_path)`
+## L148-L160：`load_prsm_detail(detail_path)`
 
 - **目的**：PrSM 详情页需要三个大 JSON：`annotated_protein`、`ms_header`、`ms_peaks`
 - 规则：
   - `detail_path` 为空或文件不存在 → 返回 `(None, None, None)`（由上层决定如何降级）
-  - 用 `load_js_object(path)` 读取 `.js`，它会返回一个 Python dict
-  - `prsm_root = doc.get("prsm") or doc`：兼容两种根形状
+  - 用 `load_prsm_document(path)` 读取并解析明细文件
+  - 用 `get_prsm_root(doc)` 统一 wrapper 形态
   - 从 `prsm_root` 里取：
     - `annotated_protein`
     - `ms.ms_header`

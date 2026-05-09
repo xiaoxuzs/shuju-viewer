@@ -17,7 +17,10 @@
 - `json/dataclass/Path/Any`：基础
 - `create_engine/text`：写 DB
 - `to_int/to_float`：把 TopPIC 字符串数字安全转换
-- `load_js_object`：读取 `prsm*.js`
+- `app.services.prsm_files`（新补充）：
+  - `iter_prsm_files`：列出 `data/` 下的 `prsm*` 明细文件，支持 `.js/.json/.txt`
+  - `load_prsm_document`：读取并解析明细文件（兼容 JS 赋值包裹 / 纯 JSON）
+  - `get_prsm_root`：把 wrapper 形态统一成 PrSM root
 
 ## L31-L38：`UniversalImportStats`
 
@@ -34,7 +37,7 @@
 ## L50-L65：`ingest_universal_prsm_js` 输入校验
 
 - `root/data` 必须存在
-- 必须至少有一个 `prsm*.js`
+- 必须至少有一个可识别的 `prsm*` 明细文件（目前支持 `.js/.json/.txt`；由 `iter_prsm_files` 决定）
 
 ## L66-L100：创建 engine + dataset 行
 

@@ -45,6 +45,13 @@
 
 对应 **`shuju/`**：例如解压/处理样本数据的脚本等；解释文件按同样规则放在 `explain/shuju/` 下。数据体量大的原始谱图 JS、ZIP 等一般**不做**逐文件解释，见 **`逐行解释索引.md`** 中的说明与边界。
 
+### `explain/mzml-demo/` — 独立演示程序（Demo）
+
+对应 **`mzml-demo/`**：用于验证与演示 “mzML 全量读入内存 + `prsm*.js` 合并展示” 的最小可运行服务。
+
+- **`explain/mzml-demo/app.py.md`**：FastAPI demo 服务主体（内存 mzML store、prsm.js 解析与合并、静态页面）。
+- **`explain/mzml-demo/scripts/prsmup.py.md`**：从 `prsm.xml + ms2.msalign` 生成 `prsm<id>.js` 的脚本（便于在没有 TopPIC HTML 包时生成 demo 输入）。
+
 ---
 
 ## 阅读建议

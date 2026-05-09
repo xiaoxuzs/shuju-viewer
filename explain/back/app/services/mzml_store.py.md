@@ -14,6 +14,7 @@
 
 - `re`：解析 native id 里的 `scan=123`
 - `threading`：并发加载控制（避免同一 run_id 被多线程重复加载）
+- `gzip`：支持直接读取 `.mzML.gz`（mzML 压缩包），避免导入时解压到磁盘再读
 - `dataclass`：存放缓存结构
 - `pyteomics.mzml`：mzML 读取器
 
@@ -77,14 +78,17 @@
 - 返回该 run 的缓存状态摘要（loaded/path/scan 数量、ms1/ms2 数量）
 - 主要用于调试或未来的监控 API
 
-### L133-L174：`load_run(run_id, mzml_path)`
+### L133-L186：`load_run(run_id, mzml_path)`
 
 - 目标：**只允许一个线程真正加载**；其它线程等待 Event 完成
 - 逻辑：
   - 若该 run 已加载且路径一致：只 touch 并返回
   - 若发现 `_loading[run_id]` 已存在：说明别的线程在加载 → wait() 后返回
   - 否则当前线程成为 loader：
-    - 使用 `pyteomics.mzml.read(...)` 迭代所有 spectrum
+    - 根据扩展名选择读取方式：
+      - `.mzML.gz` / `.mzML.gzip`：用 `gzip.open(..., "rb")` 再交给 `mzml.read(fh)`
+      - 其他：`mzml.read(str(path))`
+    - 迭代所有 spectrum
     - 从 native id 解析 scan，建立 `spectra[scan] = _extract_spectrum(...)`
   - finally：无论成功失败，都 set Event，保证等待者不死锁
   - 成功后写入 `_cache` 并触发 LRU 驱逐

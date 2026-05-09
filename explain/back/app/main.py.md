@@ -20,7 +20,7 @@
 - `api_router`：从 `app.api.v1` 导入聚合路由（统一挂在 `/api/v1`）。
 - `settings`：配置对象（包含 CORS origins、DATA_ROOT 等）。
 - `configure_logging/get_logger`：统一日志配置与 logger。
-- 从 `app.services.import_jobs` 导入三个“启动时补 schema”的函数：
+- 从 `app.services.import_jobs` 导入三个“启动时补 schema”的函数（为了兼容老数据库，启动时自动补齐所需列/索引）：
   - `ensure_jobs_table()`：创建 `import_jobs`（UI 导入进度轮询依赖）
   - `ensure_dataset_zip_fingerprint_schema()`：给 `datasets` 增加 `source_zip_sha256` 与唯一索引（避免同 ZIP 重复导入）
   - `ensure_runs_metadata_schema()`：给 `runs` 增加 `run_metadata`（mzML memory 模式 run ↔ mzML 路径映射依赖）
