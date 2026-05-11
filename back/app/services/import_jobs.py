@@ -54,6 +54,7 @@ from app.services.mzml_mapping import (
 )
 from app.services.import_planner import ImportLayoutError, plan_zip_ingest
 from app.services.import_planner.types import DatasetShape
+from app.services.incoming_path_relocate import relocate_incoming_root
 
 log = get_logger(__name__)
 
@@ -661,6 +662,17 @@ def run_zip_import_job(
     incoming_dir = data_root / f"{folder_name}.incoming"
     keep_incoming_on_error = False  # set True if the caller-visible error path is one we shouldn't auto-clean
 
+    # Temporary wall-time breakdown for import perf debugging (remove when stable).
+    _t0 = time.perf_counter()
+    _t = _t0
+    timing: dict[str, float] = {}
+
+    def _slice(label: str) -> None:
+        nonlocal _t
+        now = time.perf_counter()
+        timing[label] = now - _t
+        _t = now
+
     try:
         # ---- Phase: extract --------------------------------------------------
         # Extract into a sibling ``.incoming`` directory; only swap with the
@@ -692,6 +704,8 @@ def run_zip_import_job(
             )
 
         _extract_zip_with_progress(zip_path, incoming_dir, on_progress=_extract_cb)
+        _slice("extract_zip_s")
+
         _maybe_unwrap_single_root_folder(incoming_dir)
         ingest_root = _find_ingest_root(incoming_dir)
         incoming_dir_abs = str(incoming_dir.resolve())
@@ -700,6 +714,7 @@ def run_zip_import_job(
             plan = plan_zip_ingest(ingest_root)
         except ImportLayoutError as exc:
             raise RuntimeError(str(exc)) from exc
+        _slice("unwrap_find_root_plan_s")
 
         # ---- mzML mapping (validate on disk only; do not load spectra) -----
         mzml_mapping: dict[str, Path] | None = None
@@ -715,6 +730,9 @@ def run_zip_import_job(
             except MzmlMappingError as exc:
                 raise RuntimeError(f"mzML mapping validation failed: {exc}") from exc
             mzml_mapping = mapping_result.mapping
+            _slice("mzml_mapping_validate_s")
+        else:
+            timing["mzml_mapping_validate_s"] = 0.0
 
         # ---- Phases: init / proteins / matches / finalize -------------------
         _update_job(
@@ -735,6 +753,8 @@ def run_zip_import_job(
                 replace=True,
                 progress_callback=_make_adapter_progress_handler(job_id),
             )
+            _slice("ingest_universal_toppic_s")
+            timing["assign_toppic_runs_from_prsm_headers_s"] = 0.0
             if plan.need_toppic_multirun_pass:
                 _update_job(
                     job_id,
@@ -747,6 +767,7 @@ def run_zip_import_job(
                     root=ingest_root,
                     progress_callback=_make_adapter_progress_handler(job_id),
                 )
+                _slice("assign_toppic_runs_from_prsm_headers_s")
         elif plan.shape == DatasetShape.PRSM_BUNDLE:
             stats = ingest_universal_prsm_js(
                 root=ingest_root,
@@ -755,6 +776,8 @@ def run_zip_import_job(
                 name=name,
                 replace=True,
             )
+            _slice("ingest_universal_prsm_js_s")
+            timing["assign_toppic_runs_from_prsm_headers_s"] = 0.0
         else:
             raise RuntimeError("internal error: unsupported import plan shape")
 
@@ -767,6 +790,7 @@ def run_zip_import_job(
                     text("UPDATE datasets SET description = :description WHERE dataset_id = :dataset_id"),
                     {"description": description, "dataset_id": stats.dataset_id},
                 )
+        _slice("description_update_s")
 
         # ---- Atomic dir swap -------------------------------------------------
         # Now that the DB ingest succeeded, replace the previous final dir with
@@ -797,6 +821,7 @@ def run_zip_import_job(
                 final_dir,
                 rename_error,
             )
+        _slice("disk_swap_incoming_to_final_s")
 
         # The DB row now has source_root pointing into the (no-longer-existing)
         # ``<slug>.incoming`` path because ingest_universal_toppic was called
@@ -905,6 +930,17 @@ def run_zip_import_job(
                         if mzml_path is None:
                             missing_runs.append(file_name)
                             continue
+                        # Mapping paths were collected under ``*.incoming``; after a successful
+                        # rename to the final dataset folder those absolute paths go stale (same bug
+                        # class as ``detail_path``). Align mzML paths with the post-rename root.
+                        if incoming_dir_abs != final_dir_abs:
+                            mzml_stored = relocate_incoming_root(
+                                path=Path(mzml_path),
+                                incoming_root=Path(incoming_dir_abs),
+                                final_root=Path(final_dir_abs),
+                            )
+                        else:
+                            mzml_stored = str(mzml_path)
                         conn.execute(
                             text(
                                 """
@@ -915,7 +951,7 @@ def run_zip_import_job(
                             ),
                             {
                                 "run_id": run_id,
-                                "patch": json.dumps({"mzml_file_path": str(mzml_path)}, ensure_ascii=False),
+                                "patch": json.dumps({"mzml_file_path": mzml_stored}, ensure_ascii=False),
                             },
                         )
 
@@ -945,15 +981,19 @@ def run_zip_import_job(
             raise RuntimeError(
                 f"Import finished, but failed to persist dataset path / ZIP fingerprint: {exc}"
             ) from exc
+        _slice("db_finalize_paths_and_metadata_s")
 
+        timing["total_zip_import_job_s"] = time.perf_counter() - _t0
+        timing_parts = " ".join(f"{k}={v:.3f}" for k, v in sorted(timing.items()))
         log.info(
-            "import job %s done dataset_id=%s run_id=%s proteins=%s proteoforms=%s matches=%s",
+            "import job %s done dataset_id=%s run_id=%s proteins=%s proteoforms=%s matches=%s | timing %s",
             job_id,
             stats.dataset_id,
             stats.run_id,
             stats.proteins,
             stats.proteoforms,
             stats.matches,
+            timing_parts,
         )
         _update_job(
             job_id,
@@ -970,6 +1010,12 @@ def run_zip_import_job(
             ),
         )
     except Exception as exc:  # noqa: BLE001
+        timing["total_zip_import_job_s"] = time.perf_counter() - _t0
+        log.warning(
+            "import job %s failed | timing %s",
+            job_id,
+            " ".join(f"{k}={v:.3f}" for k, v in sorted(timing.items())),
+        )
         log.exception("import job %s failed", job_id)
         _update_job(
             job_id,

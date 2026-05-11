@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.services.incoming_path_relocate import try_fix_stale_incoming_absolute_path
 from app.services.mzml_mapping import (
     build_mapping_from_extracted_dataset,
     normalize_spectrum_file_name,
@@ -92,9 +93,23 @@ def mzml_spectrum(
         # get_db() does not auto-commit; persist backfill or the next request still sees old rows.
         session.commit()
 
-    path = Path(str(mzml_path))
-    if not path.exists():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"mzML not found: {path}")
+    raw_path = Path(str(mzml_path))
+    missing_before = not raw_path.is_file()
+    path = try_fix_stale_incoming_absolute_path(raw_path)
+    if path is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"mzML not found: {mzml_path}")
+    if missing_before and str(path) != str(mzml_path):
+        session.execute(
+            text(
+                "UPDATE runs SET run_metadata = run_metadata || CAST(:patch AS jsonb) "
+                "WHERE run_id = :run_id"
+            ),
+            {
+                "run_id": run_id,
+                "patch": json.dumps({"mzml_file_path": str(path)}, ensure_ascii=False),
+            },
+        )
+        session.commit()
 
     # Lazy-load: only load on the first actual spectrum request.
     if not STORE.is_loaded(run_id):
@@ -112,4 +127,3 @@ def mzml_spectrum(
         "dataset_id": dataset_id,
         **spec,
     }
-

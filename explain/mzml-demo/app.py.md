@@ -1,8 +1,7 @@
-## `mzml-demo/app.py` 逐行解释
+# `mzml-demo/app.py` 逐行解释
 
-> 这是一个**独立演示程序**：把一个 mzML 文件全部读入内存（按 scan 号索引），再读取 TopPIC 的 `prsm*.js`（`prsm_data = {...}`）并与 mzML 谱图合并，提供 FastAPI 接口给浏览器查看。
->
-> 注意：它不直接集成到主项目的 `back/` / `front/`，更像是用来验证 mzML-memory + prsm.js 结构的 “可运行样机”。
+> 来源文件：`mzml-demo/app.py`  
+> 独立演示：mzML 全内存索引 + `prsm*.js` 合并，FastAPI 提供浏览器查看；不集成主 `back/`/`front/`。
 
 ---
 
@@ -12,55 +11,48 @@
 
 ---
 
-## L11-L25：依赖
+## L11-L24：依赖
 
+- **L13-L18**：`argparse` / `json` / `re` / `sys`、`Path`、`typing.Any`。
 - **L20-L23**：FastAPI、CORS、中间件、静态文件与 JSON 响应。
 - **L24**：`pyteomics.mzml`：mzML 解析器（逐谱读取）。
 
 ---
 
-## L27-L126：`MzmlStore` — mzML 全量读入内存（按 scan 索引）
+## L31-L126：常量、`MzmlStore` 与解析辅助函数
 
-### L31-L68：scan 号解析
+### L31-L32：scan 号正则
 
-- **L31**：`_SCAN_RE = re.compile(r"scan=(\\d+)")`：从 mzML 的 native id 文本中抽取 scan 号。
-- **L66-L68**：`_parse_scan(native_id)`：正则匹配到就转 int，否则返回 `None`。
+- **L31**：`_SCAN_RE = re.compile(r"scan=(\d+)")`：从 mzML native id 文本中抽取 `scan=` 后的整数。
 
-### L34-L63：存储结构与加载
+### L34-L63：`MzmlStore`（按 scan 索引的全内存谱图）
 
-- **L34-L40**：`MzmlStore` 保存：
-  - `path`：当前加载的 mzML 路径
-  - `spectra`：`{scan: spectrum_dict}` 字典
-- **L41-L55**：`load(path)`：
-  - **L42-L43**：重置状态
-  - **L46-L55**：`mzml.read(...)` 逐条读取 spectrum：
-    - 用 `_parse_scan(spec["id"])` 抽 scan
-    - 用 `_extract_spectrum(spec, scan)` 抽取需要的字段并存入内存
-    - 每 500 条打印一次进度
+- **L37-L39**：`path`、`spectra: dict[int, dict]` 初始状态。
+- **L41-L55**：`load(path)`：`path.resolve()`、清空 `spectra`、`mzml.read` 循环；`_parse_scan(spec.get("id", ""))` 为 `None` 则跳过；否则 `_extract_spectrum` 写入；每 500 条打印进度。
+- **L57-L63**：`status()`：返回 path 字符串、`loaded_scans`、MS1/MS2 计数（遍历 `spectra` 的 `ms_level`）。
 
-### L71-L79：保留时间（RT）统一为秒
+### L66-L68：`_parse_scan`
 
-- **L72-L78**：从 `scanList.scan[*]["scan start time"]` 读取，若单位是 minute 则乘 60，统一返回秒数。
+- 对 `native_id` 做 `_SCAN_RE.search`，匹配则 `int(m.group(1))`，否则 `None`。
 
-### L82-L114：前体（precursor）信息抽取
+### L71-L79：`_rt_seconds`
 
-- **L83-L86**：只取第一个 precursor（demo 简化）。
-- **L87-L113**：抽取 isolation window 与 selected ion 的关键字段，并尝试解析 `spectrumRef` 里的 parent scan。
-- **L93-L105**：`_f/_i`：把可能是字符串/数值的字段稳健转成 float/int。
+- 从 `scanList.scan` 里找 `scan start time`；`unit_info` 含 `minute` 时把数值乘 60，否则按秒；找不到则 `0.0`。
 
-### L116-L126：谱图抽取结构
+### L82-L114：`_extract_precursor`
 
-- **L117-L124**：把 `m/z array`、`intensity array` 转成 Python list（便于 JSON 输出）。
-- **L125**：附上 `_extract_precursor` 的结果。
+- 只取第一个 precursor；组装 isolation window、selected ion、`parent_scan`（从 `spectrumRef` 再 `_parse_scan`）；内嵌 `_f`/`_i` 做数值转换。
+
+### L116-L126：`_extract_spectrum`
+
+- 输出 `scan`、`ms_level`、`rt_seconds`、mz/intensity 的 list、`precursor`。
 
 ---
 
-## L129-L150：`prsm*.js` 解析（TopPIC HTML 形态）
+## L129-L151：`prsm*.js` 解析（TopPIC HTML 形态）
 
-- **L133-L145**：`load_prsm_js(path)`：
-  - 用正则 `_PRSM_HEAD` 验证并剥掉前缀 `prsm_data =`
-  - 去掉末尾 `;`
-  - `json.loads(...)` 得到 `dict`
+- **L133-L134**：模块级 `_PRSM_HEAD = re.compile(r"^\s*prsm_data\s*=\s*")`。
+- **L136-L144**：`load_prsm_js(path)`：读文本；`_PRSM_HEAD.match` 失败则 `ValueError`；剥前缀、去尾部分号、`json.loads`。
 - **L147-L150**：`_as_list`：把 “可能是单对象/列表/None” 统一成 list，方便后续遍历。
 
 ---
@@ -94,10 +86,16 @@
 
 ## L300-L329：命令行入口与启动
 
-- **L300-L307**：`parse_args`：必需参数 `--mzml`；可选 `--data/--host/--port`。
-- **L310-L325**：`main`：
-  - 校验 mzML 路径存在
-  - 创建/设置 `DATA_DIR`
-  - `STORE.load(mzml_path)` 全量加载
-  - `uvicorn.run(...)` 启动服务
+- **L300-L307**：`parse_args`：必需 `--mzml`；可选 `--data/--host/--port`。
+- **L310-L324**：`main`：校验 mzML；`global DATA_DIR` 后设为 `resolve()` 的 data 目录并 `mkdir`；`STORE.load`；`uvicorn.run(app, host=..., port=..., log_level="info")`。
+- **L327-L328**：`if __name__ == "__main__": main()`。
+
+---
+
+## 附录：源码顶层符号索引（与 `mzml-demo/app.py` 全文检索对齐）
+
+- `_parse_scan`、`_rt_seconds`、`_extract_precursor`、`_extract_spectrum`
+- `load_prsm_js`、`_as_list`、`combine_payload`
+- `mzml_status`、`prsm_list`、`prsm_view`、`index`
+- `parse_args`、`main`
 

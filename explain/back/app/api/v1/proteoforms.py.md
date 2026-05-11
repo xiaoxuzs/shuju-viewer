@@ -1,6 +1,7 @@
-## `back/app/api/v1/proteoforms.py` 逐行解释
+# `back/app/api/v1/proteoforms.py` 逐行解释
 
-> 目标：提供“某 dataset + 某 cutoff 下的 proteoform 列表与详情”API。注意：universal schema 的 `proteoforms` 表是跨 cutoff 共享的，所以必须通过 `identification_matches.extra_metadata.source_cutoff` 判断该 proteoform 是否属于当前 cutoff 的结果集。
+> 来源文件：`back/app/api/v1/proteoforms.py`  
+> 某 dataset + cutoff 下的 **proteoform 列表与详情**；`proteoforms` 行跨 cutoff 共享，归属由 **`identification_matches` + `source_cutoff`** 判定。
 
 ---
 
@@ -94,20 +95,13 @@
 - path 参数 `proteoform_id` 是 **DB 主键** `proteoforms.proteoform_id`（注释强调“不是 TopPIC 业务号”）。
 - cutoff 维度：如果该 proteoform 在该 cutoff 下没有任何 `identification_matches`，则返回 404（避免跨 cutoff 混淆）。
 
-### L116-L153：查询 proteoform 主体
+### L116-L152：查询 proteoform 主体
 
-- require_dataset + require_cutoff。
-- SELECT：
-  - `pf.proteoform_id AS id`：DB 主键
-  - `prm.protein_id`：所属 protein（通过 relation mapping 找到；用 LEFT JOIN，意味着可能为 null）
-  - `source_proteoform_id`：业务 id（用于 UI 展示）
-  - sequence_id/sequence_name/mass/统计字段同列表
-- WHERE：
-  - dataset_id + proteoform_id 精确匹配
-  - EXISTS identification_matches（entity_type='PROTEOFORM', entity_id=pf.proteoform_id, source_cutoff=:cutoff）
-- 查不到则 404。
+- **L116-L117**：`require_dataset` + `require_cutoff`。
+- **L118-L150**：`SELECT`：`pf.proteoform_id AS id`、`prm.protein_id`（LEFT JOIN）、业务字段与 `NULL::integer` 占位列；`WHERE dataset_id + proteoform_id` + `EXISTS identification_matches`（`source_cutoff`）。
+- **L151-L152**：无行 → **404**。
 
-### L154-L170：查询该 proteoform 下的 PrSM 列表
+### L154-L166：查询该 proteoform 下的 PrSM 列表
 
 - 使用 `prsm_list_select_sql(...)` 生成标准 PrSM SELECT。
 - where 条件：
@@ -121,5 +115,12 @@
 
 ### L167-L170：组装 `ProteoformDetailOut`
 
-- 展开 pf 字段，并附带 `prsms=[...]`。
+- 将 `pf` 行展开为详情字段，并附加 `prsms`：对每条 PrSM 行先 `dict(p)` 再经 `prsm_list_item` 规整，构造 `PrsmListItemOut`。
+
+---
+
+## 附录：源码顶层符号索引（与 `proteoforms.py` 全文检索对齐）
+
+- `list_proteoforms`
+- `get_proteoform`
 

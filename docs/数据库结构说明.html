@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Universal Viewer — 数据库结构说明</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --border: #2d3a4d;
+      --text: #e8eef5;
+      --muted: #9aa8bc;
+      --accent: #5b9fd4;
+      --accent2: #7cbe8a;
+      --warn: #e6b35c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+      font-size: 15px;
+    }
+    header {
+      padding: 2rem 1.5rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(165deg, #152030 0%, var(--bg) 70%);
+    }
+    header h1 { margin: 0 0 0.35rem; font-size: 1.55rem; font-weight: 600; }
+    header p { margin: 0; color: var(--muted); max-width: 58rem; }
+    main { max-width: 58rem; margin: 0 auto; padding: 1.5rem; }
+    section { margin-bottom: 2.25rem; }
+    h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 0 0 0.75rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; color: var(--text); }
+    .note {
+      background: var(--panel);
+      border-left: 3px solid var(--warn);
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      border-radius: 0 6px 6px 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .note code { color: var(--accent2); }
+    ul.meta { margin: 0.5rem 0 0; padding-left: 1.2rem; color: var(--muted); }
+    .table-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 1.25rem;
+    }
+    .table-card header.inner {
+      padding: 0.65rem 1rem;
+      background: rgba(0,0,0,0.2);
+      border-bottom: 1px solid var(--border);
+    }
+    .table-card header.inner strong { font-size: 1.02rem; }
+    .table-card header.inner span { color: var(--muted); font-size: 0.88rem; display: block; margin-top: 0.25rem; }
+    table.cols { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    table.cols th, table.cols td { padding: 0.45rem 0.65rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    table.cols th { color: var(--muted); font-weight: 500; width: 22%; }
+    table.cols tr:last-child td, table.cols tr:last-child th { border-bottom: none; }
+    table.cols td.type { font-family: ui-monospace, Consolas, monospace; color: var(--accent2); white-space: nowrap; }
+    table.cols td.desc { color: var(--muted); font-size: 0.88rem; }
+    .idx-list { font-size: 0.88rem; color: var(--muted); margin: 0; padding-left: 1.15rem; }
+    .er {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.65;
+      overflow-x: auto;
+      white-space: pre;
+      color: var(--muted);
+    }
+    footer { padding: 1rem 1.5rem 2rem; color: var(--muted); font-size: 0.85rem; text-align: center; }
+    a { color: var(--accent); }
+    .diagram-wrap {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 1rem 0.75rem;
+      margin: 0.75rem 0 0;
+      overflow-x: auto;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+    .diagram-wrap svg {
+      display: block;
+      margin: 0 auto;
+      max-width: 100%;
+      height: auto;
+    }
+    .diagram-legend {
+      margin: 0.75rem 0 0;
+      padding: 0.65rem 1rem;
+      font-size: 0.88rem;
+      color: #475569;
+      text-align: left;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+      border-radius: 0 0 8px 8px;
+    }
+    .diagram-legend strong { color: #0f172a; }
+    .diagram-legend code { color: #0369a1; background: #e0f2fe; padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.86em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Universal Viewer 数据库结构</h1>
+    <p>目标库为 <strong>PostgreSQL</strong>。权威 DDL 与注释见仓库内 <code>docs/universal_schema.sql</code>；后端读路径使用 SQLAlchemy <code>text()</code> 直连这些表，无 ORM 实体层。</p>
+  </header>
+  <main>
+    <section>
+      <h2>总览</h2>
+      <ul class="meta">
+        <li><strong>核心域表（7）</strong>：<code>datasets</code> → <code>runs</code>；<code>proteins</code>；<code>peptides</code> / <code>proteoforms</code>；<code>identification_matches</code>（PSM/PrSM 统一）；<code>protein_relation_mapping</code>（蛋白 ↔ 肽段/形态）。</li>
+        <li><strong>任务表（1）</strong>：<code>import_jobs</code> — ZIP 导入后台任务状态与进度（与 schema 文件同源；旧库可由启动逻辑补建）。</li>
+        <li><strong>无独立表</strong>：cutoff 由 <code>identification_matches.extra_metadata-&gt;&gt;'source_cutoff'</code> 与 API 层常量合成，见 <code>docs/architecture.md</code>。</li>
+      </ul>
+      <div class="note">
+        <strong>启动时迁移（非 SQL 文件内首次建表）</strong>：<code>back/app/services/import_jobs.py</code> 会在连接可用时执行 <code>ensure_dataset_zip_fingerprint_schema()</code>（<code>datasets.source_zip_sha256</code> + 部分唯一索引）与 <code>ensure_runs_metadata_schema()</code>（<code>runs.run_metadata</code>），以便与旧库兼容。
+      </div>
+    </section>
+
+    <section>
+      <h2>实体关系示意图</h2>
+      <p style="margin:0 0 0.5rem; color: var(--muted); font-size: 0.92rem;">内嵌 <strong>SVG</strong>：左右<strong>泳道</strong>区分「运行/鉴定」与「蛋白/映射」；中央<strong>说明框</strong>写清 <code>entity_type</code> 与 <code>entity_id</code> 如何二选一指向实体表；四条<strong>虚线</strong>使用不同高度，减少交叉。实线 = DDL 外键。</p>
+      <div class="diagram-wrap">
+        <svg viewBox="0 0 980 548" role="img" aria-labelledby="erTitle erDesc" xmlns="http://www.w3.org/2000/svg">
+          <title id="erTitle">Universal Viewer 表关系示意图（泳道 + 多态说明）</title>
+          <desc id="erDesc">左泳道为 runs 与 identification_matches；右泳道为 proteins 与 protein_relation_mapping；底部为 peptides 与 proteoforms；中央说明 entity_type 与 entity_id。</desc>
+          <rect x="0" y="0" width="980" height="548" fill="#ffffff" />
+          <style type="text/css">
+            .lane { fill: #f8fafc; stroke: #e2e8f0; stroke-width: 1; }
+            .tbl { stroke-width: 2; }
+            .t1 { fill: #eceff1; stroke: #546e7a; }
+            .t2 { fill: #bbdefb; stroke: #1565c0; }
+            .t3 { fill: #ffe0b2; stroke: #e65100; }
+            .t4 { fill: #c8e6c9; stroke: #2e7d32; }
+            .t5 { fill: #f8bbd9; stroke: #ad1457; }
+            .t6 { fill: #d1c4e9; stroke: #5e35b1; }
+            .t7 { fill: #b2ebf2; stroke: #00695c; }
+            .t8 { fill: #e1bee7; stroke: #6a1b9a; }
+            .name { font: 600 12.5px Segoe UI, system-ui, sans-serif; fill: #0f172a; }
+            .sub { font: 10.5px Segoe UI, system-ui, sans-serif; fill: #475569; }
+            .edge-fk { fill: none; stroke: #1e293b; stroke-width: 2.2; stroke-linejoin: miter; stroke-linecap: butt; }
+            .edge-log { fill: none; stroke: #64748b; stroke-width: 1.9; stroke-dasharray: 7 5; stroke-linejoin: miter; stroke-linecap: butt; }
+            .lbl { font: 10px Segoe UI, system-ui, sans-serif; fill: #0f172a; }
+            .lblbg { fill: #ffffff; stroke: #94a3b8; stroke-width: 1; }
+            .callout { fill: #f8fafc; stroke: #64748b; stroke-width: 1.2; }
+            .callout-title { font: 700 11px Segoe UI, system-ui, sans-serif; fill: #0f172a; }
+            .callout-body { font: 10px ui-monospace, Consolas, monospace; fill: #334155; }
+            .key-cap { font: 10px Segoe UI, system-ui, sans-serif; fill: #475569; }
+          </style>
+
+          <rect class="lane" x="24" y="96" width="300" height="354" rx="10" ry="10" />
+          <text class="key-cap" x="174" y="114" text-anchor="middle">左泳道：原始文件 → 鉴定匹配（含 run_id）</text>
+          <rect class="lane" x="656" y="96" width="300" height="354" rx="10" ry="10" />
+          <text class="key-cap" x="806" y="114" text-anchor="middle">右泳道：蛋白 → 蛋白与肽/形态的映射</text>
+
+          <g class="edges" pointer-events="none">
+            <path class="edge-log" d="M 460 42 L 460 52" />
+            <path class="edge-fk" d="M 460 92 L 460 108 L 255 108 L 255 115" />
+            <path class="edge-fk" d="M 460 92 L 460 108 L 817 108 L 817 115" />
+            <path class="edge-fk" d="M 460 92 L 460 108 L 150 108 L 150 200" />
+            <path class="edge-fk" d="M 460 92 L 460 108 L 762 108 L 762 200" />
+            <path class="edge-fk" d="M 460 92 L 460 122 L 170 122 L 170 400" />
+            <path class="edge-fk" d="M 460 92 L 460 132 L 810 132 L 810 400" />
+            <path class="edge-fk" d="M 255 147 L 255 178 L 150 178 L 150 200" />
+            <path class="edge-fk" d="M 817 147 L 817 178 L 762 178 L 762 200" />
+            <path class="edge-log" d="M 150 244 L 170 244 L 170 400" />
+            <path class="edge-log" d="M 150 244 L 150 320 L 810 320 L 810 400" />
+            <path class="edge-log" d="M 762 244 L 762 332 L 170 332 L 170 400" />
+            <path class="edge-log" d="M 762 244 L 762 356 L 810 356 L 810 400" />
+          </g>
+
+          <g class="nodes">
+            <rect class="tbl t1" x="400" y="8" width="120" height="34" rx="8" ry="8" />
+            <text class="name" x="460" y="24" text-anchor="middle">import_jobs</text>
+            <text class="sub" x="460" y="36" text-anchor="middle">导入任务</text>
+
+            <rect class="tbl t2" x="340" y="52" width="240" height="40" rx="8" ry="8" />
+            <text class="name" x="460" y="72" text-anchor="middle">datasets</text>
+            <text class="sub" x="460" y="86" text-anchor="middle">子表对其 ON DELETE CASCADE</text>
+
+            <rect class="tbl t3" x="200" y="115" width="110" height="32" rx="8" ry="8" />
+            <text class="name" x="255" y="131" text-anchor="middle">runs</text>
+            <text class="sub" x="255" y="142" text-anchor="middle">实验 / 文件</text>
+
+            <rect class="tbl t4" x="772" y="115" width="90" height="32" rx="8" ry="8" />
+            <text class="name" x="817" y="131" text-anchor="middle">proteins</text>
+            <text class="sub" x="817" y="142" text-anchor="middle">蛋白</text>
+
+            <rect class="tbl t5" x="55" y="200" width="190" height="44" rx="8" ry="8" />
+            <text class="name" x="150" y="218" text-anchor="middle">identification_matches</text>
+            <text class="sub" x="150" y="234" text-anchor="middle">PSM / PrSM 统一</text>
+
+            <rect class="tbl t6" x="652" y="200" width="220" height="44" rx="8" ry="8" />
+            <text class="name" x="762" y="218" text-anchor="middle">protein_relation_mapping</text>
+            <text class="sub" x="762" y="234" text-anchor="middle">蛋白 ↔ 肽 / 形态</text>
+
+            <rect class="tbl t7" x="72" y="400" width="196" height="36" rx="8" ry="8" />
+            <text class="name" x="170" y="418" text-anchor="middle">peptides</text>
+            <text class="sub" x="170" y="430" text-anchor="middle">肽段实体（BU）</text>
+
+            <rect class="tbl t8" x="712" y="400" width="196" height="36" rx="8" ry="8" />
+            <text class="name" x="810" y="418" text-anchor="middle">proteoforms</text>
+            <text class="sub" x="810" y="430" text-anchor="middle">形态实体（TD）</text>
+          </g>
+
+          <g class="callout-group">
+            <rect class="callout" x="268" y="198" width="384" height="86" rx="8" ry="8" />
+            <text class="callout-title" x="460" y="218" text-anchor="middle">多态指向（库内无 FK，由应用解析）</text>
+            <text class="callout-body" x="284" y="238" text-anchor="start">entity_type = 'PEPTIDE'     →  entity_id  = peptides.peptide_id</text>
+            <text class="callout-body" x="284" y="256" text-anchor="start">entity_type = 'PROTEOFORM'  →  entity_id  = proteoforms.proteoform_id</text>
+            <text class="callout-body" x="284" y="274" text-anchor="start">两张表写法相同：identification_matches · protein_relation_mapping</text>
+          </g>
+
+          <g class="key-lines" pointer-events="none">
+            <line x1="40" y1="462" x2="72" y2="462" class="edge-fk" />
+            <text class="key-cap" x="80" y="466" text-anchor="start">实线 = PostgreSQL 外键（DDL）</text>
+            <line x1="40" y1="480" x2="72" y2="480" class="edge-log" />
+            <text class="key-cap" x="80" y="484" text-anchor="start">虚线 = 逻辑关联（按列解析，无 DB 约束）</text>
+          </g>
+
+          <g class="edge-labels" pointer-events="none">
+            <rect class="lblbg" x="418" y="44" width="84" height="16" rx="4" ry="4" />
+            <text class="lbl" x="460" y="56" text-anchor="middle">slug · 非 FK</text>
+            <rect class="lblbg" x="500" y="88" width="102" height="16" rx="4" ry="4" />
+            <text class="lbl" x="551" y="100" text-anchor="middle">FK dataset_id</text>
+            <rect class="lblbg" x="168" y="156" width="72" height="16" rx="4" ry="4" />
+            <text class="lbl" x="204" y="168" text-anchor="middle">FK run_id</text>
+            <rect class="lblbg" x="738" y="156" width="88" height="16" rx="4" ry="4" />
+            <text class="lbl" x="782" y="168" text-anchor="middle">FK protein_id</text>
+            <rect class="lblbg" x="40" y="360" width="150" height="16" rx="4" ry="4" />
+            <text class="lbl" x="115" y="372" text-anchor="middle">虚线① IM → peptides（竖折）</text>
+            <rect class="lblbg" x="360" y="308" width="188" height="16" rx="4" ry="4" />
+            <text class="lbl" x="454" y="320" text-anchor="middle">虚线② IM → proteoforms（y=320）</text>
+            <rect class="lblbg" x="360" y="326" width="188" height="16" rx="4" ry="4" />
+            <text class="lbl" x="454" y="338" text-anchor="middle">虚线③ MP → peptides（y=332）</text>
+            <rect class="lblbg" x="360" y="344" width="196" height="16" rx="4" ry="4" />
+            <text class="lbl" x="458" y="356" text-anchor="middle">虚线④ MP → proteoforms（y=356）</text>
+          </g>
+        </svg>
+        <div class="diagram-legend">
+          <strong>图例：</strong>子表对 <code>datasets</code> 均为 <code>ON DELETE CASCADE</code>。<code>identification_matches</code> 与 <code>protein_relation_mapping</code> 通过 <code>entity_type</code> / <code>entity_id</code> 指向 <code>peptides</code> 或 <code>proteoforms</code>，数据库不强制外键。
+        </div>
+      </div>
+      <h3 style="margin-top:1.5rem;">纯文本备份（离线可读）</h3>
+      <div class="er">datasets (1) ──&lt; runs
+datasets (1) ──&lt; proteins
+datasets (1) ──&lt; peptides
+datasets (1) ──&lt; proteoforms
+datasets (1) ──&lt; identification_matches ──&gt; runs
+identification_matches.entity_type + entity_id ──&gt; peptides | proteoforms
+datasets (1) ──&lt; protein_relation_mapping ──&gt; proteins
+protein_relation_mapping.entity_type + entity_id ──&gt; peptides | proteoforms
+import_jobs（独立，可选 dataset_slug 关联成功后的数据集）</div>
+    </section>
+
+    <section>
+      <h2>表：datasets</h2>
+      <div class="table-card">
+        <header class="inner"><strong>datasets</strong><span>数据集总入口：项目/批次；URL 用 slug；能力用 capabilities JSON。</span></header>
+        <table class="cols">
+          <tr><th>dataset_id</th><td class="type">BIGSERIAL PK</td><td class="desc">数据集唯一内部 ID。</td></tr>
+          <tr><th>dataset_name</th><td class="type">VARCHAR(255) NOT NULL</td><td class="desc">展示名称。</td></tr>
+          <tr><th>slug</th><td class="type">VARCHAR(160) NOT NULL UNIQUE</td><td class="desc">短标识，URL 与查询。</td></tr>
+          <tr><th>analysis_mode</th><td class="type">VARCHAR(20)</td><td class="desc">BOTTOM_UP | TOP_DOWN（CHECK）。</td></tr>
+          <tr><th>source_software</th><td class="type">VARCHAR(100)</td><td class="desc">来源软件名。</td></tr>
+          <tr><th>source_root</th><td class="type">TEXT</td><td class="desc">数据集根目录路径。</td></tr>
+          <tr><th>status</th><td class="type">VARCHAR(20) DEFAULT IMPORTED</td><td class="desc">IMPORTED | PARSING | READY | ERROR。</td></tr>
+          <tr><th>description</th><td class="type">TEXT</td><td class="desc">说明。</td></tr>
+          <tr><th>capabilities</th><td class="type">JSONB</td><td class="desc">能力声明（MS1/MS2/PrSM 等）。</td></tr>
+          <tr><th>extra_metadata</th><td class="type">JSONB</td><td class="desc">扩展元数据。</td></tr>
+          <tr><th>created_at</th><td class="type">TIMESTAMPTZ</td><td class="desc">创建时间。</td></tr>
+          <tr><th>source_zip_sha256</th><td class="type">CHAR(64) NULL</td><td class="desc">导入 ZIP 的 SHA-256；部分唯一索引 <code>uq_datasets_source_zip_sha256</code>（WHERE NOT NULL）。</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>表：runs</h2>
+      <div class="table-card">
+        <header class="inner"><strong>runs</strong><span>实验文件 / 运行；FK <code>dataset_id</code> → datasets ON DELETE CASCADE。</span></header>
+        <table class="cols">
+          <tr><th>run_id</th><td class="type">BIGSERIAL PK</td><td class="desc">运行 ID。</td></tr>
+          <tr><th>dataset_id</th><td class="type">BIGINT FK</td><td class="desc">所属数据集。</td></tr>
+          <tr><th>file_path</th><td class="type">TEXT</td><td class="desc">服务器上文件路径。</td></tr>
+          <tr><th>file_name</th><td class="type">VARCHAR(255)</td><td class="desc">展示用文件名。</td></tr>
+          <tr><th>analysis_mode</th><td class="type">VARCHAR(20)</td><td class="desc">BOTTOM_UP | TOP_DOWN。</td></tr>
+          <tr><th>software</th><td class="type">VARCHAR(100)</td><td class="desc">来源软件。</td></tr>
+          <tr><th>status</th><td class="type">VARCHAR(20)</td><td class="desc">IMPORTED | PARSING | READY | ERROR。</td></tr>
+          <tr><th>instrument_metadata</th><td class="type">JSONB</td><td class="desc">仪器与采集参数。</td></tr>
+          <tr><th>sample_metadata</th><td class="type">JSONB</td><td class="desc">样本信息。</td></tr>
+          <tr><th>run_metadata</th><td class="type">JSONB</td><td class="desc">运行级扩展（如 mzML 映射；启动迁移可补列）。</td></tr>
+          <tr><th>created_at</th><td class="type">TIMESTAMPTZ</td><td class="desc">创建时间。</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>表：proteins</h2>
+      <div class="table-card">
+        <header class="inner"><strong>proteins</strong><span>Bottom-up / Top-down 共用蛋白根节点；UNIQUE (dataset_id, accession, is_decoy)。</span></header>
+        <table class="cols">
+          <tr><th>protein_id</th><td class="type">BIGSERIAL PK</td><td class="desc"></td></tr>
+          <tr><th>dataset_id</th><td class="type">BIGINT FK</td><td class="desc"></td></tr>
+          <tr><th>accession</th><td class="type">VARCHAR(255)</td><td class="desc">如 UniProt。</td></tr>
+          <tr><th>gene_name</th><td class="type">VARCHAR(255)</td><td class="desc"></td></tr>
+          <tr><th>description</th><td class="type">TEXT</td><td class="desc"></td></tr>
+          <tr><th>base_sequence</th><td class="type">TEXT</td><td class="desc">理论序列。</td></tr>
+          <tr><th>is_decoy</th><td class="type">BOOLEAN DEFAULT false</td><td class="desc"></td></tr>
+          <tr><th>extra_metadata</th><td class="type">JSONB</td><td class="desc"></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>表：peptides</h2>
+      <div class="table-card">
+        <header class="inner"><strong>peptides</strong><span>Bottom-up 肽段；UNIQUE (dataset_id, sequence)。</span></header>
+        <table class="cols">
+          <tr><th>peptide_id</th><td class="type">BIGSERIAL PK</td><td class="desc"></td></tr>
+          <tr><th>dataset_id</th><td class="type">BIGINT FK</td><td class="desc"></td></tr>
+          <tr><th>sequence</th><td class="type">VARCHAR(1000)</td><td class="desc">无修饰纯序列。</td></tr>
+          <tr><th>theoretical_mass</th><td class="type">DOUBLE PRECISION</td><td class="desc"></td></tr>
+          <tr><th>length</th><td class="type">INTEGER</td><td class="desc"></td></tr>
+          <tr><th>missed_cleavages</th><td class="type">SMALLINT</td><td class="desc"></td></tr>
+          <tr><th>extra_metadata</th><td class="type">JSONB</td><td class="desc"></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>表：proteoforms</h2>
+      <div class="table-card">
+        <header class="inner"><strong>proteoforms</strong><span>Top-down 蛋白形态（PTM 等）。</span></header>
+        <table class="cols">
+          <tr><th>proteoform_id</th><td class="type">BIGSERIAL PK</td><td class="desc"></td></tr>
+          <tr><th>dataset_id</th><td class="type">BIGINT FK</td><td class="desc"></td></tr>
+          <tr><th>modifications</th><td class="type">JSONB default []</td><td class="desc">PTM 列表。</td></tr>
+          <tr><th>start_res / end_res</th><td class="type">INTEGER</td><td class="desc">在基础蛋白上的区间。</td></tr>
+          <tr><th>theoretical_mass</th><td class="type">DOUBLE PRECISION</td><td class="desc"></td></tr>
+          <tr><th>extra_metadata</th><td class="type">JSONB</td><td class="desc"></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>表：identification_matches</h2>
+      <div class="table-card">
+        <header class="inner"><strong>identification_matches</strong><span>统一 PSM/PrSM：<code>entity_type</code> ∈ PEPTIDE | PROTEOFORM，<code>entity_id</code> 多态指向对应表。</span></header>
+        <table class="cols">
+          <tr><th>match_id</th><td class="type">BIGSERIAL PK</td><td class="desc"></td></tr>
+          <tr><th>dataset_id</th><td class="type">BIGINT FK</td><td class="desc"></td></tr>
+          <tr><th>run_id</th><td class="type">BIGINT FK → runs</td><td class="desc">定位原始文件。</td></tr>
+          <tr><th>scan_number</th><td class="type">INTEGER</td><td class="desc">与 run 联立定位谱图。</td></tr>
+          <tr><th>spectrum_native_id</th><td class="type">VARCHAR(255)</td><td class="desc">可选原生谱 ID。</td></tr>
+          <tr><th>retention_time</th><td class="type">DOUBLE PRECISION</td><td class="desc"></td></tr>
+          <tr><th>ms_level</th><td class="type">SMALLINT DEFAULT 2</td><td class="desc"></td></tr>
+          <tr><th>entity_type / entity_id</th><td class="type">VARCHAR(30) / BIGINT</td><td class="desc">多态关联。</td></tr>
+          <tr><th>modified_sequence</th><td class="type">TEXT</td><td class="desc">展示用带修饰序列。</td></tr>
+          <tr><th>experimental_mass, precursor_mz, precursor_charge</th><td class="type">数值</td><td class="desc">母离子相关。</td></tr>
+          <tr><th>intensity</th><td class="type">DOUBLE PRECISION</td><td class="desc"></td></tr>
+          <tr><th>score, e_value, q_value, pep</th><td class="type">DOUBLE PRECISION</td><td class="desc">统计与打分。</td></tr>
+          <tr><th>is_decoy_match</th><td class="type">BOOLEAN</td><td class="desc"></td></tr>
+          <tr><th>search_engine</th><td class="type">VARCHAR(100)</td><td class="desc"></td></tr>
+          <tr><th>detail_path</th><td class="type">TEXT</td><td class="desc">详情文件路径。</td></tr>
+          <tr><th>detail_cache</th><td class="type">JSONB</td><td class="desc">解析缓存。</td></tr>
+          <tr><th>extra_metadata</th><td class="type">JSONB</td><td class="desc">含 source_cutoff 等扩展。</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>表：protein_relation_mapping</h2>
+      <div class="table-card">
+        <header class="inner"><strong>protein_relation_mapping</strong><span>蛋白 ↔ 肽段/形态多对多；<code>entity_type</code> ∈ PEPTIDE | PROTEOFORM。</span></header>
+        <table class="cols">
+          <tr><th>mapping_id</th><td class="type">BIGSERIAL PK</td><td class="desc"></td></tr>
+          <tr><th>dataset_id</th><td class="type">BIGINT FK</td><td class="desc"></td></tr>
+          <tr><th>protein_id</th><td class="type">BIGINT FK → proteins</td><td class="desc"></td></tr>
+          <tr><th>entity_type / entity_id</th><td class="type">VARCHAR(30) / BIGINT</td><td class="desc">指向 peptides 或 proteoforms。</td></tr>
+          <tr><th>start_position / end_position</th><td class="type">INTEGER</td><td class="desc">在基础蛋白序列上区间。</td></tr>
+          <tr><th>is_unique</th><td class="type">BOOLEAN DEFAULT false</td><td class="desc"></td></tr>
+          <tr><th>extra_metadata</th><td class="type">JSONB</td><td class="desc"></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>表：import_jobs</h2>
+      <div class="table-card">
+        <header class="inner"><strong>import_jobs</strong><span>ZIP 导入异步任务；<code>job_id</code> UUID；status ∈ queued | running | success | failed。</span></header>
+        <table class="cols">
+          <tr><th>job_id</th><td class="type">UUID PK</td><td class="desc">前端轮询凭据。</td></tr>
+          <tr><th>status</th><td class="type">VARCHAR(20)</td><td class="desc">queued / running / success / failed。</td></tr>
+          <tr><th>stage</th><td class="type">VARCHAR(40)</td><td class="desc">阶段代码（如 extract、matches）。</td></tr>
+          <tr><th>stage_label / stage_detail</th><td class="type">TEXT</td><td class="desc">展示标签与细节。</td></tr>
+          <tr><th>message / error</th><td class="type">TEXT</td><td class="desc">消息与错误。</td></tr>
+          <tr><th>progress</th><td class="type">DOUBLE 0..100</td><td class="desc">进度百分比。</td></tr>
+          <tr><th>dataset_slug / dataset_name</th><td class="type">VARCHAR</td><td class="desc">成功后可跳转 slug。</td></tr>
+          <tr><th>description</th><td class="type">TEXT</td><td class="desc">导入时描述。</td></tr>
+          <tr><th>source_zip_name</th><td class="type">TEXT</td><td class="desc">上传 zip 文件名。</td></tr>
+          <tr><th>created_at / updated_at</th><td class="type">TIMESTAMPTZ</td><td class="desc">TTL 清理用 updated_at。</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>索引（摘自 DDL）</h2>
+      <ul class="idx-list">
+        <li><code>uq_datasets_source_zip_sha256</code> — partial UNIQUE on <code>datasets(source_zip_sha256)</code> WHERE NOT NULL</li>
+        <li><code>ix_runs_dataset_id</code>, <code>ix_runs_analysis_mode</code>, <code>ix_runs_status</code></li>
+        <li><code>ix_proteins_dataset_id</code>, <code>ix_peptides_dataset_id</code>, <code>ix_proteoforms_dataset_id</code></li>
+        <li><code>ix_identification_matches_dataset_run_scan</code> — (dataset_id, run_id, scan_number)</li>
+        <li><code>ix_identification_matches_entity</code> — (dataset_id, entity_type, entity_id)</li>
+        <li><code>ix_identification_matches_q_value</code>, <code>ix_identification_matches_e_value</code>, <code>ix_identification_matches_search_engine</code></li>
+        <li><code>ix_protein_relation_mapping_dataset_id</code>, <code>ix_protein_relation_mapping_protein_id</code>, <code>ix_protein_relation_mapping_entity</code>, <code>ix_protein_relation_mapping_is_unique</code></li>
+        <li><code>ix_import_jobs_status_updated_at</code>, <code>ix_import_jobs_dataset_slug</code></li>
+      </ul>
+    </section>
+  </main>
+  <footer>
+    由仓库 <code>docs/universal_schema.sql</code> 与 <code>back/app/services/import_jobs.py</code> 整理生成；若 DDL 变更请同步更新本页或重新从 SQL 导出。
+  </footer>
+</body>
+</html>

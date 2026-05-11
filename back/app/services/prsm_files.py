@@ -68,6 +68,33 @@ def prsm_detail_path(directory: Path, prsm_id: int) -> Path | None:
     return None
 
 
+def prsm_paths_by_id(directory: Path) -> dict[int, Path]:
+    """Map ``prsm`` numeric id → file path with one directory scan.
+
+    Suffix preference matches :func:`prsm_detail_path`. Use this for bulk work
+    (e.g. fast import) instead of calling :func:`prsm_detail_path` per row, which
+    would re-list the directory on every call.
+    """
+    by_id: dict[int, dict[str, Path]] = {}
+    for path in iter_prsm_files(directory):
+        stem = path.stem
+        if not stem.startswith("prsm"):
+            continue
+        try:
+            pid = int(stem.removeprefix("prsm"))
+        except ValueError:
+            continue
+        by_id.setdefault(pid, {})[path.suffix.lower()] = path
+    out: dict[int, Path] = {}
+    for prsm_id, candidates in by_id.items():
+        for suffix in SUPPORTED_PRSM_SUFFIXES:
+            chosen = candidates.get(suffix)
+            if chosen is not None:
+                out[prsm_id] = chosen
+                break
+    return out
+
+
 def load_prsm_document(path: Path) -> dict[str, Any]:
     """Read a supported PrSM detail file and return its JSON-like document."""
     return load_js_object(path)

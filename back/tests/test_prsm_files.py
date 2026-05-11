@@ -9,6 +9,7 @@ from app.services.prsm_files import (
     iter_prsm_files,
     load_prsm_document,
     prsm_detail_path,
+    prsm_paths_by_id,
 )
 
 
@@ -33,6 +34,16 @@ def test_iter_prsm_files_supports_configured_suffixes(tmp_path):
     assert has_prsm_files(tmp_path)
     assert [path.name for path in iter_prsm_files(tmp_path)] == ["prsm1.js", "prsm2.json", "prsm3.txt"]
     assert prsm_detail_path(tmp_path, 2) == tmp_path / "prsm2.json"
+
+
+def test_prsm_paths_by_id_matches_prsm_detail_path(tmp_path):
+    (tmp_path / "prsm2.json").write_text(json.dumps(_prsm_doc("b.mzML")), encoding="utf-8")
+    (tmp_path / "prsm1.js").write_text(f"prsm_data = {json.dumps(_prsm_doc('a.mzML'))};", encoding="utf-8")
+    (tmp_path / "prsm3.txt").write_text(json.dumps(_prsm_doc("c.mzML")), encoding="utf-8")
+
+    by_id = prsm_paths_by_id(tmp_path)
+    for pid in (1, 2, 3):
+        assert by_id.get(pid) == prsm_detail_path(tmp_path, pid)
 
 
 def test_load_prsm_document_normalizes_wrappers(tmp_path):

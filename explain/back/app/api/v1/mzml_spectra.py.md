@@ -12,6 +12,7 @@
 
 ## L6-L21：依赖
 
+- **L10**：`json`（backfill 时写 `run_metadata` patch）。
 - **L16-L20**：`build_mapping_from_extracted_dataset`、`normalize_spectrum_file_name`：与导入期相同的映射逻辑，用于运行时补全。
 - **L21**：`STORE`：进程内 mzML 缓存单例（`mzml_store.py`）。
 
@@ -19,10 +20,9 @@
 
 - `GET /datasets/{dataset_id}/runs/{run_id}/spectra/{scan_number}`，`response_model=dict[str, Any]`。
 
-## L31-L49：查 run
+## L31-L49：查 `runs` 行
 
-- SELECT `run_id, dataset_id, file_name, run_metadata` from `runs`，`(run_id, dataset_id)` 双条件。
-- 无行 → **404** `run not found`。
+- **L38-L47**：`SELECT ... FROM runs WHERE run_id AND dataset_id`；无行 → **404** `run not found`。
 
 ## L51-L93：`mzml_file_path` 与 backfill
 
@@ -35,15 +35,12 @@
   - **L85-L91**：`UPDATE datasets SET capabilities = capabilities || '{"spectra_source": "mzml_memory"}'`，保证前端路由一致。
   - **L92-L93**：**`session.commit()`** — `get_db()` 不自动提交；若不 commit，下次请求仍看不到 backfill。
 
-## L95-L108：读盘、懒加载、取 scan
+## L95-L114：读盘、懒加载、取 scan 与响应
 
-- **L95-L97**：`Path` 存在性；不存在 → **404** `mzml not found`。
-- **L99-L104**：`STORE.is_loaded(run_id)` 为 false 时 `load_run`；失败 → **500**。
-- **L106-L108**：`get_spectrum`；无 scan → **404**。
-
-## L110-L114：响应
-
-- 返回 `{ run_id, dataset_id, **spec }`；`spec` 含 mzML 解析字段（如顶层 **`mz`/`intensity` 数组** 等），供前端 `parseRawSpectrum` 消费。
+- **L95-L97**：`Path(mzml_path)` 不存在 → **404** `mzml not found`。
+- **L100-L104**：`STORE.is_loaded(run_id)` 为 false 时 `STORE.load_run`；异常 → **500**。
+- **L106-L108**：`STORE.get_spectrum`；无该 scan → **404**。
+- **L110-L114**：返回 `{ run_id, dataset_id, **spec }`（`spec` 为 mzML 解析字段，供前端消费）。
 
 ---
 
@@ -52,3 +49,9 @@
 - **`import_jobs.py` / `mzml_mapping.py`**：正常导入应已写入 `mzml_file_path`；本路由的 backfill 面向旧数据或中断的 finalize。
 - **`mzml_store.py`**：LRU、gzip、scan 索引。
 - **`client.ts::fetchMzmlSpectrum`**：URL 与参数顺序需一致。
+
+---
+
+## 附录：源码顶层符号索引（与 `mzml_spectra.py` 全文检索对齐）
+
+- `mzml_spectrum`

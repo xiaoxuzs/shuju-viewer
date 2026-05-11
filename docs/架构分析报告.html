@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>架构分析报告 · proteo-viewer</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --text: #1a2332;
+      --muted: #5c6b7e;
+      --border: #e2e8f0;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --ok: #059669;
+      --warn: #d97706;
+      --bad: #dc2626;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(30, 41, 59, 0.08);
+      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --mono: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.65;
+      color: var(--text);
+      background: var(--bg);
+      padding: 2rem 1.25rem 4rem;
+    }
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+    }
+    header {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      background: linear-gradient(145deg, var(--card) 0%, var(--accent-soft) 100%);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      margin: 0 0 0.5rem;
+      font-size: 1.65rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    nav.toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+    }
+    nav.toc strong {
+      display: block;
+      margin-bottom: 0.75rem;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    nav.toc ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      columns: 2;
+      column-gap: 1.5rem;
+    }
+    nav.toc a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    nav.toc a:hover { text-decoration: underline; }
+    nav.toc li { margin-bottom: 0.35rem; break-inside: avoid; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+    section h2 {
+      margin: 0 0 1rem;
+      font-size: 1.15rem;
+      font-weight: 700;
+      padding-bottom: 0.6rem;
+      border-bottom: 2px solid var(--accent-soft);
+      color: var(--text);
+    }
+    section h3 {
+      margin: 1.25rem 0 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    section h3:first-of-type { margin-top: 0; }
+    p { margin: 0 0 0.85rem; color: var(--text); }
+    p:last-child { margin-bottom: 0; }
+    ul {
+      margin: 0 0 0.85rem;
+      padding-left: 1.25rem;
+      color: var(--text);
+    }
+    li { margin-bottom: 0.35rem; }
+    .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      margin-right: 0.35rem;
+      vertical-align: middle;
+    }
+    .tag-back { background: #dbeafe; color: #1d4ed8; }
+    .tag-front { background: #d1fae5; color: #047857; }
+    .tag-risk { background: #fee2e2; color: #b91c1c; }
+    .tag-ok { background: #d1fae5; color: #047857; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 0.75rem 0 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.65rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--accent-soft);
+      font-weight: 600;
+      color: var(--text);
+    }
+    code, .mono {
+      font-family: var(--mono);
+      font-size: 0.82em;
+      background: #f1f5f9;
+      padding: 0.12em 0.4em;
+      border-radius: 4px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 640px) {
+      nav.toc ul { columns: 1; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      padding: 0.85rem 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 1rem 0 0;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .callout.warn { border-left-color: var(--warn); background: #fffbeb; }
+    footer {
+      text-align: center;
+      margin-top: 2rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>proteo-viewer 架构分析</h1>
+      <p>基于 <code>back</code> / <code>front</code> 源码通读的整理稿 · 便于浏览与评审</p>
+    </header>
+
+    <nav class="toc" aria-label="目录">
+      <strong>目录</strong>
+      <ul>
+        <li><a href="#overview">1. 系统概览</a></li>
+        <li><a href="#backend">2. 后端结构</a></li>
+        <li><a href="#frontend">3. 前端结构</a></li>
+        <li><a href="#dataflow">4. 核心数据流</a></li>
+        <li><a href="#strengths">5. 实现亮点</a></li>
+        <li><a href="#gaps">6. 待完善项</a></li>
+        <li><a href="#roadmap">7. 改进路线图</a></li>
+        <li><a href="#note">8. 阅读范围说明</a></li>
+      </ul>
+    </nav>
+
+    <section id="overview">
+      <h2>1. 系统概览</h2>
+      <p>
+        <span class="tag tag-back">back</span>FastAPI + SQLAlchemy + PostgreSQL（universal 七表），手写 <code>text()</code> SQL；
+        ZIP 导入、TopPIC/TopFD 树解析、可选 mzML 内存谱图。
+      </p>
+      <p>
+        <span class="tag tag-front">front</span>Vite + React 18 + React Router + TanStack Query + Tailwind；
+        路由形态 <code>/datasets/:slug/:cutoff/...</code>，PrSM 详情支持 TopFD JS 与 mzML 两种谱源。
+      </p>
+    </section>
+
+    <section id="backend">
+      <h2>2. 后端结构（要点）</h2>
+      <table>
+        <thead>
+          <tr><th>模块</th><th>职责摘要</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>main.py</code></td><td>应用入口、CORS、<code>lifespan</code> 中 bootstrap 表结构片段</td></tr>
+          <tr><td><code>core/</code></td><td>配置、DB 引擎与 Session、Rich 日志</td></tr>
+          <tr><td><code>api/v1/</code></td><td>datasets / imports / proteins / proteoforms / prsms / spectra / mzml_spectra</td></tr>
+          <tr><td><code>universal_compat.py</code></td><td>合成 cutoff id、SQL 片段、加载 PrSM 详情文件</td></tr>
+          <tr><td><code>import_jobs.py</code></td><td>ZIP 安全解压、任务状态、进度相位、目录原子替换、指纹与 mzML run 映射</td></tr>
+          <tr><td><code>import_planner/</code></td><td>ZIP 布局与谱源（<code>topfd_js</code> / <code>mzml_memory</code>）判定</td></tr>
+          <tr><td><code>mzml_*</code></td><td>严格文件名映射；进程内按 <code>run_id</code> 懒加载整 mzML</td></tr>
+          <tr><td><code>universal_toppic_adapter.py</code></td><td>fast 导入、多 run 头分配 <code>assign_toppic_runs_from_prsm_headers</code></td></tr>
+          <tr><td><code>universal_prsm_js_adapter.py</code></td><td>仅 PrSM 包 + mzML 的最小导入路径</td></tr>
+          <tr><td><code>schemas/</code></td><td>Pydantic 响应与分页 <code>Page[T]</code></td></tr>
+          <tr><td><code>tests/</code></td><td>planner、layout、<code>prsm_files</code> 单元测试（体量较小）</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="frontend">
+      <h2>3. 前端结构（要点）</h2>
+      <table>
+        <thead>
+          <tr><th>区域</th><th>职责摘要</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>api/client.ts</code></td><td>与 <code>/api/v1</code> 对齐的 HTTP 封装</td></tr>
+          <tr><td><code>api/types.ts</code></td><td>与后端契约；明确区分 DB 主键 id 与业务 id</td></tr>
+          <tr><td><code>pages/</code></td><td>数据集列表/导入/删除、概览、列表与详情页</td></tr>
+          <tr><td><code>features/prsm/parse.ts</code></td><td>TopPIC JSON 归一化 + TopFD 谱 / mzML 向量两种解析</td></tr>
+          <tr><td><code>features/prsm/*.tsx</code></td><td>序列图、D3 谱图、碎片化视图、匹配峰表与模态框</td></tr>
+          <tr><td><code>components/</code></td><td>AppShell、PageHeader、Pagination、Stat、UI 基元</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="dataflow">
+      <h2>4. 核心数据流（端到端）</h2>
+      <ol>
+        <li><strong>导入</strong>：<code>POST /imports</code> → 临时 ZIP → SHA256 去重 → 后台线程解压至 <code>*.incoming</code> → <code>plan_zip_ingest</code> → DB 写入 → 成功后目录 rename，并更新 <code>source_root</code>、<code>detail_path</code> 前缀、<code>capabilities.spectra_source</code>、<code>runs.run_metadata.mzml_file_path</code>（如适用）。</li>
+        <li><strong>列表</strong>：cutoff 由 <code>identification_matches.extra_metadata.source_cutoff</code> 过滤；排序字段白名单防注入。</li>
+        <li><strong>PrSM 详情</strong>：库表字段 + 磁盘 PrSM 文件合并；谱图按 <code>spectra_source</code> 走 MS1/MS2 JS API 或 mzML scan API。</li>
+      </ol>
+    </section>
+
+    <section id="strengths">
+      <h2>5. 实现亮点</h2>
+      <ul>
+        <li>ZIP <strong>zip-slip</strong> 校验与并行解压设计到位。</li>
+        <li>导入 <strong>先 DB 再换目录</strong>，Windows rename 失败时有降级与路径修正逻辑。</li>
+        <li>mzML <strong>导入期不读全文</strong>，映射来自 PrSM header，与产品约束一致。</li>
+        <li>前端 PrSM 页对 <strong>双谱源</strong>、dataset 能力刷新、zoom 状态拆分处理细致。</li>
+        <li><code>parse.ts</code> 对 TopPIC 单元素数组与两种谱 JSON 形状的处理是前后端契约的关键。</li>
+      </ul>
+    </section>
+
+    <section id="gaps">
+      <h2>6. 待完善项（按维度）</h2>
+
+      <h3>数据与迁移</h3>
+      <ul>
+        <li>部分 DDL 依赖启动时执行，建议 <strong>Alembic</strong> 等版本化迁移作为单一事实来源。</li>
+        <li>大量 <code>jsonb_extract_path_text</code> 重复，可收敛为常量或小查询层。</li>
+      </ul>
+
+      <h3>任务与进程</h3>
+      <ul>
+        <li>导入为 <strong>daemon 线程</strong>，与多 worker、进程重启、资源隔离不匹配长期运维；宜独立 worker / 队列。</li>
+      </ul>
+
+      <h3>性能与内存</h3>
+      <ul>
+        <li><code>MzmlStore</code> 整文件进内存 + LRU 按 run 个数；大 mzML 仍有峰值与首请求阻塞风险。</li>
+        <li>列表 SQL 在数据量增大时可能需要表达式索引或生成列评审。</li>
+      </ul>
+
+      <h3>安全与配额</h3>
+      <ul>
+        <li>无认证；上传无全局大小/并发上限（依赖环境与磁盘）。</li>
+        <li>生产环境应收紧 CORS、覆盖默认数据库连接串。</li>
+      </ul>
+
+      <h3>测试与前端工程</h3>
+      <ul>
+        <li>后端 API / ingest 集成测试偏少；前端无 Vitest/E2E。</li>
+        <li>导入轮询无 <code>AbortController</code>；部分列表页未统一 error UI。</li>
+        <li>蛋白质列表行使用 <code>window.location</code> 整页跳转，与 SPA 不一致。</li>
+      </ul>
+
+      <div class="callout warn">
+        <strong>文档一致性</strong>：空状态里的 CLI 示例若仍写 <code>--mode full</code>，与当前适配器「仅支持 fast」不一致，建议改为 <code>--mode fast</code> 或删除该参数说明。
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <h2>7. 建议改进顺序（精简路线图）</h2>
+      <table>
+        <thead>
+          <tr><th>优先级</th><th>项</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>修正 CLI / 空状态文案与真实支持参数一致</td></tr>
+          <tr><td>2</td><td>引入数据库迁移工具，替代仅启动时 DDL</td></tr>
+          <tr><td>3</td><td>导入任务脱离 API 进程（队列或子进程）+ 上传限额</td></tr>
+          <tr><td>4</td><td>观测：结构化日志、关键阶段耗时；mzML 加载可配置与限流</td></tr>
+          <tr><td>5</td><td>测试：pytest 覆盖 API + fixture ZIP；Vitest 覆盖 <code>parse.ts</code> 等</td></tr>
+          <tr><td>6</td><td>前端：Router 导航、列表错误态、导入取消与 Error Boundary</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="note">
+      <h2>8. 阅读范围说明</h2>
+      <p><span class="tag tag-ok">已通读</span><code>back</code> 下全部 Python 源码；<code>front</code> 下除两个超大 D3 图表文件外的全部源码。</p>
+      <p><code>SpectrumChart.tsx</code>、<code>FragmentationView.tsx</code> 已读 API、状态、下采样与注释；其余多为 D3 绘制细节，可按需再做函数级走读。</p>
+    </section>
+
+    <footer>
+      文件路径：<span class="mono">e:/viewer/架构分析报告.html</span> · 可直接用浏览器打开
+    </footer>
+  </div>
+</body>
+</html>

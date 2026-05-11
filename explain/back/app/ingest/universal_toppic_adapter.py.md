@@ -14,116 +14,53 @@
   - TopFD 的 `spectrum*.js` 保留在磁盘
   - 后端 `api/v1/spectra.py` + `services/spectrum_cache.py` 按需读取
 
-## L17-L36（导入与 CLI 外壳）
+## L17-L30（导入）
 
-- 引入 `typer`：提供 CLI 命令 `python -m app.ingest.universal_toppic_adapter ingest ...`
-- `Console/tqdm`：用于 CLI 进度输出（与后台任务的 progress_callback 是两套体系，但复用同一导入逻辑）
-- `create_engine/text/Connection`：写入 universal schema（raw SQL）
-- `best_prsm/ensure_list/to_int/to_float`：解析 TopPIC 的字符串数字与“单元素数组压扁”
-- `load_js_object`：解析 `proteins.js` 与 PrSM 明细文件（可能是 JS 赋值包裹 JSON，也可能是纯 JSON）
-- `app.services.prsm_files`（新补充）：
-  - `iter_prsm_files`：列出 `prsms/` 或 `data/` 下的 `prsm*` 明细文件（支持 `.js/.json/.txt`）
-  - `load_prsm_document` / `get_prsm_root`：把不同 wrapper 形态统一成 PrSM root（避免到处写 `doc["prsm_data"]["prsm"]`）
-  - `prsm_detail_path`：在 fast 模式只拿摘要时，用它按后缀优先级解析 `detail_path` 对应的真实文件（`.js` 优先，其次 `.json/.txt`）
+- `json`、`dataclasses`、`Path`、`typing`；**`typer`**、`rich.console.Console`；**`create_engine`/`text`**、`Connection`；`app.ingest.utils`（`best_prsm`、`ensure_list`、`to_float`、`to_int`）；`load_js_object`；`prsm_files` 中 **`get_prsm_root`、`load_prsm_document`、`prsm_detail_path`**（本文件未直接 import `iter_prsm_files`，列举 PrSM 文件在其它辅助逻辑中完成）。
+- **L32-L34**：全局 `console`、`typer.Typer` CLI 根。
 
-## L37-L40：`CUTOFF_DIRS`
+## L36-L39：`CUTOFF_DIRS`
 
-- cutoff kind → TopPIC 输出目录名映射：
-  - `"prsm"` → `toppic_prsm_cutoff`
-  - `"proteoform"` → `toppic_proteoform_cutoff`
-- 意义：
-  - 导入时会遍历两个 cutoff 目录（若缺失则跳过）
-  - cutoff 信息最终写入 `extra_metadata.source_cutoff`
+- cutoff kind → 目录名：`prsm` → `toppic_prsm_cutoff`，`proteoform` → `toppic_proteoform_cutoff`；导入时遍历（缺则跳过），并写入 match 的 `extra_metadata.source_cutoff`。
 
-## L43-L52：`UniversalImportStats`
+## L42-L51：`UniversalImportStats`
 
-- 导入统计：dataset_id/run_id + 计数（proteins/proteoforms/relations/matches/skipped）
-- 被：
-  - CLI 打印
-  - 后台导入任务写入 job 成功的 stage_detail
+- `@dataclass`：`dataset_id`、`run_id`、计数器（含 `skipped_matches`）；供 CLI 打印与 `import_jobs` 成功摘要。
 
-## L54-L78：进度事件 `ProgressEvent` 与 `_emit`
+## L54-L77：`ProgressEvent` 与 `_emit`
 
-- `ProgressEvent`：
-  - `phase`: `"init" | "proteins" | "matches" | "finalize"`
-  - `cutoff`: per-cutoff 阶段带 cutoff_kind
-  - `current/total`: 局部进度
-  - `message`: 文字提示
-- `_emit`：
-  - 用 try/except 吞掉回调异常，避免“进度上报”影响导入正确性
-- 该机制被 `import_jobs.py` 用来转换成全局 0..100 进度条。
+- **L54-L66**：`ProgressEvent`：`phase` / `cutoff` / `current` / `total` / `message`（docstring 标明典型 phase 含 `init`、`proteins`、`matches`、`finalize`）。
+- **L69-70**：`ProgressCallback` 类型别名。
+- **L72-L77**：`_emit`：回调异常吞掉，避免进度上报打断导入。
 
-## L81-L124：Typer CLI 命令 `ingest(...)`
+## L80-L137：Typer CLI `ingest(...)`
 
-- 解析 CLI 参数：
-  - `root/slug/name/mode/replace` 等
-  - `database_url` 若不传，fallback 到 `settings.database_url`（CLI 与 API 用同库）
-- 调用核心函数 `ingest_universal_toppic(...)` 并打印 stats
+- **L93-L94**：`--mode` 帮助文案：**仅 `fast`**。
+- **L97-L105**：若未传 `--database-url` 则懒加载 `settings.database_url`；`mode` 非 `fast` → 红字 + `typer.Exit(2)`。
+- **L107-L115**：`_cli_progress`：终端打印 phase/cutoff/current/total/message。
+- **L117-L137**：调用 `ingest_universal_toppic(..., mode="fast", progress_callback=_cli_progress)` 并打印统计。
 
-## L126-L193：`_RunRegistry`（多 run 懒创建）
+> CLI **不会**自动调用 `assign_toppic_runs_from_prsm_headers`；多 run 对齐请走 `import_jobs` 或自行在 fast ingest 后调用。
 
-- 目的：把 PrSM 的 `ms_header.spectrum_file_name` 映射成 `runs.run_id`
-- 行为：
-  - `get_default()`：
-    - fast 导入（不读 prsm*.js）时只有一个默认 run
-    - 缺 spectrum_file_name 的记录也落到默认 run
-  - `get_or_create(file_name)`：
-    - full 导入会读每个 PrSM 详情
-    - 每个 distinct spectrum_file_name 都创建一个 runs 行
-    - 这样 `identification_matches.run_id` 能区分多 mzML/RAW 文件
+## L140-L201：`_RunRegistry`
 
-## L195-L293：`ingest_universal_toppic(...)`（核心入口）
+- **L151-L173**：`get_default` / `get_or_create`：按 `spectrum_file_name` 懒建 `runs` 行并缓存；空名回退默认 run。
+- **L175-L196**：`_insert_run`：`INSERT INTO runs ... RETURNING run_id`。
+- **L198-L200**：`created_count` 属性。
 
-### 输入校验（L218-L223）
+## L203-L288：`ingest_universal_toppic`（仅 fast）
 
-- root 必须存在
-- mode 必须是 `fast` 或 `full`
+- **L213-L224**：docstring：fast summaries；多 run 由 **`assign_toppic_runs_from_prsm_headers`** 另行完成。
+- **L225-L229**：`root.resolve()`、存在性；`mode != "fast"` → `ValueError`。
+- **L231-L244**：`_emit(init)`、`create_engine`、`begin`；可选 `DELETE` 旧 slug；`_create_dataset`、`_RunRegistry`、`stats.run_id = get_default()`。
+- **L251-L272**：按 `CUTOFF_DIRS` 找 `proteins.js`，调用 `_import_proteins_and_forms`。
+- **L274-L288**：`finalize` 事件 + `UPDATE datasets/runs SET status='READY'`；返回 `stats`。
 
-### 建立连接 + 可选 replace（L224-L230）
+## L291-L329：`_create_dataset`
 
-- `engine = create_engine(database_url)`
-- `with engine.begin()`：事务块
-- 若 replace：`DELETE FROM datasets WHERE slug=:slug`（依赖 cascade 清旧数据）
+- **L292-L329**：`INSERT INTO datasets`（`TOP_DOWN`、`TopPIC_TopFD`、`source_root`、`capabilities` JSON 字符串等）`RETURNING dataset_id`。
 
-### 创建 dataset + 默认 run（L231-L238）
-
-- `_create_dataset(...)` 插入 datasets（status=IMPORTED、capabilities=JSONB）
-- 初始化 `_RunRegistry`
-- `runs.get_default()`：保证 stats.run_id 总有值
-
-### 缓存/去重结构（L239-L243）
-
-- `protein_by_source_seq`: `source_sequence_id -> proteins.protein_id`
-- `proteoform_by_source_key`: `(source_sequence_id, source_proteoform_id) -> proteoforms.proteoform_id`
-- `relation_keys`: 避免重复插入 protein_relation_mapping
-- `fast_match_keys`: fast 模式避免重复插入 identification_matches
-
-### 遍历 cutoff 并导入（L244-L277）
-
-- 对每个 cutoff_kind：
-  - 找 `toppic_*_cutoff/data_js/proteins.js`，缺失则跳过
-  - 调用 `_import_proteins_and_forms(...)`：
-    - 导入 proteins/proteoforms/relation
-    - fast 模式：同时登记 PrSM 摘要（不打开 prsm*.js）
-  - 若 mode==full：
-    - 再调用 `_import_prsm_matches(...)` 逐个打开 `prsm*.js` 导入 identification_matches 的完整信息（scan、precursor、ms ids 等）
-
-### finalize（L278-L292）
-
-- datasets.status 与 runs.status 标记 READY
-- 发出 finalize progress event
-- 返回 stats
-
-## L295-L334：`_create_dataset`
-
-- 插入 datasets：
-  - `analysis_mode='TOP_DOWN'`
-  - `source_software='TopPIC_TopFD'`
-  - `source_root=str(root)`（导入时记录的绝对路径）
-  - `capabilities` 默认包含 has_ms1/has_ms2/has_prsms 等
-- 返回 dataset_id
-
-## L336-L435：`_import_proteins_and_forms`（读 proteins.js）
+## L332-L438：`_import_proteins_and_forms`（读 `proteins.js`）
 
 - `doc = load_js_object(proteins_file)`
 - 兼容两种嵌套路径取 `protein_list.proteins.protein`
@@ -137,9 +74,9 @@
     - fast 模式：调用 `_import_fast_prsm_summaries(...)`
 - 同时按 25 个 protein 的粒度 emit progress（proteins phase）
 
-## L436-L551：`_insert_protein` / `_insert_proteoform` / `_insert_relation`
+## L440-L605：`_insert_protein` / `_insert_proteoform` / `_insert_relation`
 
-- `_insert_protein`：
+- `_insert_protein`（**L440** 起）：
   - 计算 accession/decoy
   - 汇总 prsm_number 与 best_prsm（最小 e-value）
   - 把 TopPIC 的业务字段塞进 `extra_metadata`
@@ -150,25 +87,21 @@
   - protein_relation_mapping 记录 protein → proteoform 的归属关系
   - `extra_metadata` 写 source ids 与 cutoff
 
-## L603-L715：`_import_fast_prsm_summaries`（fast 模式登记 match）
+## L607-L719：`_import_fast_prsm_summaries`（fast 模式登记 match）
 
-- 不打开 `prsm*.js`，只从 `proteins.js` 的 prsm 摘要登记 identification_matches：
-  - `scan_number=-1`
-  - precursor/ms ids/scans 等字段多数为空（后续详情页读取 prsm*.js 再补齐）
-  - `detail_path` 指向 `prsms/prsm{ID}.js`，若文件不存在则跳过并计入 skipped
-  - `extra_metadata` 写：
-    - `source_cutoff/source_prsm_id/source_sequence_id/source_proteoform_id`
-    - `p_value/matched_fragment_number/matched_peak_number`
-    - `import_mode="fast"`
+- 仅从 `proteins.js` 摘要写 `identification_matches`：`scan_number=-1` 占位、`detail_path` 经 `prsm_detail_path` 解析（多后缀）；缺文件则 skip；`import_mode="fast"`。
+- **full 路径已移除**；明细头字段由 **`assign_toppic_runs_from_prsm_headers`** 批量 `UPDATE`。
 
-## L717-...：`_import_prsm_matches`（full 模式逐个打开 prsm*.js）
+## L721-L853：`assign_toppic_runs_from_prsm_headers`
 
-- full 模式会：
-  - 遍历 `prsms/` 下支持的 `prsm*` 明细文件（通过 `iter_prsm_files`，后缀支持 `.js/.json/.txt`）
-  - 解析 `annotated_protein` 得到 `sequence_id/proteoform_id` 并映射到 DB proteoform_id
-  - 从 `ms_header` 取 scan/precursor/ms ids
-  - 用 `_RunRegistry.get_or_create(spectrum_file_name)` 做多 run 映射
-  - 插入更完整的 identification_matches（并 emit matches progress）
+- **调用时机**：`import_jobs` 在 `plan.need_toppic_multirun_pass` 时，于 **`ingest_universal_toppic` 成功之后**调用。
+- **L738-L748**：选出 `detail_path IS NOT NULL` 的 matches；`n_total==0` 则返回 0。
+- **L753-L847**：新建 `_RunRegistry`，循环每行：读文件、`get_prsm_root`、取 `ms_header.scans` 为 **MS2 scan**（`_first_int`）、`get_or_create(spectrum_file_name)`；合并 `extra_metadata`（`import_mode="fast_multirun"`）；`UPDATE identification_matches` 写 `run_id`、`scan_number`、precursor 相关、`e_value`/`q_value` 等；每 50 条或最后一条 `_emit(matches, …)`。
+- **L849-L853**：若 `updated != n_total` 则 `RuntimeError`；否则返回 `updated`。
 
-> 说明：后续如果你希望我把该文件“从第一行到最后一行每个函数都解释到”，我会继续分段读取未展示部分并把剩余函数补齐到本解释文件里（当前已覆盖到 fast/full 两条主路径与关键写入点）。
+---
+
+## 附录：源码中其余顶层符号（与 `universal_toppic_adapter.py` 对照）
+
+以下符号在本文主流程小节中**未逐一枚举**，但在源码中仍为顶层定义，可用编辑器全局搜索对齐：`assign_toppic_runs_from_prsm_headers`（已专节）、`_accession_from_sequence_name`、`_annotation_summary`、`_as_text`、`_extract_proteoform_mass`、`_first_int`、`_first_text`、`_json_dumps`、`_looks_decoy` 以及各 `_import_*` / `_insert_*` 辅助函数。
 

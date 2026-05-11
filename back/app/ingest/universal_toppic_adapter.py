@@ -27,7 +27,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
 from app.ingest.utils import best_prsm, ensure_list, to_float, to_int
 from app.services.js_parser import load_js_object
-from app.services.prsm_files import get_prsm_root, load_prsm_document, prsm_detail_path
+from app.services.prsm_files import get_prsm_root, load_prsm_document, prsm_paths_by_id
 
 
 console = Console()
@@ -353,6 +353,9 @@ def _import_proteins_and_forms(
 
     proteins_iter = list(ensure_list(protein_list or []))
     n_total = len(proteins_iter)
+    prsm_path_by_id: dict[int, Path] = (
+        prsm_paths_by_id(cutoff_root / "prsms") if mode == "fast" else {}
+    )
     _emit(
         progress_callback,
         ProgressEvent("proteins", cutoff_kind, 0, max(n_total, 1), f"{cutoff_kind}: 0/{n_total} proteins"),
@@ -426,7 +429,7 @@ def _import_proteins_and_forms(
                     dataset_id=dataset_id,
                     run_id=runs.get_default(),
                     cutoff_kind=cutoff_kind,
-                    cutoff_root=cutoff_root,
+                    prsm_path_by_id=prsm_path_by_id,
                     source_seq_id=source_seq_id,
                     source_form_id=source_form_id,
                     proteoform_id=proteoform_id,
@@ -610,7 +613,7 @@ def _import_fast_prsm_summaries(
     dataset_id: int,
     run_id: int,
     cutoff_kind: str,
-    cutoff_root: Path,
+    prsm_path_by_id: dict[int, Path],
     source_seq_id: int,
     source_form_id: int,
     proteoform_id: int,
@@ -620,13 +623,12 @@ def _import_fast_prsm_summaries(
     stats: UniversalImportStats,
 ) -> None:
     """Register PrSM rows from proteins.js summaries without opening detail files."""
-    prsms_dir = cutoff_root / "prsms"
     for prsm_summary in ensure_list(form_doc.get("prsm")):
         source_prsm_id = to_int(prsm_summary.get("prsm_id"))
         if source_prsm_id is None:
             stats.skipped_matches += 1
             continue
-        detail_path = prsm_detail_path(prsms_dir, source_prsm_id)
+        detail_path = prsm_path_by_id.get(source_prsm_id)
         if detail_path is None:
             stats.skipped_matches += 1
             continue

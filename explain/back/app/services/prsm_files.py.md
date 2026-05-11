@@ -1,6 +1,7 @@
-## `back/app/services/prsm_files.py` 逐行解释
+# `back/app/services/prsm_files.py` 逐行解释
 
-> 目标：把“TopPIC 的 PrSM 明细文件（`prsm*.js/.json/.txt`）”的**发现、排序、定位与读取**抽成独立模块，供后端 API / 导入流程在需要时复用。
+> 来源文件：`back/app/services/prsm_files.py`  
+> TopPIC PrSM 明细（`prsm*.js/.json/.txt`）的**发现、排序、定位与读取**，供 API / `import_planner` / ingest 复用。
 
 ---
 
@@ -50,49 +51,69 @@
 
 ---
 
-## L46-L55：`prsm_detail_path` — 给定 `prsm_id`，按后缀优先级选出实际文件
+## L46-L57：`ingest_root_has_supported_prsm_files` — 解压根下是否“某处”有 PrSM 明细
 
-- **L48**：目标 stem：`prsm{id}`。
-- **L49**：先用 `iter_prsm_files(directory)` 找出所有 `prsm*` 文件，再筛出 `stem==目标` 的候选，并建立 `{suffix: path}` 映射（suffix 小写）。
-- **L50-L53**：按照 `SUPPORTED_PRSM_SUFFIXES` 的顺序依次选取：
+- **L46-L51**：docstring：ZIP 导入在 **TopPIC HTML 树** 场景下要求磁盘上存在可读的 PrSM 明细，以便 mzML 多 run 分配与详情 API 读 `detail_path`。
+- **L52-L53**：若 `ingest_root/data/` 下已有支持的 `prsm*` 文件 → 直接 `True`（与 prsm-only bundle 共用 `data/` 的情况也满足）。
+- **L54-L56**：否则遍历 `toppic_prsm_cutoff`、`toppic_proteoform_cutoff` 下的 `data_js/prsms/`，任一路径下 `has_prsm_files` 为真即 `True`。
+- **L57**：都不满足则 `False`。
+
+该函数被 `import_planner.plan_zip_ingest` 用于：**仅有 `proteins.js` 但没有 PrSM 明细的 HTML 包一律拒绝**，避免导入后无法做 header 级 run 分配或读详情。
+
+---
+
+## L60-L68：`prsm_detail_path` — 给定 `prsm_id`，按后缀优先级选出实际文件
+
+- **L62**：目标 stem：`prsm{id}`。
+- **L63**：先用 `iter_prsm_files(directory)` 找出所有 `prsm*` 文件，再筛出 `stem==目标` 的候选，并建立 `{suffix: path}` 映射（suffix 小写）。
+- **L64-L67**：按照 `SUPPORTED_PRSM_SUFFIXES` 的顺序依次选取：
   - 先 `.js`
   - 再 `.json`
   - 再 `.txt`
-- **L54**：全都没有则返回 `None`。
+- **L68**：全都没有则返回 `None`。
 
 这个函数把“同一个 prsm id 有多种序列化格式”的兼容处理集中到一处，避免 API 层散落 if/else。
 
 ---
 
-## L57-L60：`load_prsm_document` — 读取 PrSM 明细，返回 JSON-like dict
+## L71-L73：`load_prsm_document` — 读取 PrSM 明细，返回 JSON-like dict
 
-- **L59**：直接委托 `load_js_object(path)`：
+- **L73**：直接委托 `load_js_object(path)`：
   - 对 `.js`：通常会剥掉形如 `prsm_data =` 的包裹并 JSON 解析
   - 对 `.json`：直接 JSON 解析
   - 对 `.txt`：如果仍是 JSON 或 JS 包裹的 JSON，也能同样解析（具体取决于 `js_parser` 的实现）
 
 ---
 
-## L62-L75：`get_prsm_root` — 统一 TopPIC 的不同 wrapper
+## L76-L88：`get_prsm_root` — 统一 TopPIC 的不同 wrapper
 
 TopPIC 的 PrSM 明细可能出现 3 种形态：
 
-- **L64-L66**：`{"prsm": {...}}`
-- **L68-L72**：`{"prsm_data": {"prsm": {...}}}`
-- **L74**：否则就把整份 doc 当作 prsm 对象返回（兜底）
+- **L78-L80**：`{"prsm": {...}}`
+- **L82-L86**：`{"prsm_data": {"prsm": {...}}}`
+- **L88**：否则就把整份 doc 当作 prsm 对象返回（兜底）
 
 该函数的目的：后续字段访问统一从同一个 root 出发，避免到处写 `doc["prsm_data"]["prsm"]`。
 
 ---
 
-## L77-L89：`extract_spectrum_file_name` — 从 PrSM 明细提取谱图源文件名
+## L91-L103：`extract_spectrum_file_name` — 从 PrSM 明细提取谱图源文件名
 
-- **L79-L80**：读取文档并标准化 root。
-- **L81-L83**：读取路径：`prsm_root["ms"]["ms_header"]["spectrum_file_name"]`（缺失时给 `{}` 兜底）。
-- **L84-L88**：做严格校验：
+- **L93-L94**：读取文档并标准化 root。
+- **L95-L97**：读取路径：`prsm_root["ms"]["ms_header"]["spectrum_file_name"]`（缺失时给 `{}` 兜底）。
+- **L98-L102**：做严格校验：
   - 缺字段 → `ValueError(missing ...)`
   - 字符串空白 → `ValueError(empty ...)`
-- **L89**：返回去空白后的文件名文本。
+- **L103**：返回去空白后的文件名文本。
 
 典型用途：在 “mzML-memory” 模式下，用该文件名去做 run ↔ mzML 文件的严格映射（保证每个 run 对应的 mzML 可定位）。
+
+---
+
+## 附录：源码顶层符号索引（与 `prsm_files.py` 全文检索对齐）
+
+- `SUPPORTED_PRSM_SUFFIXES`
+- `is_prsm_file`、`prsm_sort_key`、`iter_prsm_files`、`has_prsm_files`
+- `ingest_root_has_supported_prsm_files`、`prsm_detail_path`
+- `load_prsm_document`、`get_prsm_root`、`extract_spectrum_file_name`
 
