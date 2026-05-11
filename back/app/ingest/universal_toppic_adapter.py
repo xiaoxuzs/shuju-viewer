@@ -38,6 +38,59 @@ CUTOFF_DIRS = {
     "proteoform": "toppic_proteoform_cutoff",
 }
 
+_FAST_MATCH_INSERT_SQL = text(
+    """
+    INSERT INTO identification_matches (
+        dataset_id,
+        run_id,
+        scan_number,
+        spectrum_native_id,
+        retention_time,
+        ms_level,
+        entity_type,
+        entity_id,
+        modified_sequence,
+        experimental_mass,
+        precursor_mz,
+        precursor_charge,
+        intensity,
+        score,
+        e_value,
+        q_value,
+        pep,
+        is_decoy_match,
+        search_engine,
+        detail_path,
+        detail_cache,
+        extra_metadata
+    )
+    VALUES (
+        :dataset_id,
+        :run_id,
+        -1,
+        NULL,
+        NULL,
+        2,
+        'PROTEOFORM',
+        :entity_id,
+        :modified_sequence,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        :e_value,
+        :q_value,
+        NULL,
+        :is_decoy_match,
+        'TopPIC',
+        :detail_path,
+        NULL,
+        CAST(:extra_metadata AS jsonb)
+    )
+    """
+)
+
 
 @dataclass
 class UniversalImportStats:
@@ -356,6 +409,7 @@ def _import_proteins_and_forms(
     prsm_path_by_id: dict[int, Path] = (
         prsm_paths_by_id(cutoff_root / "prsms") if mode == "fast" else {}
     )
+    fast_match_rows: list[dict[str, Any]] = []
     _emit(
         progress_callback,
         ProgressEvent("proteins", cutoff_kind, 0, max(n_total, 1), f"{cutoff_kind}: 0/{n_total} proteins"),
@@ -425,7 +479,6 @@ def _import_proteins_and_forms(
 
             if mode == "fast":
                 _import_fast_prsm_summaries(
-                    conn,
                     dataset_id=dataset_id,
                     run_id=runs.get_default(),
                     cutoff_kind=cutoff_kind,
@@ -436,8 +489,13 @@ def _import_proteins_and_forms(
                     sequence_name=str(form_doc.get("sequence_name") or protein_doc.get("sequence_name") or ""),
                     form_doc=form_doc,
                     fast_match_keys=fast_match_keys,
+                    match_rows=fast_match_rows,
                     stats=stats,
                 )
+
+    if fast_match_rows:
+        conn.execute(_FAST_MATCH_INSERT_SQL, fast_match_rows)
+        stats.matches += len(fast_match_rows)
 
 
 def _insert_protein(conn: Connection, dataset_id: int, protein_doc: dict[str, Any]) -> int:
@@ -608,7 +666,6 @@ def _insert_relation(
 
 
 def _import_fast_prsm_summaries(
-    conn: Connection,
     *,
     dataset_id: int,
     run_id: int,
@@ -620,9 +677,10 @@ def _import_fast_prsm_summaries(
     sequence_name: str,
     form_doc: dict[str, Any],
     fast_match_keys: set[tuple[str, int]],
+    match_rows: list[dict[str, Any]],
     stats: UniversalImportStats,
 ) -> None:
-    """Register PrSM rows from proteins.js summaries without opening detail files."""
+    """Queue PrSM rows from proteins.js summaries without opening detail files."""
     for prsm_summary in ensure_list(form_doc.get("prsm")):
         source_prsm_id = to_int(prsm_summary.get("prsm_id"))
         if source_prsm_id is None:
@@ -637,59 +695,7 @@ def _import_fast_prsm_summaries(
             continue
         fast_match_keys.add(match_key)
 
-        conn.execute(
-            text(
-                """
-                INSERT INTO identification_matches (
-                    dataset_id,
-                    run_id,
-                    scan_number,
-                    spectrum_native_id,
-                    retention_time,
-                    ms_level,
-                    entity_type,
-                    entity_id,
-                    modified_sequence,
-                    experimental_mass,
-                    precursor_mz,
-                    precursor_charge,
-                    intensity,
-                    score,
-                    e_value,
-                    q_value,
-                    pep,
-                    is_decoy_match,
-                    search_engine,
-                    detail_path,
-                    detail_cache,
-                    extra_metadata
-                )
-                VALUES (
-                    :dataset_id,
-                    :run_id,
-                    -1,
-                    NULL,
-                    NULL,
-                    2,
-                    'PROTEOFORM',
-                    :entity_id,
-                    :modified_sequence,
-                    NULL,
-                    NULL,
-                    NULL,
-                    NULL,
-                    NULL,
-                    :e_value,
-                    :q_value,
-                    NULL,
-                    :is_decoy_match,
-                    'TopPIC',
-                    :detail_path,
-                    NULL,
-                    CAST(:extra_metadata AS jsonb)
-                )
-                """
-            ),
+        match_rows.append(
             {
                 "dataset_id": dataset_id,
                 "run_id": run_id,
@@ -715,9 +721,8 @@ def _import_fast_prsm_summaries(
                         "import_mode": "fast",
                     }
                 ),
-            },
+            }
         )
-        stats.matches += 1
 
 
 def assign_toppic_runs_from_prsm_headers(
