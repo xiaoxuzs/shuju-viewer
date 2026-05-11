@@ -39,6 +39,9 @@ import { FragmentationView } from "@/features/prsm/FragmentationView";
 
 type Marker = { x: number; label: string } | null;
 
+/** MS1/MS2 charts: global base-peak normalization vs raw intensity axis. */
+type SpectrumIntensityMode = "absolute" | "percent";
+
 function useModalHeight() {
   const compute = () =>
     typeof window === "undefined" ? 600 : Math.max(360, Math.floor(window.innerHeight * 0.72));
@@ -143,6 +146,8 @@ export function PrsmDetailPage() {
   const [ms1ModalOpen, setMs1ModalOpen] = useState(false);
   const [ms2ModalOpen, setMs2ModalOpen] = useState(false);
   const [peakDetail, setPeakDetail] = useState<{ peak: MsPeakRow; ion: MatchedIon } | null>(null);
+  const [spectrumIntensityMode, setSpectrumIntensityMode] =
+    useState<SpectrumIntensityMode>("percent");
   const modalChartHeight = useModalHeight();
 
   const ms2ScanLabel = useMemo(() => {
@@ -168,6 +173,13 @@ export function PrsmDetailPage() {
   useEffect(() => {
     setPeakDetail(null);
   }, [prsmIdNum]);
+
+  useEffect(() => {
+    setMs1InlineZoom(DEFAULT_ZOOM);
+    setMs1ModalZoom(DEFAULT_ZOOM);
+    setMs2InlineZoom(DEFAULT_ZOOM);
+    setMs2ModalZoom(DEFAULT_ZOOM);
+  }, [spectrumIntensityMode]);
 
   const precursorMarker: Marker = prsm?.precursor_mz
     ? { x: prsm.precursor_mz, label: `precursor ${formatNumber(prsm.precursor_mz, 4)}` }
@@ -272,6 +284,36 @@ export function PrsmDetailPage() {
       )}
 
       {/* MS1 + MS2 spectra side by side */}
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted-foreground">MS1 / MS2 Y axis</span>
+        <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5">
+          <button
+            type="button"
+            onClick={() => setSpectrumIntensityMode("percent")}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              spectrumIntensityMode === "percent"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Relative abundance (%)
+          </button>
+          <button
+            type="button"
+            onClick={() => setSpectrumIntensityMode("absolute")}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              spectrumIntensityMode === "absolute"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Absolute intensity
+          </button>
+        </div>
+        <span className="text-xs text-muted-foreground">
+          Percent mode: full-spectrum base peak = 100% (publication-style).
+        </span>
+      </div>
       <div className="mb-6 grid gap-4 xl:grid-cols-5">
         <Card className="xl:col-span-2">
           <CardHeader className="flex flex-row items-baseline justify-between gap-3">
@@ -292,6 +334,7 @@ export function PrsmDetailPage() {
                 peaks={ms1ChartPeaks}
                 xLabel="m/z (MS1)"
                 yLabel="intensity"
+                yIntensityScale={spectrumIntensityMode}
                 height={260}
                 marker={precursorMarker}
                 emptyHint="no MS1 peaks"
@@ -322,6 +365,7 @@ export function PrsmDetailPage() {
                 peaks={ms2ChartPeaks}
                 xLabel="m/z (MS2)"
                 yLabel="intensity"
+                yIntensityScale={spectrumIntensityMode}
                 height={320}
                 emptyHint="no MS2 peaks"
                 zoom={ms2InlineZoom}
@@ -406,6 +450,7 @@ export function PrsmDetailPage() {
             peaks={ms1ChartPeaks}
             xLabel="m/z (MS1)"
             yLabel="intensity"
+            yIntensityScale={spectrumIntensityMode}
             height={modalChartHeight}
             marker={precursorMarker}
             emptyHint="no MS1 peaks"
@@ -431,6 +476,7 @@ export function PrsmDetailPage() {
             peaks={ms2ChartPeaks}
             xLabel="m/z (MS2)"
             yLabel="intensity"
+            yIntensityScale={spectrumIntensityMode}
             height={modalChartHeight}
             emptyHint="no MS2 peaks"
             zoom={ms2ModalZoom}

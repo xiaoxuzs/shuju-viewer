@@ -70,8 +70,15 @@ interface Props {
    * If provided, the Y axis renders ticks as percentages of this value
    * instead of the default SI-formatted intensity. Mirrors the original
    * TopMSV viewer where matched-peak windows show 0 / 25 / 50 / 75 / 100 %.
+   * Takes precedence over {@link yIntensityScale} when set (matched-peak panel).
    */
   yPercentBase?: number | null;
+  /**
+   * `percent`: global base-peak normalization — max intensity over the full
+   * `peaks` array is 100% relative abundance; X zoom does not change that scale.
+   * Ignored when `yPercentBase` is set.
+   */
+  yIntensityScale?: "absolute" | "percent";
   className?: string;
 }
 
@@ -188,6 +195,7 @@ export function SpectrumChart({
   annotationGuidesMz,
   envelopeOverlay,
   yPercentBase,
+  yIntensityScale = "absolute",
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -231,6 +239,25 @@ export function SpectrumChart({
     if (sortedPeaks.length === 0) return [0, 1];
     return [sortedPeaks[0].mz, sortedPeaks[sortedPeaks.length - 1].mz];
   }, [sortedPeaks, xDomain]);
+
+  /** Max intensity over the entire spectrum (not X-window / not downsampled). */
+  const globalBPI = useMemo(() => {
+    let m = 0;
+    for (const p of sortedPeaks) {
+      if (p.intensity > m) m = p.intensity;
+    }
+    return m > 0 ? m : 1;
+  }, [sortedPeaks]);
+
+  const useLocalPercentPanel =
+    yPercentBase != null && yPercentBase > 0;
+  const useGlobalRA =
+    yIntensityScale === "percent" && !useLocalPercentPanel;
+
+  const axisYLabel = useMemo(() => {
+    if (useGlobalRA) return "Relative abundance (%)";
+    return yLabel;
+  }, [useGlobalRA, yLabel]);
 
   // Keep primitive marker values so the skeleton effect doesn't rebuild on
   // every parent re-render (the caller often creates `marker` inline).
@@ -309,7 +336,7 @@ export function SpectrumChart({
       .attr("text-anchor", "middle")
       .attr("fill", "hsl(var(--muted-foreground))")
       .attr("font-size", 11)
-      .text(yLabel);
+      .text(axisYLabel);
 
     // Reusable groups: axes + grid (updated via `axis.call` on every zoom,
     // which only patches tick text/lines) and peak layer (clipped so off-range
@@ -385,7 +412,22 @@ export function SpectrumChart({
       let autoYMax = 0;
       for (const p of displayed) if (p.intensity > autoYMax) autoYMax = p.intensity;
       if (autoYMax === 0) autoYMax = 1;
-      const yDomain: [number, number] = z.y ?? [0, autoYMax];
+
+      let yDomain: [number, number];
+      if (useGlobalRA) {
+        if (z.y == null) {
+          yDomain = [0, globalBPI];
+        } else {
+          let y0 = z.y[0];
+          let y1 = z.y[1];
+          if (y0 < 0) y0 = 0;
+          if (y1 > globalBPI) y1 = globalBPI;
+          if (y1 - y0 < 1e-6 || y0 >= y1) yDomain = [0, globalBPI];
+          else yDomain = [y0, y1];
+        }
+      } else {
+        yDomain = z.y ?? [0, autoYMax];
+      }
       // Same reason as X: keep domain exact so Y zoom is also truly stepless.
       yScale = d3.scaleLinear().domain(yDomain).range([innerH, 0]);
 
@@ -402,11 +444,12 @@ export function SpectrumChart({
             .attr("font-size", 11);
           sel.selectAll("line, path").attr("stroke", "hsl(var(--border))");
         });
-      const usePercent = yPercentBase != null && yPercentBase > 0;
-      const percentBase = yPercentBase ?? 0;
-      const yTickFormat: (v: d3.NumberValue) => string = usePercent
-        ? (v) => `${Math.round((Number(v) / percentBase) * 100)}%`
-        : (v) => siFormat(Number(v));
+      const yTickFormat: (v: d3.NumberValue) => string = useLocalPercentPanel
+        ? (v) =>
+            `${Math.round((Number(v) / (yPercentBase as number)) * 100)}%`
+        : useGlobalRA
+          ? (v) => `${Math.round((Number(v) / globalBPI) * 100)}%`
+          : (v) => siFormat(Number(v));
       yAxisG
         .call(
           d3
@@ -810,6 +853,10 @@ export function SpectrumChart({
           let newY0 = vy - (vy - y0) * factor;
           let newY1 = vy + (y1 - vy) * factor;
           if (newY0 < 0) newY0 = 0;
+          if (useGlobalRA) {
+            if (newY1 > globalBPI) newY1 = globalBPI;
+            if (newY0 > newY1 - 1e-6) newY0 = Math.max(0, newY1 - 1e-6);
+          }
           if (newY1 - newY0 < 1e-6) return;
           commitZoomRef.current({ x: currentZoom.x, y: [newY0, newY1] });
         } else {
@@ -847,13 +894,17 @@ export function SpectrumChart({
     width,
     height,
     xLabel,
-    yLabel,
+    axisYLabel,
     markerX,
     markerLabel,
     fullX,
     annotationGuidesMz,
     envelopeOverlay,
     yPercentBase,
+    yIntensityScale,
+    globalBPI,
+    useGlobalRA,
+    useLocalPercentPanel,
   ]);
 
   // --- Zoom update (hot path) -------------------------------------------------
@@ -914,6 +965,11 @@ export function SpectrumChart({
                 int {d3.format(".3~s")(tooltip.peak.intensity)}
                 {tooltip.peak.charge != null ? ` · z=${tooltip.peak.charge}` : ""}
               </div>
+              {useGlobalRA && (
+                <div className="font-mono text-muted-foreground">
+                  RA {((tooltip.peak.intensity / globalBPI) * 100).toFixed(2)}%
+                </div>
+              )}
               {tooltip.peak.ion && (
                 <div className="font-semibold" style={{ color: colorFor(tooltip.peak) }}>
                   {tooltip.peak.ion}
