@@ -7,6 +7,15 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ImportEnqueueIn(BaseModel):
+    """Request body for path-based dataset import."""
+
+    source_path: str = Field(..., min_length=1, description="Absolute or user-home path to a folder on the server.")
+    slug: str = Field(..., min_length=1, description="Unique slug for URLs.")
+    name: str = Field(..., min_length=1, description="Human-readable dataset name.")
+    description: str | None = Field(None, description="Optional description.")
+
+
 class ImportJobOut(BaseModel):
     """Status of a dataset import started from the UI."""
 
@@ -25,7 +34,10 @@ class ImportJobOut(BaseModel):
     )
     stage: str | None = Field(
         None,
-        description="Machine-readable phase code: queued | extract | init | proteins | matches | finalize | success | failed",
+        description=(
+            "Machine-readable phase: queued | fingerprint | init | proteins | "
+            "matches | finalize | success | failed"
+        ),
     )
     stage_label: str | None = Field(
         None,

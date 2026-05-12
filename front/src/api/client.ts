@@ -6,6 +6,7 @@ import axios from "axios";
 import type {
   DatasetDeletedOut,
   DatasetOut,
+  ImportEnqueueIn,
   ImportJobCreatedOut,
   ImportJobOut,
   Page,
@@ -40,10 +41,11 @@ export async function fetchDatasets(): Promise<DatasetOut[]> {
   return data;
 }
 
-/** Upload a ZIP of a TopPIC output tree; returns a job id to poll. */
-export async function enqueueImport(formData: FormData): Promise<ImportJobCreatedOut> {
-  const { data } = await api.post<ImportJobCreatedOut>("/imports", formData, {
+/** Enqueue import from a server-side folder path; returns a job id to poll. */
+export async function enqueueImport(body: ImportEnqueueIn): Promise<ImportJobCreatedOut> {
+  const { data } = await api.post<ImportJobCreatedOut>("/imports", body, {
     timeout: 600_000,
+    headers: { "Content-Type": "application/json" },
   });
   return data;
 }

@@ -46,7 +46,7 @@ app/
 ```
 
 The on-disk database schema is owned by `docs/universal_schema.sql`. Reads go
-through `app/api/v1/*.py` + `app/api/v1/universal_compat.py`; writes (both ZIP
+through `app/api/v1/*.py` + `app/api/v1/universal_compat.py`; writes (both path
 upload via `POST /api/v1/imports` and the CLI above) go through
 `app/ingest/universal_toppic_adapter.py`. There is no SQLAlchemy ORM layer or
 Alembic migration tree anymore — that has been removed in favour of the single

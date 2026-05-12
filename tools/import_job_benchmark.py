@@ -5,7 +5,7 @@ when the dev server watches ``back/``.
 
 Usage::
 
-    e:\\viewer\\back\\.venv\\Scripts\\python.exe e:\\viewer\\tools\\import_job_benchmark.py --zip \"E:/viewer/shuju/48.zip\"
+    e:\\viewer\\back\\.venv\\Scripts\\python.exe e:\\viewer\\tools\\import_job_benchmark.py --source-path \"E:/viewer/shuju/MZ20160222DS_histone48_html\"
 
 Requires: ``curl`` on PATH (Windows 10+), backend reachable at ``--base-url``.
 """
@@ -43,9 +43,10 @@ def _delete_dataset(base: str, slug: str) -> None:
         resp.read()
 
 
-def _curl_post_import(base: str, zip_path: Path, slug: str, name: str) -> tuple[int, str, float]:
-    """POST multipart /imports; return (http_code, body, elapsed_seconds)."""
+def _curl_post_import(base: str, source_path: str, slug: str, name: str) -> tuple[int, str, float]:
+    """POST JSON /imports; return (http_code, body, elapsed_seconds)."""
     url = f"{base.rstrip('/')}/api/v1/imports"
+    payload = json.dumps({"source_path": source_path, "slug": slug, "name": name}, ensure_ascii=False)
     cmd = [
         "curl",
         "-sS",
@@ -60,12 +61,10 @@ def _curl_post_import(base: str, zip_path: Path, slug: str, name: str) -> tuple[
         url,
         "-H",
         "Accept: application/json",
-        "-F",
-        f"file=@{zip_path};type=application/zip",
-        "-F",
-        f"slug={slug}",
-        "-F",
-        f"name={name}",
+        "-H",
+        "Content-Type: application/json",
+        "--data-binary",
+        payload,
     ]
     t0 = time.perf_counter()
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -92,7 +91,7 @@ class Sample:
 @dataclass
 class RunLog:
     base_url: str
-    zip_path: str
+    source_path: str
     slug: str
     post_http_code: int = 0
     post_elapsed_s: float = 0.0
@@ -104,7 +103,7 @@ class RunLog:
     def to_jsonable(self) -> dict[str, Any]:
         return {
             "base_url": self.base_url,
-            "zip_path": self.zip_path,
+            "source_path": self.source_path,
             "slug": self.slug,
             "post_http_code": self.post_http_code,
             "post_elapsed_s": self.post_elapsed_s,
@@ -123,23 +122,23 @@ class RunLog:
         rows = self.samples
         last = rows[-1]
 
-        ext_start = next((s.rel for s in rows if s.payload.get("stage") == "extract"), None)
-        t_extract = None
-        if ext_start is not None:
-            after = next((s.rel for s in rows if s.payload.get("stage") not in ("extract", None)), None)
+        fp_start = next((s.rel for s in rows if s.payload.get("stage") == "fingerprint"), None)
+        t_fingerprint = None
+        if fp_start is not None:
+            after = next((s.rel for s in rows if s.payload.get("stage") not in ("fingerprint", None)), None)
             if after is not None:
-                t_extract = after - ext_start
+                t_fingerprint = after - fp_start
             else:
-                t_extract = last.rel - ext_start
+                t_fingerprint = last.rel - fp_start
 
-        last_ext = max((s.rel for s in rows if s.payload.get("stage") == "extract"), default=None)
+        last_fp = max((s.rel for s in rows if s.payload.get("stage") == "fingerprint"), default=None)
         first_db = next(
             (s.rel for s in rows if s.payload.get("stage") in _DB_STAGES),
             None,
         )
-        after_extract_to_db_s = None
-        if last_ext is not None and first_db is not None:
-            after_extract_to_db_s = max(0.0, first_db - last_ext)
+        after_fp_to_db_s = None
+        if last_fp is not None and first_db is not None:
+            after_fp_to_db_s = max(0.0, first_db - last_fp)
 
         ingest_wall_s = None
         if first_db is not None and last.payload.get("status") == "success":
@@ -147,9 +146,9 @@ class RunLog:
 
         return {
             "total_poll_wall_s": last.rel,
-            "post_includes_upload_hash_create_s": self.post_elapsed_s,
-            "extract_wall_s_est": t_extract,
-            "after_extract_to_first_db_stage_s_est": after_extract_to_db_s,
+            "post_elapsed_s": self.post_elapsed_s,
+            "fingerprint_wall_s_est": t_fingerprint,
+            "after_fingerprint_to_first_db_stage_s_est": after_fp_to_db_s,
             "first_db_stage_to_success_s_est": ingest_wall_s,
             "final_status": last.payload.get("status"),
             "final_stage": last.payload.get("stage"),
@@ -161,29 +160,29 @@ class RunLog:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--base-url", default="http://127.0.0.1:8000", help="API origin (no trailing /api)")
-    p.add_argument("--zip", type=Path, required=True, help="Path to .zip to upload")
+    p.add_argument("--source-path", type=str, required=True, help="Server path to dataset folder")
     p.add_argument("--slug", default="", help="Dataset slug (default: auto)")
     p.add_argument("--name", default="", help="Display name (default: auto)")
     p.add_argument("--poll-interval", type=float, default=2.0)
     p.add_argument("--out", type=Path, default=None, help="Write JSON log here")
     args = p.parse_args()
 
-    zip_path: Path = args.zip.resolve()
-    if not zip_path.is_file():
-        print(f"ZIP not found: {zip_path}", file=sys.stderr)
+    src = args.source_path.strip()
+    if not src:
+        print("Empty --source-path", file=sys.stderr)
         return 2
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     slug = args.slug.strip() or f"bench-48-{stamp}"
     name = args.name.strip() or f"Import benchmark {stamp}"
 
-    log = RunLog(base_url=args.base_url, zip_path=str(zip_path), slug=slug)
+    log = RunLog(base_url=args.base_url, source_path=src, slug=slug)
     repo_root = Path(__file__).resolve().parents[1]
     out_path = args.out or repo_root / "logs" / f"import-benchmark-{slug}.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        code, body, elapsed = _curl_post_import(args.base_url, zip_path, slug, name)
+        code, body, elapsed = _curl_post_import(args.base_url, src, slug, name)
     except Exception as exc:
         log.error = f"POST failed: {exc}"
         out_path.write_text(json.dumps(log.to_jsonable(), indent=2), encoding="utf-8")
@@ -199,9 +198,9 @@ def main() -> int:
             detail = json.loads(body).get("detail")
             if isinstance(detail, dict) and detail.get("slug"):
                 conflict_slug = str(detail["slug"])
-                print(f"409 duplicate ZIP; deleting dataset slug={conflict_slug!r} and retrying once…")
+                print(f"409 conflict; deleting dataset slug={conflict_slug!r} and retrying once…")
                 _delete_dataset(args.base_url, conflict_slug)
-                code, body, elapsed = _curl_post_import(args.base_url, zip_path, slug, name)
+                code, body, elapsed = _curl_post_import(args.base_url, src, slug, name)
                 log.post_http_code = code
                 log.post_elapsed_s += elapsed
                 log.post_body = body

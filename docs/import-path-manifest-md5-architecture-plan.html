@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>路径导入与数据集 Manifest MD5 — 架构与实施规划</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6370;
+      --border: #e2e6ef;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --teal: #0d9488;
+      --teal-soft: #ecfdf5;
+      --warn: #b45309;
+      --warn-bg: #fffbeb;
+      --ok: #047857;
+      --ok-bg: #ecfdf5;
+      --del: #b91c1c;
+      --del-bg: #fef2f2;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 10px 40px -12px rgba(15, 23, 42, 0.12);
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      background: linear-gradient(180deg, #eef2ff 0%, var(--bg) 28%, var(--bg) 100%);
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 0 1.25rem 3.5rem;
+    }
+
+    /* Hero */
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      align-items: center;
+      padding: 2.5rem 0 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    @media (max-width: 768px) {
+      .hero { grid-template-columns: 1fr; text-align: center; }
+      .hero-visual { order: -1; max-width: 280px; margin: 0 auto; }
+    }
+    .hero h1 {
+      font-size: clamp(1.45rem, 3.5vw, 1.85rem);
+      font-weight: 700;
+      line-height: 1.25;
+      margin: 0 0 0.75rem;
+      letter-spacing: -0.02em;
+    }
+    .hero-lead {
+      color: var(--muted);
+      font-size: 1.02rem;
+      margin: 0 0 1.25rem;
+    }
+    .hero-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    @media (max-width: 768px) {
+      .hero-badges { justify-content: center; }
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+    .badge svg { flex-shrink: 0; opacity: 0.85; }
+
+    /* Sections */
+    h2 {
+      font-size: 1.28rem;
+      margin: 2.75rem 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--accent-soft);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    h2 .sec-num {
+      display: inline-flex;
+      width: 1.85rem;
+      height: 1.85rem;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.95rem;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 1.35rem 0 0.65rem;
+      color: var(--text);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.4rem;
+      margin: 1rem 0;
+      box-shadow: var(--shadow);
+    }
+    .card-highlight {
+      border-color: #c7d2fe;
+      background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .muted { color: var(--muted); font-size: 0.94rem; }
+
+    /* Figures */
+    figure.fig {
+      margin: 1.5rem 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+    }
+    figure.fig figcaption {
+      margin-top: 0.85rem;
+      font-size: 0.88rem;
+      color: var(--muted);
+      text-align: left;
+      border-top: 1px dashed var(--border);
+      padding-top: 0.75rem;
+    }
+    figure.fig figcaption strong { color: var(--text); }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin: 1rem 0;
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+    th, td {
+      padding: 0.65rem 0.85rem;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    tr:last-child td { border-bottom: none; }
+
+    code {
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 0.84em;
+      background: #f1f5f9;
+      padding: 0.12em 0.38em;
+      border-radius: 4px;
+      color: #0f172a;
+    }
+    pre.code {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: var(--radius-sm);
+      padding: 1rem 1.15rem;
+      overflow-x: auto;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      border: 1px solid #1e293b;
+    }
+    pre.code code { background: transparent; color: inherit; padding: 0; }
+
+    ul.tight li { margin: 0.4rem 0; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    .tag {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-right: 0.35rem;
+      vertical-align: middle;
+    }
+    .tag-new { background: var(--ok-bg); color: var(--ok); }
+    .tag-del { background: var(--del-bg); color: var(--del); }
+    .tag-mod { background: var(--warn-bg); color: var(--warn); }
+    .del { color: var(--del); }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+
+    nav.toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin: 2rem 0;
+      box-shadow: var(--shadow);
+    }
+    nav.toc strong { font-size: 1rem; color: var(--text); }
+    nav.toc ol { margin: 0.5rem 0 0 1.2rem; padding: 0; columns: 2; column-gap: 2rem; }
+    @media (max-width: 600px) { nav.toc ol { columns: 1; } }
+    nav.toc a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    nav.toc a:hover { text-decoration: underline; }
+
+    .icon-inline {
+      display: inline-block;
+      vertical-align: -0.15em;
+      margin-right: 0.25rem;
+    }
+    footer.doc-foot {
+      margin-top: 3rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="hero-text">
+      <h1>路径导入与数据集 Manifest MD5<br /><span style="font-weight:600;color:var(--muted);font-size:0.92em;">架构与实施规划</span></h1>
+      <p class="hero-lead">全新概念：去掉 ZIP 与 SHA256；仅登记服务器路径并完成入库编排；重复识别采用<strong>数据集级 manifest MD5</strong>；能力分层为<strong>低耦合独立模块</strong>，并配套<strong>能力测试</strong>（耗时与精确性）。</p>
+      <div class="hero-badges">
+        <span class="badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          路径导入
+        </span>
+        <span class="badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Manifest MD5
+        </span>
+        <span class="badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          能力测试
+        </span>
+      </div>
+    </div>
+    <div class="hero-visual" aria-hidden="true">
+      <!-- 图：概念总览 — 路径 → 目录树 → manifest → 指纹 -->
+      <svg viewBox="0 0 320 220" width="100%" height="auto" style="max-width:340px;display:block;filter:drop-shadow(0 8px 24px rgba(37,99,235,0.12))">
+        <defs>
+          <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#dbeafe"/><stop offset="100%" style="stop-color:#e0e7ff"/>
+          </linearGradient>
+          <linearGradient id="g2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#2563eb"/><stop offset="100%" style="stop-color:#4f46e5"/>
+          </linearGradient>
+        </defs>
+        <rect x="8" y="8" width="304" height="204" rx="16" fill="url(#g1)" stroke="#c7d2fe" stroke-width="1.5"/>
+        <!-- path -->
+        <text x="24" y="38" fill="#1e3a5f" font-size="11" font-weight="700">source_path</text>
+        <rect x="20" y="44" width="200" height="28" rx="6" fill="#fff" stroke="#93c5fd" stroke-width="1.2"/>
+        <text x="32" y="63" fill="#334155" font-size="10" font-family="monospace">/data/…/dataset_root</text>
+        <path d="M 230 58 L 268 58" stroke="#2563eb" stroke-width="2" marker-end="url(#arr)"/>
+        <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><polygon points="0 0, 6 3, 0 6" fill="#2563eb"/></marker></defs>
+        <!-- tree -->
+        <rect x="20" y="88" width="88" height="72" rx="8" fill="#fff" stroke="#94a3b8" stroke-width="1"/>
+        <text x="28" y="108" fill="#64748b" font-size="9" font-weight="600">目录树</text>
+        <line x1="28" y1="114" x2="92" y2="114" stroke="#e2e8f0"/>
+        <text x="28" y="128" fill="#475569" font-size="8" font-family="monospace">a.html</text>
+        <text x="28" y="142" fill="#475569" font-size="8" font-family="monospace">b.js</text>
+        <text x="28" y="156" fill="#475569" font-size="8" font-family="monospace">…</text>
+        <!-- manifest -->
+        <rect x="118" y="88" width="92" height="72" rx="8" fill="#fff" stroke="#5eead4" stroke-width="1.5"/>
+        <text x="126" y="108" fill="#0f766e" font-size="9" font-weight="600">Manifest</text>
+        <text x="126" y="124" fill="#0d9488" font-size="7.5" font-family="monospace">path\tmd5\n…</text>
+        <text x="126" y="142" fill="#64748b" font-size="7">排序后拼接</text>
+        <!-- md5 -->
+        <rect x="222" y="88" width="78" height="72" rx="10" fill="url(#g2)" stroke="#312e81" stroke-width="0"/>
+        <text x="236" y="118" fill="#fff" font-size="9" font-weight="700">MD5(M)</text>
+        <text x="228" y="142" fill="#c7d2fe" font-size="7" font-family="monospace">32 hex</text>
+        <text x="228" y="154" fill="#e0e7ff" font-size="6.5">去重键</text>
+        <!-- db -->
+        <rect x="20" y="176" width="280" height="32" rx="8" fill="#1e293b" stroke="#334155"/>
+        <text x="36" y="196" fill="#94a3b8" font-size="9">PostgreSQL</text>
+        <text x="120" y="196" fill="#e2e8f0" font-size="9" font-weight="600">datasets.source_dataset_md5</text>
+      </svg>
+    </div>
+  </header>
+
+  <div class="card card-highlight">
+    <strong>前置假设</strong>：业务数据已清空，可同步修改数据库与代码，无需兼容历史 ZIP 导入行。<br />
+    <span class="muted">本页为规划审阅稿；不写具体类名与行号，实施以本节与表格契约为准。</span>
+  </div>
+
+  <nav class="toc">
+    <strong>目录</strong>
+    <ol>
+      <li><a href="#principles">设计原则与模块边界</a></li>
+      <li><a href="#remove">删除清单（旧概念）</a></li>
+      <li><a href="#modules">模块划分与依赖关系</a></li>
+      <li><a href="#manifest">Manifest MD5 规范</a></li>
+      <li><a href="#db">数据库变更</a></li>
+      <li><a href="#api-job">API 与作业编排</a></li>
+      <li><a href="#testing">能力测试模块</a></li>
+      <li><a href="#order">实施顺序与验收</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="principles"><span class="sec-num">1</span> 设计原则与模块边界</h2>
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="margin-top:0">低耦合</h3>
+      <p class="muted" style="margin-top:0">模块间仅通过<strong>窄接口</strong>传递纯数据（路径、选项、指纹结果、查询回调），不在路由或编排层内联哈希与递归遍历实现。</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">单一职责</h3>
+      <p class="muted" style="margin-top:0">指纹计算、路径导入编排、能力测试三者代码分离；算法变更集中在指纹模块，用测试模块锁住行为。</p>
+    </div>
+  </div>
+  <h3>实施时需避免的耦合</h3>
+  <ul class="tight">
+    <li>在 FastAPI 路由内实现 MD5 或全盘扫描。</li>
+    <li>在指纹模块内执行 SQL 或调用 ingest。</li>
+    <li>能力测试默认依赖生产库写权限（应对 fixture / 临时库）。</li>
+  </ul>
+
+  <h2 id="remove"><span class="sec-num">2</span> 删除清单（旧概念）</h2>
+  <p>以下从代码与 schema 中<strong>移除</strong>，不再保留 ZIP 上传与 SHA256 分支。</p>
+  <table>
+    <thead>
+      <tr><th>类别</th><th>删除内容</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>HTTP</strong></td>
+        <td class="del"><code>UploadFile</code>、临时 ZIP、<code>sha256_hex_of_file</code>、ZIP 扩展名校验、基于 ZIP 的 409。</td>
+      </tr>
+      <tr>
+        <td><strong>Runner</strong></td>
+        <td class="del">ZIP 解压、<code>zipfile</code> 并行解压、临时文件 <code>unlink</code>。</td>
+      </tr>
+      <tr>
+        <td><strong>数据库</strong></td>
+        <td class="del"><code>source_zip_sha256</code>、<code>uq_datasets_source_zip_sha256</code>；<code>import_jobs.source_zip_name</code> 等 ZIP 语义字段。</td>
+      </tr>
+      <tr>
+        <td><strong>服务</strong></td>
+        <td class="del">ZIP 专用指纹工具、<code>find_dataset_with_zip_sha256</code> 及仅服务该列的迁移。</td>
+      </tr>
+      <tr>
+        <td><strong>产品</strong></td>
+        <td class="del">「上传 ZIP」文案与控件 → 改为服务器路径输入或受控选择。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="modules"><span class="sec-num">3</span> 模块划分与依赖关系</h2>
+  <p>后端建议以<strong>独立子包</strong>承载；下表为逻辑名，实施时可微调目录名。</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 640 280" width="100%" style="max-width:640px;height:auto" role="img" aria-labelledby="fig1-title">
+      <title id="fig1-title">模块依赖关系示意图</title>
+      <defs>
+        <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.12"/></filter>
+      </defs>
+      <!-- HTTP -->
+      <g filter="url(#sh)">
+        <rect x="20" y="100" width="100" height="56" rx="10" fill="#fff" stroke="#93c5fd" stroke-width="1.5"/>
+        <text x="70" y="128" text-anchor="middle" fill="#1d4ed8" font-size="11" font-weight="700">HTTP</text>
+        <text x="70" y="144" text-anchor="middle" fill="#64748b" font-size="9">POST 路径</text>
+      </g>
+      <!-- path_import -->
+      <g filter="url(#sh)">
+        <rect x="160" y="88" width="130" height="80" rx="12" fill="#2563eb" stroke="#1d4ed8"/>
+        <text x="225" y="118" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">path_import</text>
+        <text x="225" y="138" text-anchor="middle" fill="#bfdbfe" font-size="9">编排 · 校验 · 阶段</text>
+        <text x="225" y="156" text-anchor="middle" fill="#93c5fe" font-size="8">run_path_import_job</text>
+      </g>
+      <!-- manifest -->
+      <g filter="url(#sh)">
+        <rect x="330" y="20" width="130" height="72" rx="12" fill="#0d9488" stroke="#0f766e"/>
+        <text x="395" y="48" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">dataset_manifest_md5</text>
+        <text x="395" y="68" text-anchor="middle" fill="#99f6e4" font-size="8.5">枚举 · 每文件 MD5</text>
+        <text x="395" y="82" text-anchor="middle" fill="#ccfbf1" font-size="8.5">manifest → MD5(M)</text>
+      </g>
+      <!-- db -->
+      <g filter="url(#sh)">
+        <rect x="330" y="188" width="130" height="72" rx="12" fill="#334155" stroke="#1e293b"/>
+        <text x="395" y="216" text-anchor="middle" fill="#f1f5f9" font-size="11" font-weight="700">db_adapter</text>
+        <text x="395" y="236" text-anchor="middle" fill="#94a3b8" font-size="8.5">查重 · 写入指纹</text>
+        <text x="395" y="250" text-anchor="middle" fill="#64748b" font-size="8">薄 SQL 封装</text>
+      </g>
+      <!-- planner -->
+      <g filter="url(#sh)">
+        <rect x="500" y="100" width="120" height="72" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <text x="560" y="128" text-anchor="middle" fill="#475569" font-size="10" font-weight="700">planner + ingest</text>
+        <text x="560" y="148" text-anchor="middle" fill="#64748b" font-size="8">现有适配器</text>
+      </g>
+      <!-- tests -->
+      <g filter="url(#sh)">
+        <rect x="500" y="12" width="120" height="56" rx="10" fill="#fffbeb" stroke="#fbbf24"/>
+        <text x="560" y="38" text-anchor="middle" fill="#b45309" font-size="10" font-weight="700">capability_tests</text>
+        <text x="560" y="54" text-anchor="middle" fill="#92400e" font-size="8">耗时 · Golden</text>
+      </g>
+      <!-- arrows -->
+      <path d="M 120 128 L 155 128" stroke="#2563eb" stroke-width="2.5" fill="none" marker-end="url(#m1)"/>
+      <path d="M 290 128 L 325 128" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#m1)"/>
+      <path d="M 260 88 L 360 92" stroke="#0d9488" stroke-width="2" fill="none" marker-end="url(#m2)"/>
+      <path d="M 260 168 L 360 248" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#m1)"/>
+      <path d="M 390 92 L 390 188" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3" fill="none"/>
+      <path d="M 460 128 L 495 128" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#m1)"/>
+      <path d="M 560 68 L 460 52" stroke="#d97706" stroke-width="1.5" fill="none" marker-end="url(#m2)"/>
+      <defs>
+        <marker id="m1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#2563eb"/></marker>
+        <marker id="m2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0 0, 7 3.5, 0 7" fill="#0d9488"/></marker>
+      </defs>
+    </svg>
+    <figcaption><strong>图 1</strong> 模块依赖：<code>path_import</code> 连接 HTTP、指纹模块、数据库适配器与现有 planner/ingest；<code>capability_tests</code> 仅依赖指纹模块（虚线语义：不经过 HTTP）。</figcaption>
+  </figure>
+
+  <table>
+    <thead>
+      <tr><th>模块</th><th>职责</th><th>禁止依赖</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="tag tag-new">NEW</span><code>dataset_manifest_md5</code></td>
+        <td>规范内枚举、每文件 MD5、manifest 行、<code>md5(M)</code>；可注入 lookup 做冲突检测。</td>
+        <td>FastAPI、SQLAlchemy、ingest</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-new">NEW</span><code>path_import</code></td>
+        <td>路径安全校验、作业阶段、调用 planner/ingest、finalize。</td>
+        <td>在编排层手写扫盘 MD5</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-mod">薄层</span><code>db_adapter</code></td>
+        <td><code>find_by_manifest_md5</code>、写入指纹等小接口。</td>
+        <td>阶段文案、HTTP</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-new">NEW</span><code>import_capability_tests</code></td>
+        <td>pytest / CLI：墙钟时间 + golden 精确性。</td>
+        <td>生产写库</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="manifest"><span class="sec-num">4</span> 数据集级 Manifest MD5 规范（契约）</h2>
+  <p>由 <strong>dataset_manifest_md5</strong> 实现并单测锁定；<code>path_import</code> 只消费指纹字符串。</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 560 200" width="100%" style="max-width:560px;height:auto" aria-labelledby="fig2-title">
+      <title id="fig2-title">Manifest 计算流水线</title>
+      <rect x="10" y="70" width="100" height="100" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+      <text x="60" y="98" text-anchor="middle" fill="#475569" font-size="10" font-weight="700">遍历文件</text>
+      <text x="60" y="118" text-anchor="middle" fill="#64748b" font-size="8">POSIX 相对路径</text>
+      <text x="60" y="136" text-anchor="middle" fill="#64748b" font-size="8">字典序排序</text>
+      <text x="60" y="156" text-anchor="middle" fill="#94a3b8" font-size="7">排除 .DS_Store 等</text>
+      <path d="M 115 120 L 145 120" stroke="#334155" stroke-width="2" marker-end="url(#a3)"/>
+      <rect x="150" y="70" width="110" height="100" rx="10" fill="#ecfdf5" stroke="#34d399"/>
+      <text x="205" y="98" text-anchor="middle" fill="#065f46" font-size="10" font-weight="700">每文件 MD5</text>
+      <text x="205" y="120" text-anchor="middle" fill="#047857" font-size="8">流式分块</text>
+      <text x="205" y="140" text-anchor="middle" fill="#059669" font-size="7" font-family="monospace">relpath\tmd5\n</text>
+      <path d="M 265 120 L 295 120" stroke="#334155" stroke-width="2" marker-end="url(#a3)"/>
+      <rect x="300" y="70" width="100" height="100" rx="10" fill="#eff6ff" stroke="#60a5fa"/>
+      <text x="350" y="98" text-anchor="middle" fill="#1e40af" font-size="10" font-weight="700">拼接 M</text>
+      <text x="350" y="120" text-anchor="middle" fill="#3b82f6" font-size="8">UTF-8 字节</text>
+      <path d="M 405 120 L 435 120" stroke="#334155" stroke-width="2" marker-end="url(#a3)"/>
+      <rect x="440" y="65" width="110" height="110" rx="14" fill="#1e293b" stroke="#0f172a"/>
+      <text x="495" y="108" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">MD5(M)</text>
+      <text x="495" y="132" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="monospace">32 hex</text>
+      <text x="495" y="154" text-anchor="middle" fill="#64748b" font-size="8">source_dataset_md5</text>
+      <defs><marker id="a3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><polygon points="0 0, 8 4, 0 8" fill="#334155"/></marker></defs>
+    </svg>
+    <figcaption><strong>图 2</strong> 计算流水线：排序后的 manifest 文本 <code>M</code> 再做一次 MD5，得到与 ZIP 字节序无关的<strong>数据集级</strong>指纹。</figcaption>
+  </figure>
+
+  <h3>规则摘要</h3>
+  <ul class="tight">
+    <li>根目录 <code>ingest_root</code> 与当前 planner 使用的根一致。</li>
+    <li>仅常规文件；符号链接策略在实现中写死并由测试覆盖。</li>
+    <li>每行：<code>&lt;relpath&gt;\t&lt;file_md5_hex&gt;\n</code>；<code>source_dataset_md5 = md5(M.encode("utf-8")).hexdigest()</code>。</li>
+    <li><strong>零文件</strong>：建议拒绝导入；<strong>大文件</strong>：流式哈希。</li>
+  </ul>
+
+  <h2 id="db"><span class="sec-num">5</span> 数据库变更</h2>
+  <figure class="fig">
+    <svg viewBox="0 0 560 120" width="100%" style="max-width:560px;height:auto">
+      <rect x="20" y="25" width="230" height="70" rx="10" fill="#fef2f2" stroke="#fecaca"/>
+      <text x="135" y="52" text-anchor="middle" fill="#991b1b" font-size="11" font-weight="700">移除</text>
+      <text x="135" y="72" text-anchor="middle" fill="#b91c1c" font-size="9" font-family="monospace">source_zip_sha256</text>
+      <text x="135" y="88" text-anchor="middle" fill="#b91c1c" font-size="8">+ uq_…zip_sha256</text>
+      <text x="280" y="68" font-size="24" fill="#cbd5e1">→</text>
+      <rect x="310" y="25" width="230" height="70" rx="10" fill="#ecfdf5" stroke="#6ee7b7"/>
+      <text x="425" y="52" text-anchor="middle" fill="#047857" font-size="11" font-weight="700">新增</text>
+      <text x="425" y="72" text-anchor="middle" fill="#065f46" font-size="9" font-family="monospace">source_dataset_md5</text>
+      <text x="425" y="88" text-anchor="middle" fill="#059669" font-size="8">CHAR(32) + 部分 UNIQUE</text>
+    </svg>
+    <figcaption><strong>图 3</strong> <code>datasets</code> 表：去掉 ZIP 指纹列与索引，改为 manifest 派生的 MD5 列及去重索引。</figcaption>
+  </figure>
+  <ul class="tight">
+    <li><code>import_jobs</code>：去掉 <code>source_zip_name</code>；新增 <code>source_path</code>；可选 <code>manifest_md5_hex</code> 便于排障。</li>
+    <li>同步更新 <code>docs/universal_schema.sql</code> 与启动迁移逻辑。</li>
+  </ul>
+
+  <h2 id="api-job"><span class="sec-num">6</span> API 与导入作业编排</h2>
+  <p>请求体包含 <code>source_path</code>、<code>slug</code>、<code>name</code> 等；同步阶段<strong>不</strong>扫全树算 MD5；返回 <code>202</code> + <code>job_id</code>。</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 620 100" width="100%" style="max-width:620px;height:auto">
+      <defs>
+        <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" style="stop-color:#0d9488"/><stop offset="35%" style="stop-color:#2563eb"/>
+          <stop offset="70%" style="stop-color:#6366f1"/><stop offset="100%" style="stop-color:#7c3aed"/>
+        </linearGradient>
+      </defs>
+      <rect x="15" y="35" width="590" height="14" rx="7" fill="#e2e8f0"/>
+      <rect x="15" y="35" width="590" height="14" rx="7" fill="url(#bar)" opacity="0.85"/>
+      <text x="75" y="28" text-anchor="middle" fill="#0f766e" font-size="9" font-weight="700">1 fingerprint</text>
+      <text x="215" y="28" text-anchor="middle" fill="#1d4ed8" font-size="9" font-weight="700">2 plan</text>
+      <text x="355" y="28" text-anchor="middle" fill="#4338ca" font-size="9" font-weight="700">3 ingest</text>
+      <text x="515" y="28" text-anchor="middle" fill="#6d28d9" font-size="9" font-weight="700">4 finalize</text>
+      <text x="75" y="78" text-anchor="middle" fill="#64748b" font-size="8">查重</text>
+      <text x="215" y="78" text-anchor="middle" fill="#64748b" font-size="8">布局</text>
+      <text x="355" y="78" text-anchor="middle" fill="#64748b" font-size="8">写入业务表</text>
+      <text x="515" y="78" text-anchor="middle" fill="#64748b" font-size="8">路径+MD5</text>
+    </svg>
+    <figcaption><strong>图 4</strong> 后台作业建议阶段：先指纹与去重，再规划与入库，最后持久化 <code>source_root</code> 与 <code>source_dataset_md5</code>（并发下依赖唯一索引兜底）。</figcaption>
+  </figure>
+
+  <h2 id="testing"><span class="sec-num">7</span> 能力测试模块（独立）</h2>
+  <div class="grid-2">
+    <div class="card" style="border-left:4px solid #f59e0b">
+      <h3 style="margin-top:0">运行时间</h3>
+      <p class="muted" style="margin-top:0">对 fixture 或环境变量指定目录测量 fingerprint 阶段墙钟时间；可多次运行取中位数，结果输出表格或 JSON。</p>
+    </div>
+    <div class="card" style="border-left:4px solid #10b981">
+      <h3 style="margin-top:0">精确性</h3>
+      <p class="muted" style="margin-top:0">Golden manifest / 期望 MD5；覆盖排序、排除规则、改一字节应改变哈希等用例。</p>
+    </div>
+  </div>
+  <p class="muted">推荐 <code>pytest</code> 无 DB、无网络默认跑；与「真 ingest + 临时库」集成测试分层。</p>
+
+  <h2 id="order"><span class="sec-num">8</span> 建议实施顺序与验收</h2>
+  <table>
+    <thead>
+      <tr><th>#</th><th>交付物</th><th>验收</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td><code>dataset_manifest_md5</code> + 单测 + golden</td><td class="ok">算法与第 4 节一致</td></tr>
+      <tr><td>2</td><td>DB 迁移 + <code>universal_schema.sql</code></td><td class="ok">无 ZIP 列；新索引生效</td></tr>
+      <tr><td>3</td><td><code>path_import</code> + 删 ZIP API/runner</td><td class="ok">仅路径；作业含查重</td></tr>
+      <tr><td>4</td><td>能力测试入口 + fixture</td><td class="ok">一条命令可复现报告</td></tr>
+      <tr><td>5</td><td>前端与对外说明</td><td class="ok">无上传 ZIP；错误语义清晰</td></tr>
+    </tbody>
+  </table>
+  <div class="card" style="background:var(--warn-bg);border-color:#fde68a">
+    <h3 style="margin-top:0" class="warn">风险提示</h3>
+    <p class="muted" style="margin-top:0">Manifest 排除范围若与 planner 认定的数据文件不一致，可能导致「指纹一致但无法 ingest」或相反；建议增加一条对齐 planner 的集成 fixture。</p>
+  </div>
+
+  <footer class="doc-foot">
+    规划审阅稿 · 文件路径：<code>docs/import-path-manifest-md5-architecture-plan.html</code>
+  </footer>
+</div>
+</body>
+</html>

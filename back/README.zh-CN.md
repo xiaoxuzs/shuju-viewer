@@ -45,7 +45,7 @@ app/
 ```
 
 数据库表结构以 `docs/universal_schema.sql` 为唯一真值。读模型在
-`app/api/v1/*.py` + `app/api/v1/universal_compat.py`；写模型（前端 ZIP 上传
+`app/api/v1/*.py` + `app/api/v1/universal_compat.py`；写模型（前端路径导入
 `POST /api/v1/imports` 和上面的 CLI）都走
 `app/ingest/universal_toppic_adapter.py`。已经不再保留 SQLAlchemy ORM 与
 Alembic 迁移这一条平行链路。

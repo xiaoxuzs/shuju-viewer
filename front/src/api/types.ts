@@ -45,6 +45,14 @@ export interface DatasetOut {
   cutoffs: CutoffOut[];
 }
 
+/** ``POST /imports`` JSON body: path-based import on the server. */
+export interface ImportEnqueueIn {
+  source_path: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+}
+
 /** Background import job status from ``POST /imports`` / ``GET /imports/{job_id}``. */
 export interface ImportJobOut {
   job_id: string;
@@ -54,7 +62,7 @@ export interface ImportJobOut {
   dataset_slug: string | null;
   /** Real progress 0..100. 100 only when status === 'success'. */
   progress: number;
-  /** Phase code: queued | extract | init | proteins | matches | finalize | success | failed. */
+  /** Phase code: queued | fingerprint | init | proteins | matches | finalize | success | failed. */
   stage: string | null;
   /** Human-readable label for the current phase (Chinese in current build). */
   stage_label: string | null;

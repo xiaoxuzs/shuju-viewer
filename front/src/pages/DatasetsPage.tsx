@@ -1,7 +1,7 @@
 /**
- * 数据集列表：展示已导入项目卡片；支持上传 ZIP 导入，空状态时仍提示 CLI 备选。
+ * 数据集列表：展示已导入项目卡片；支持填写服务器路径触发后台导入，空状态时仍提示 CLI 备选。
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -9,11 +9,11 @@ import {
   ArrowRight,
   Database,
   FileText,
+  FolderOpen,
   Layers,
   ListTree,
   Loader2,
   Trash2,
-  Upload,
 } from "lucide-react";
 
 import { deleteDataset, enqueueImport, fetchDatasets, fetchImportJob } from "@/api/client";
@@ -38,13 +38,12 @@ export function DatasetsPage() {
   });
 
   const [importOpen, setImportOpen] = useState(false);
-  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [sourcePath, setSourcePath] = useState("");
   const [slug, setSlug] = useState("");
   const [dsName, setDsName] = useState("");
   const [description, setDescription] = useState("");
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Delete dialog state
   const [deleteTarget, setDeleteTarget] = useState<DatasetOut | null>(null);
@@ -72,28 +71,27 @@ export function DatasetsPage() {
   }, [deleteTarget, queryClient]);
 
   const resetImportForm = useCallback(() => {
-    setZipFile(null);
+    setSourcePath("");
     setSlug("");
     setDsName("");
     setDescription("");
     setImportError(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
   const runImport = useCallback(async () => {
-    if (!zipFile || !slug.trim() || !dsName.trim()) {
-      setImportError("Choose a .zip file and fill slug and name.");
+    if (!sourcePath.trim() || !slug.trim() || !dsName.trim()) {
+      setImportError("请填写服务器上的数据集路径、slug 和显示名称。");
       return;
     }
     setImportError(null);
     setImportBusy(true);
     try {
-      const form = new FormData();
-      form.append("file", zipFile);
-      form.append("slug", slug.trim());
-      form.append("name", dsName.trim());
-      if (description.trim()) form.append("description", description.trim());
-      const { job_id: jobId } = await enqueueImport(form);
+      const { job_id: jobId } = await enqueueImport({
+        source_path: sourcePath.trim(),
+        slug: slug.trim(),
+        name: dsName.trim(),
+        description: description.trim() || null,
+      });
 
       for (;;) {
         const job = await fetchImportJob(jobId);
@@ -130,7 +128,7 @@ export function DatasetsPage() {
       setImportError(msg);
       setImportBusy(false);
     }
-  }, [description, dsName, queryClient, resetImportForm, slug, zipFile]);
+  }, [description, dsName, queryClient, resetImportForm, slug, sourcePath]);
 
   return (
     <>
@@ -139,8 +137,8 @@ export function DatasetsPage() {
         description="Pick a dataset to start exploring proteins, proteoforms, PrSMs and spectra."
         actions={
           <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-            <Upload className="h-4 w-4" />
-            Import from ZIP
+            <FolderOpen className="h-4 w-4" />
+            从路径导入
           </Button>
         }
       />
@@ -255,25 +253,24 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
         >
           <Card className="w-full max-w-md border-border/80 shadow-xl">
             <CardHeader>
-              <CardTitle id="import-dialog-title">Import dataset</CardTitle>
+              <CardTitle id="import-dialog-title">从路径导入数据集</CardTitle>
               <CardDescription>
-                Upload a <span className="font-mono text-foreground">.zip</span> of one TopPIC result tree (contains{" "}
-                <span className="font-mono">topfd</span> and <span className="font-mono">toppic_*_cutoff</span>). Files
-                are unpacked under the server <span className="font-mono">shuju</span> folder, then ingested.
+                填写<strong>服务器本机</strong>上已解压的 TopPIC 结果目录路径（可包含一层外层文件夹；后端会自动解析
+                <span className="font-mono">topfd</span> / <span className="font-mono">toppic_*_cutoff</span>{" "}
+                所在根目录）。导入前会计算元数据指纹用于去重，不复制文件。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Archive (.zip)</label>
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="import-path">
+                  数据集路径（服务器）
+                </label>
                 <Input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".zip,application/zip"
+                  id="import-path"
+                  placeholder="例如 E:\viewer\shuju\MyDataset 或 /data/results/run1"
+                  value={sourcePath}
                   disabled={importBusy}
-                  onChange={(ev) => {
-                    const f = ev.target.files?.[0];
-                    setZipFile(f ?? null);
-                  }}
+                  onChange={(e) => setSourcePath(e.target.value)}
                 />
               </div>
               <div className="space-y-2">

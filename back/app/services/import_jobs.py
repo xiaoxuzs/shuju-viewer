@@ -5,34 +5,26 @@ State is stored in the universal ``import_jobs`` table (see
 across uvicorn ``--reload`` cycles. Old completed/failed jobs are GC'd
 opportunistically on every read using :data:`JOB_TTL_DAYS`.
 
-Writes go through :func:`app.ingest.universal_toppic_adapter.ingest_universal_toppic`,
-i.e. the universal 7-table schema — the same schema that ``app/api/v1/*.py``
-reads from.
+Imports are **path-based**: the client sends an on-disk folder; the worker
+resolves the TopPIC ingest root, computes a fast metadata fingerprint for
+duplicate detection, then runs the same universal ingest adapters as before.
 
-Each :class:`ImportJob` carries a real progress percentage that the frontend
-polls. Progress is split into 4 weighted phases:
-
-* ``extract`` – ZIP unpacking (counted by file entries).
-* ``proteins`` – inserting proteins / proteoforms / relations (per cutoff).
-* ``matches`` – inserting ``identification_matches`` (per cutoff; TopPIC uses
-  fast summaries plus optional PrSM-header run assignment for mzML).
-* ``finalize`` – marking dataset / run rows ``READY`` and writing description.
+Progress phases include ``fingerprint``, ``init``, ``proteins``, ``matches``,
+and ``finalize``.
 """
 
 from __future__ import annotations
 
-import re
 import json
+import re
 import shutil
 import threading
 import time
 import uuid
-import zipfile
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path, PurePosixPath
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Iterable
+from pathlib import Path
+from typing import Any, Callable
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -41,20 +33,22 @@ from app.api.v1.universal_compat import cutoff_kinds
 from app.core.config import settings
 from app.core.db import engine as _db_engine
 from app.core.logging import get_logger
+from app.dataset_ingest_root import resolve_ingest_root
+from app.fingerprint import compute_dataset_metadata_fingerprint
 from app.ingest.universal_toppic_adapter import (
     ProgressEvent,
     assign_toppic_runs_from_prsm_headers,
     ingest_universal_toppic,
 )
 from app.ingest.universal_prsm_js_adapter import ingest_universal_prsm_js
+from app.services.import_planner import ImportLayoutError, plan_zip_ingest
+from app.services.import_planner.types import DatasetShape
+from app.services.incoming_path_relocate import relocate_incoming_root
 from app.services.mzml_mapping import (
     MzmlMappingError,
     build_mapping_from_extracted_dataset,
     normalize_spectrum_file_name,
 )
-from app.services.import_planner import ImportLayoutError, plan_zip_ingest
-from app.services.import_planner.types import DatasetShape
-from app.services.incoming_path_relocate import relocate_incoming_root
 
 log = get_logger(__name__)
 
@@ -64,6 +58,13 @@ log = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 JOB_TTL_DAYS = 7
+
+# ``running`` rows with ``updated_at`` older than this are ignored by
+# :func:`has_active_job_for_slug` (crashed worker / reload zombie).
+STALE_RUNNING_IMPORT_JOB_MINUTES = 120
+# ``queued`` should flip to ``running`` almost immediately; if it sits this long,
+# the background thread never attached and the row is safe to ignore for deletes.
+STALE_QUEUED_IMPORT_JOB_MINUTES = 15
 
 _BOOTSTRAP_SQL: tuple[str, ...] = (
     """
@@ -79,7 +80,7 @@ _BOOTSTRAP_SQL: tuple[str, ...] = (
         dataset_slug VARCHAR(160) NULL,
         dataset_name VARCHAR(255) NULL,
         description TEXT NULL,
-        source_zip_name TEXT NULL,
+        source_path TEXT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -91,14 +92,20 @@ _BOOTSTRAP_SQL: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS ix_import_jobs_dataset_slug ON import_jobs(dataset_slug)",
 )
 
-# ``datasets`` lives in ``docs/universal_schema.sql``; older DBs need the column + index.
-_DATASET_ZIP_FINGERPRINT_SQL: tuple[str, ...] = (
-    "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS source_zip_sha256 CHAR(64) NULL",
+_IMPORT_JOBS_ALTER_SQL: tuple[str, ...] = (
+    "ALTER TABLE import_jobs ADD COLUMN IF NOT EXISTS source_path TEXT NULL",
+    "ALTER TABLE import_jobs DROP COLUMN IF EXISTS source_zip_name",
+)
+
+_DATASET_FINGERPRINT_SQL: tuple[str, ...] = (
+    "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS source_dataset_fingerprint CHAR(32) NULL",
     """
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_datasets_source_zip_sha256
-    ON datasets (source_zip_sha256)
-    WHERE source_zip_sha256 IS NOT NULL
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_datasets_source_dataset_fingerprint
+    ON datasets (source_dataset_fingerprint)
+    WHERE source_dataset_fingerprint IS NOT NULL
     """,
+    "DROP INDEX IF EXISTS uq_datasets_source_zip_sha256",
+    "ALTER TABLE datasets DROP COLUMN IF EXISTS source_zip_sha256",
 )
 
 _RUNS_METADATA_SQL: tuple[str, ...] = (
@@ -118,19 +125,21 @@ def ensure_jobs_table() -> None:
         with _db_engine.begin() as conn:
             for stmt in _BOOTSTRAP_SQL:
                 conn.execute(text(stmt))
+            for stmt in _IMPORT_JOBS_ALTER_SQL:
+                conn.execute(text(stmt))
     except Exception:  # noqa: BLE001
         log.exception("could not bootstrap import_jobs table; jobs API will fail until DB is reachable")
 
 
-def ensure_dataset_zip_fingerprint_schema() -> None:
-    """Add ``datasets.source_zip_sha256`` and partial unique index if missing."""
+def ensure_dataset_fingerprint_schema() -> None:
+    """Add ``datasets.source_dataset_fingerprint`` and drop legacy ZIP digest column."""
     try:
         with _db_engine.begin() as conn:
-            for stmt in _DATASET_ZIP_FINGERPRINT_SQL:
+            for stmt in _DATASET_FINGERPRINT_SQL:
                 conn.execute(text(stmt))
     except Exception:  # noqa: BLE001
         log.exception(
-            "could not bootstrap datasets.source_zip_sha256; duplicate-ZIP checks may fail until DB is fixed"
+            "could not bootstrap datasets.source_dataset_fingerprint; duplicate checks may fail until DB is fixed"
         )
 
 
@@ -153,8 +162,8 @@ class ExistingDatasetFingerprintMatch:
     dataset_name: str
 
 
-def find_dataset_with_zip_sha256(zip_sha256_hex: str) -> ExistingDatasetFingerprintMatch | None:
-    """If a row already has this digest, return it; otherwise ``None``."""
+def find_dataset_with_fingerprint(fingerprint_hex: str) -> ExistingDatasetFingerprintMatch | None:
+    """If a row already has this metadata fingerprint, return it; otherwise ``None``."""
     row = None
     try:
         with _db_engine.begin() as conn:
@@ -163,14 +172,14 @@ def find_dataset_with_zip_sha256(zip_sha256_hex: str) -> ExistingDatasetFingerpr
                     """
                     SELECT slug, dataset_name
                     FROM datasets
-                    WHERE source_zip_sha256 = :h
+                    WHERE source_dataset_fingerprint = :h
                     LIMIT 1
                     """
                 ),
-                {"h": zip_sha256_hex.lower()},
+                {"h": fingerprint_hex.lower()},
             ).mappings().one_or_none()
     except Exception:  # noqa: BLE001
-        log.exception("find_dataset_with_zip_sha256 failed")
+        log.exception("find_dataset_with_fingerprint failed")
         return None
     if row is None:
         return None
@@ -210,23 +219,23 @@ _CUTOFF_ORDER: dict[str, int] = {kind: idx for idx, kind in enumerate(cutoff_kin
 # (start, end) percentage windows. Tuned so that ``matches`` – which is by far
 # the longest phase for full imports – occupies ~70% of the bar.
 _PHASE_RANGES: dict[str, tuple[float, float]] = {
-    "queued":   (0.0, 1.0),
-    "extract":  (1.0, 18.0),
-    "init":     (18.0, 22.0),
-    "proteins": (22.0, 30.0),
-    "matches":  (30.0, 95.0),
-    "finalize": (95.0, 99.5),
+    "queued":      (0.0, 1.0),
+    "fingerprint": (1.0, 8.0),
+    "init":        (8.0, 12.0),
+    "proteins":    (12.0, 20.0),
+    "matches":     (20.0, 95.0),
+    "finalize":    (95.0, 99.5),
 }
 
 _PHASE_LABELS: dict[str, str] = {
-    "queued":   "排队中…",
-    "extract":  "正在解压压缩包，耗时较长…",
-    "init":     "正在创建数据集记录…",
-    "proteins": "正在导入蛋白与形态…",
-    "matches":  "正在导入鉴定结果（PrSM 详情）…",
-    "finalize": "正在收尾索引…",
-    "success":  "导入完成",
-    "failed":   "导入失败",
+    "queued":      "排队中…",
+    "fingerprint": "正在计算数据集元数据指纹…",
+    "init":        "正在创建数据集记录…",
+    "proteins":    "正在导入蛋白与形态…",
+    "matches":     "正在导入鉴定结果（PrSM 详情）…",
+    "finalize":    "正在收尾索引…",
+    "success":     "导入完成",
+    "failed":      "导入失败",
 }
 
 
@@ -238,220 +247,6 @@ _PHASE_LABELS: dict[str, str] = {
 def _slug_dir_name(slug: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", slug.strip()).strip("._-")
     return safe or "dataset"
-
-
-def _has_dataset_layout(path: Path) -> bool:
-    return path.is_dir() and (
-        (path / "toppic_prsm_cutoff").is_dir()
-        or (path / "topfd").is_dir()
-        or (path / "toppic_proteoform_cutoff").is_dir()
-        or (path / "data").is_dir()
-    )
-
-
-def _find_ingest_root(extract_dir: Path) -> Path:
-    if _has_dataset_layout(extract_dir):
-        return extract_dir.resolve()
-    subdirs = [p for p in extract_dir.iterdir() if p.is_dir()]
-    matches = [p for p in subdirs if _has_dataset_layout(p)]
-    if len(matches) == 1:
-        return matches[0].resolve()
-    if len(matches) > 1:
-        raise ValueError("ZIP contains multiple dataset folders; keep a single TopPIC output tree at the top level.")
-    raise ValueError(
-        "Could not find a TopPIC dataset folder (expect topfd/ and/or toppic_*_cutoff/ under the archive root)."
-    )
-
-
-def _validate_zip_paths(zf: zipfile.ZipFile, dest: Path) -> list[zipfile.ZipInfo]:
-    """Validate every entry against zip-slip before any disk write."""
-    infos = zf.infolist()
-    for info in infos:
-        rel = PurePosixPath(info.filename)
-        if rel.is_absolute() or ".." in rel.parts:
-            raise ValueError(f"unsafe zip entry: {info.filename!r}")
-        target = dest.joinpath(*rel.parts).resolve()
-        try:
-            target.relative_to(dest)
-        except ValueError as exc:
-            raise ValueError(f"zip slip attempt: {info.filename!r}") from exc
-    return infos
-
-
-def _collect_zip_entries(
-    zf: zipfile.ZipFile,
-    dest: Path,
-) -> tuple[list[zipfile.ZipInfo], list[Path], list[zipfile.ZipInfo]]:
-    """Return (all_infos, dir_paths, file_infos) after safety validation."""
-    infos = _validate_zip_paths(zf, dest)
-    dir_paths: set[Path] = set()
-    file_infos: list[zipfile.ZipInfo] = []
-
-    for info in infos:
-        rel = PurePosixPath(info.filename)
-        # Some archives don't include explicit dir entries; derive parent dirs from files.
-        if info.is_dir():
-            dir_paths.add(dest.joinpath(*rel.parts))
-        else:
-            file_infos.append(info)
-            parent_rel = rel.parent
-            if parent_rel.parts:
-                dir_paths.add(dest.joinpath(*parent_rel.parts))
-
-    return infos, sorted(dir_paths), file_infos
-
-
-# Fixed ThreadPoolExecutor size for ZIP extract (parallel chunk read -> write).
-ZIP_EXTRACT_WORKERS = 12
-
-_ZIP_THREAD_LOCAL = threading.local()
-
-
-def _get_thread_zip_handle(zip_path: Path) -> zipfile.ZipFile:
-    """Return a per-thread ZipFile handle (jieya.py style).
-
-    zipfile.ZipFile isn't guaranteed thread-safe, so every worker thread keeps
-    its own instance to avoid internal locks and cross-thread state.
-    """
-    zf = getattr(_ZIP_THREAD_LOCAL, "zf", None)
-    if zf is None:
-        _ZIP_THREAD_LOCAL.zf = zipfile.ZipFile(zip_path, "r")
-        zf = _ZIP_THREAD_LOCAL.zf
-    return zf
-
-
-def _chunk_iterable(items: list[Any], size: int) -> Iterable[list[Any]]:
-    """Split a list into fixed-size chunks."""
-    for i in range(0, len(items), size):
-        yield items[i : i + size]
-
-
-def _extract_chunk(zip_path: Path, infos: list[zipfile.ZipInfo], dest: Path) -> int:
-    """Extract a batch of files in a single thread.
-
-    Important: caller must have pre-created all required directories.
-    This function intentionally does NOT call mkdir to reduce per-file overhead.
-    """
-    zf = _get_thread_zip_handle(zip_path)
-    count = 0
-    for info in infos:
-        rel = PurePosixPath(info.filename)
-        target_path = dest.joinpath(*rel.parts)
-        data = zf.read(info.filename)
-        with open(target_path, "wb") as dst:
-            dst.write(data)
-        count += 1
-    return count
-
-
-def _maybe_unwrap_single_root_folder(dest: Path) -> None:
-    """If ZIP extracted into a single wrapper dir, unwrap it in-place.
-
-    Example:
-      dest/
-        some_outer_folder/
-          topfd/
-          toppic_prsm_cutoff/
-
-    After unwrapping:
-      dest/
-        topfd/
-        toppic_prsm_cutoff/
-
-    We only unwrap when dest has exactly one directory entry and no files.
-    """
-    if not dest.exists() or not dest.is_dir():
-        return
-    entries = list(dest.iterdir())
-    if not entries:
-        return
-    dirs = [p for p in entries if p.is_dir()]
-    files = [p for p in entries if p.is_file()]
-    if files or len(dirs) != 1:
-        return
-
-    wrapper = dirs[0]
-    wrapper_entries = list(wrapper.iterdir())
-    if not wrapper_entries:
-        return
-
-    # Move everything one level up, then remove the wrapper.
-    for child in wrapper_entries:
-        target = dest / child.name
-        if target.exists():
-            # Shouldn't happen for well-formed archives; if it does, fail loud.
-            raise RuntimeError(f"cannot unwrap: target already exists: {target}")
-        shutil.move(str(child), str(target))
-    try:
-        wrapper.rmdir()
-    except OSError:
-        # Best effort; if something still holds a handle, keep it.
-        pass
-
-
-def _extract_zip_with_progress(
-    zip_path: Path,
-    dest: Path,
-    *,
-    on_progress: Callable[[int, int], None] | None = None,
-) -> None:
-    """Safely extract ``zip_path`` into ``dest`` and report per-file progress.
-
-    Optimized implementation:
-    - validate zip-slip once
-    - pre-create directory tree
-    - extract file entries concurrently in chunks (jieya.py style: read -> write)
-    """
-    dest = dest.resolve()
-    dest.mkdir(parents=True, exist_ok=True)
-
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        infos, dir_paths, file_infos = _collect_zip_entries(zf, dest)
-
-    # Progress semantics are kept consistent with the previous implementation:
-    # it counted all entries (files + dirs) from zf.infolist().
-    n_total = max(len(infos), 1)
-    n_dirs = len(dir_paths)
-    n_files = len(file_infos)
-
-    if on_progress is not None:
-        on_progress(0, n_total)
-
-    # Pre-create all directories in one go (reduces per-file overhead).
-    for d in dir_paths:
-        d.mkdir(parents=True, exist_ok=True)
-
-    # Consider directory entries "done" after pre-creation.
-    done = n_dirs
-    if on_progress is not None and done:
-        on_progress(min(done, n_total), n_total)
-
-    if n_files == 0:
-        # Nothing else to do; we already created dirs.
-        if on_progress is not None:
-            on_progress(n_total, n_total)
-        return
-
-    workers = ZIP_EXTRACT_WORKERS
-
-    # Chunking reduces threadpool scheduling overhead and keeps memory spikes
-    # more predictable for huge archives.
-    chunk_size = 500
-    chunks = list(_chunk_iterable(file_infos, chunk_size))
-    extracted_files = 0
-
-    # Concurrent chunk extraction. Each future returns the number of files written.
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = [ex.submit(_extract_chunk, zip_path, chunk, dest) for chunk in chunks]
-        for fut in as_completed(futures):
-            # Propagate exceptions with useful context (job will be marked failed upstream).
-            extracted_files += fut.result()
-            done = n_dirs + extracted_files
-            if on_progress is not None:
-                on_progress(min(done, n_total), n_total)
-
-    if on_progress is not None:
-        on_progress(n_total, n_total)
 
 
 # ---------------------------------------------------------------------------
@@ -497,7 +292,7 @@ def create_job(
     slug: str | None = None,
     name: str | None = None,
     description: str | None = None,
-    source_zip_name: str | None = None,
+    source_path: str | None = None,
 ) -> ImportJob:
     """Insert a new job row in status ``queued`` and return its snapshot."""
     job_id = str(uuid.uuid4())
@@ -507,11 +302,11 @@ def create_job(
                 """
                 INSERT INTO import_jobs (
                     job_id, status, stage, stage_label, message, progress,
-                    dataset_slug, dataset_name, description, source_zip_name
+                    dataset_slug, dataset_name, description, source_path
                 )
                 VALUES (
                     CAST(:job_id AS uuid), 'queued', 'queued', :stage_label,
-                    'Queued', 0, :slug, :name, :description, :source_zip_name
+                    'Queued', 0, :slug, :name, :description, :source_path
                 )
                 RETURNING
                     job_id, status, stage, stage_label, stage_detail, message,
@@ -524,7 +319,7 @@ def create_job(
                 "slug": slug,
                 "name": name,
                 "description": description,
-                "source_zip_name": source_zip_name,
+                "source_path": source_path,
             },
         ).mappings().one()
     return _row_to_job(dict(row))
@@ -556,17 +351,38 @@ def get_job(job_id: str) -> ImportJob | None:
 
 
 def has_active_job_for_slug(slug: str) -> bool:
-    """``True`` if a queued/running job currently targets this slug."""
+    """``True`` if a non-stale queued/running job currently targets this slug.
+
+    Rows left in ``queued``/``running`` after a crash or process restart are
+    treated as inactive once ``updated_at`` is older than the per-status
+    thresholds :data:`STALE_QUEUED_IMPORT_JOB_MINUTES` /
+    :data:`STALE_RUNNING_IMPORT_JOB_MINUTES`.
+    """
     with _db_engine.begin() as conn:
         n = conn.scalar(
             text(
                 """
                 SELECT count(1) FROM import_jobs
                 WHERE dataset_slug = :slug
-                  AND status IN ('queued', 'running')
+                  AND (
+                    (
+                        status = 'queued'
+                        AND updated_at >= NOW()
+                            - (CAST(:stale_queued_mins AS int) * INTERVAL '1 minute')
+                    )
+                    OR (
+                        status = 'running'
+                        AND updated_at >= NOW()
+                            - (CAST(:stale_running_mins AS int) * INTERVAL '1 minute')
+                    )
+                  )
                 """
             ),
-            {"slug": slug},
+            {
+                "slug": slug,
+                "stale_queued_mins": STALE_QUEUED_IMPORT_JOB_MINUTES,
+                "stale_running_mins": STALE_RUNNING_IMPORT_JOB_MINUTES,
+            },
         ) or 0
     return int(n) > 0
 
@@ -647,22 +463,36 @@ def _make_adapter_progress_handler(job_id: str) -> Callable[[ProgressEvent], Non
 # ---------------------------------------------------------------------------
 
 
-def run_zip_import_job(
+def _fingerprint_progress_handler(job_id: str) -> Callable[[int], None]:
+    """Map monotonically increasing file counts into the fingerprint phase window."""
+
+    def handle(done_files: int) -> None:
+        start, end = _PHASE_RANGES["fingerprint"]
+        span = end - start
+        cap = 50_000
+        frac = min(1.0, done_files / cap)
+        pct = start + span * frac * 0.92
+        _update_job(
+            job_id,
+            progress=min(end - 0.02, pct),
+            stage="fingerprint",
+            stage_label=_PHASE_LABELS["fingerprint"],
+            stage_detail=f"已扫描 {done_files} 个文件…",
+            message=f"元数据指纹（{done_files} 个文件）…",
+        )
+
+    return handle
+
+
+def run_path_import_job(
     *,
     job_id: str,
-    zip_path: Path,
+    source_path: str,
     slug: str,
     name: str,
     description: str | None,
-    source_zip_sha256_hex: str,
 ) -> None:
-    data_root = settings.resolved_data_root
-    folder_name = _slug_dir_name(slug)
-    final_dir = data_root / folder_name
-    incoming_dir = data_root / f"{folder_name}.incoming"
-    keep_incoming_on_error = False  # set True if the caller-visible error path is one we shouldn't auto-clean
-
-    # Temporary wall-time breakdown for import perf debugging (remove when stable).
+    """Import from an on-disk folder: resolve ingest root, fingerprint, ingest, finalize."""
     _t0 = time.perf_counter()
     _t = _t0
     timing: dict[str, float] = {}
@@ -674,49 +504,50 @@ def run_zip_import_job(
         _t = now
 
     try:
-        # ---- Phase: extract --------------------------------------------------
-        # Extract into a sibling ``.incoming`` directory; only swap with the
-        # final directory once the database ingest succeeds. This keeps the
-        # previous version of the dataset readable until the new one is fully
-        # imported (atomic-ish replace).
+        user_root = Path(source_path).expanduser()
+        ingest_root = resolve_ingest_root(user_root)
+
+        if settings.import_path_must_be_under_data_root:
+            ingest_root.resolve().relative_to(settings.resolved_data_root.resolve())
+
         _update_job(
             job_id,
             status="running",
-            stage="extract",
-            stage_label=_PHASE_LABELS["extract"],
-            stage_detail="Preparing destination",
-            message="Preparing destination",
-            progress=_PHASE_RANGES["extract"][0],
+            stage="fingerprint",
+            stage_label=_PHASE_LABELS["fingerprint"],
+            stage_detail="解析数据集根路径…",
+            message="解析数据集根路径…",
+            progress=_PHASE_RANGES["fingerprint"][0],
         )
-        if incoming_dir.exists():
-            shutil.rmtree(incoming_dir)
-        incoming_dir.mkdir(parents=True, exist_ok=True)
 
-        def _extract_cb(current: int, total: int) -> None:
-            pct = _phase_percent("extract", None, current, total)
-            _update_job(
-                job_id,
-                progress=pct,
-                stage="extract",
-                stage_label=_PHASE_LABELS["extract"],
-                stage_detail=f"{current}/{total} files extracted",
-                message=f"Extracting {current}/{total} files",
+        fp = compute_dataset_metadata_fingerprint(
+            ingest_root,
+            on_progress=_fingerprint_progress_handler(job_id),
+        )
+        if fp.file_count == 0:
+            raise RuntimeError("所选路径下没有可统计文件，拒绝导入。")
+        _update_job(
+            job_id,
+            progress=_PHASE_RANGES["fingerprint"][1],
+            stage_detail=(
+                f"指纹完成：{fp.file_count} 个文件，耗时 {fp.elapsed_seconds:.3f}s，digest={fp.fingerprint}"
+            ),
+        )
+        _slice("fingerprint_s")
+
+        dup = find_dataset_with_fingerprint(fp.fingerprint)
+        if dup is not None:
+            raise RuntimeError(
+                f"该数据集的元数据指纹与已有数据集重复（slug={dup.slug}，名称={dup.dataset_name}）。"
+                "请先删除已有数据集或更换数据目录。"
             )
-
-        _extract_zip_with_progress(zip_path, incoming_dir, on_progress=_extract_cb)
-        _slice("extract_zip_s")
-
-        _maybe_unwrap_single_root_folder(incoming_dir)
-        ingest_root = _find_ingest_root(incoming_dir)
-        incoming_dir_abs = str(incoming_dir.resolve())
 
         try:
             plan = plan_zip_ingest(ingest_root)
         except ImportLayoutError as exc:
             raise RuntimeError(str(exc)) from exc
-        _slice("unwrap_find_root_plan_s")
+        _slice("plan_s")
 
-        # ---- mzML mapping (validate on disk only; do not load spectra) -----
         mzml_mapping: dict[str, Path] | None = None
         spectra_source = plan.spectra_source
         if spectra_source == "mzml_memory":
@@ -734,7 +565,6 @@ def run_zip_import_job(
         else:
             timing["mzml_mapping_validate_s"] = 0.0
 
-        # ---- Phases: init / proteins / matches / finalize -------------------
         _update_job(
             job_id,
             stage="init",
@@ -781,9 +611,6 @@ def run_zip_import_job(
         else:
             raise RuntimeError("internal error: unsupported import plan shape")
 
-        # description is not part of the universal datasets table INSERT
-        # template today; if the caller passed one we attach it via a
-        # follow-up UPDATE so list views can surface it next to the card.
         if description:
             with _db_engine.begin() as conn:
                 conn.execute(
@@ -792,66 +619,27 @@ def run_zip_import_job(
                 )
         _slice("description_update_s")
 
-        # ---- Atomic dir swap -------------------------------------------------
-        # Now that the DB ingest succeeded, replace the previous final dir with
-        # the freshly-extracted one. If the swap itself fails (extremely rare
-        # on Windows when a previous handle is open), we keep the new ingest
-        # in ``incoming`` for inspection rather than rolling back the DB.
-        if final_dir.exists():
-            shutil.rmtree(final_dir)
-        final_dir_used = final_dir
-        rename_error: OSError | None = None
-        # Retry a few times on Windows: AV scanners / Explorer can briefly lock files.
-        for attempt in range(1, 9):
-            try:
-                incoming_dir.rename(final_dir)
-                rename_error = None
-                break
-            except OSError as exc:
-                rename_error = exc
-                time.sleep(0.35 * attempt)
-        if rename_error is not None:
-            # Degrade gracefully: keep .incoming as the dataset folder so the DB
-            # import remains usable. Downstream code uses datasets.source_root.
-            keep_incoming_on_error = True
-            final_dir_used = incoming_dir
-            log.warning(
-                "rename incoming→final failed; keeping incoming dir. incoming=%s final=%s err=%s",
-                incoming_dir,
-                final_dir,
-                rename_error,
-            )
-        _slice("disk_swap_incoming_to_final_s")
+        ingest_root_abs = str(ingest_root.resolve())
+        incoming_dir_abs = ingest_root_abs
+        final_dir_abs = ingest_root_abs
+        new_source_root = ingest_root.resolve()
+        fp_hash = fp.fingerprint.lower()
 
-        # The DB row now has source_root pointing into the (no-longer-existing)
-        # ``<slug>.incoming`` path because ingest_universal_toppic was called
-        # before the rename. Translate the path so that source_root reflects
-        # the post-rename location, otherwise downstream code (spectrum loader,
-        # delete_dataset) ends up chasing a stale path.
-        try:
-            rel_to_incoming = ingest_root.relative_to(incoming_dir.resolve())
-        except ValueError:
-            rel_to_incoming = Path()
-        new_source_root = (final_dir_used / rel_to_incoming).resolve()
-        final_dir_abs = str(final_dir_used.resolve())
-        zip_hash = source_zip_sha256_hex.lower()
         try:
             with _db_engine.begin() as conn:
                 conn.execute(
                     text(
                         "UPDATE datasets SET source_root = :source_root, "
-                        "source_zip_sha256 = :zip_hash "
+                        "source_dataset_fingerprint = :fp "
                         "WHERE dataset_id = :dataset_id"
                     ),
                     {
                         "source_root": str(new_source_root),
+                        "fp": fp_hash,
                         "dataset_id": stats.dataset_id,
-                        "zip_hash": zip_hash,
                     },
                 )
 
-                # After rename, PrSM ``detail_path`` strings still point at the
-                # ``*.incoming`` directory; rewrite the prefix so API reads work.
                 if incoming_dir_abs != final_dir_abs:
                     conn.execute(
                         text(
@@ -870,7 +658,6 @@ def run_zip_import_job(
                         },
                     )
 
-                # Persist spectra source capability for frontend routing.
                 conn.execute(
                     text(
                         "UPDATE datasets "
@@ -887,13 +674,10 @@ def run_zip_import_job(
                     },
                 )
 
-                # For mzML-memory datasets, write strict run_id → mzML path mapping.
                 if spectra_source == "mzml_memory":
                     if mzml_mapping is None:
                         raise RuntimeError("internal error: mzml_mapping is missing for mzml_memory dataset")
 
-                    # Remove unused default run created by the adapter (full mode)
-                    # if it has no identification_matches.
                     conn.execute(
                         text(
                             """
@@ -930,9 +714,6 @@ def run_zip_import_job(
                         if mzml_path is None:
                             missing_runs.append(file_name)
                             continue
-                        # Mapping paths were collected under ``*.incoming``; after a successful
-                        # rename to the final dataset folder those absolute paths go stale (same bug
-                        # class as ``detail_path``). Align mzML paths with the post-rename root.
                         if incoming_dir_abs != final_dir_abs:
                             mzml_stored = relocate_incoming_root(
                                 path=Path(mzml_path),
@@ -961,7 +742,7 @@ def run_zip_import_job(
                         )
         except IntegrityError as exc:
             log.warning(
-                "duplicate source_zip_sha256 after ingest slug=%s dataset_id=%s: %s",
+                "duplicate source_dataset_fingerprint after ingest slug=%s dataset_id=%s: %s",
                 slug,
                 stats.dataset_id,
                 exc,
@@ -969,21 +750,21 @@ def run_zip_import_job(
             try:
                 delete_dataset(slug, bypass_active_job_guard=True)
             except Exception:  # noqa: BLE001
-                log.exception("rollback after duplicate ZIP fingerprint failed for slug=%s", slug)
+                log.exception("rollback after duplicate fingerprint failed for slug=%s", slug)
             raise RuntimeError(
-                "This ZIP matches an already-imported dataset (concurrent import collision was rolled back). Please keep only one copy or try again."
+                "该数据集指纹与已有记录冲突（并发导入已回滚）。请稍后重试或删除冲突数据集。"
             ) from exc
         except Exception as exc:  # noqa: BLE001
             log.exception(
-                "could not finalize datasets row (source_root / source_zip_sha256) for %s",
+                "could not finalize datasets row (source_root / source_dataset_fingerprint) for %s",
                 slug,
             )
             raise RuntimeError(
-                f"Import finished, but failed to persist dataset path / ZIP fingerprint: {exc}"
+                f"Import finished, but failed to persist dataset path / fingerprint: {exc}"
             ) from exc
         _slice("db_finalize_paths_and_metadata_s")
 
-        timing["total_zip_import_job_s"] = time.perf_counter() - _t0
+        timing["total_path_import_job_s"] = time.perf_counter() - _t0
         timing_parts = " ".join(f"{k}={v:.3f}" for k, v in sorted(timing.items()))
         log.info(
             "import job %s done dataset_id=%s run_id=%s proteins=%s proteoforms=%s matches=%s | timing %s",
@@ -1010,7 +791,7 @@ def run_zip_import_job(
             ),
         )
     except Exception as exc:  # noqa: BLE001
-        timing["total_zip_import_job_s"] = time.perf_counter() - _t0
+        timing["total_path_import_job_s"] = time.perf_counter() - _t0
         log.warning(
             "import job %s failed | timing %s",
             job_id,
@@ -1026,37 +807,24 @@ def run_zip_import_job(
             stage_label=_PHASE_LABELS["failed"],
             stage_detail=str(exc),
         )
-        if not keep_incoming_on_error:
-            try:
-                if incoming_dir.exists():
-                    shutil.rmtree(incoming_dir)
-            except OSError:
-                log.warning("could not remove partial incoming dir %s", incoming_dir)
-    finally:
-        try:
-            zip_path.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
-def start_zip_import_background(
+def start_path_import_background(
     *,
     job_id: str,
-    zip_path: Path,
+    source_path: str,
     slug: str,
     name: str,
     description: str | None,
-    source_zip_sha256_hex: str,
 ) -> None:
     thread = threading.Thread(
-        target=run_zip_import_job,
+        target=run_path_import_job,
         kwargs={
             "job_id": job_id,
-            "zip_path": zip_path,
+            "source_path": source_path,
             "slug": slug,
             "name": name,
             "description": description,
-            "source_zip_sha256_hex": source_zip_sha256_hex,
         },
         name=f"import-{job_id}",
         daemon=True,
@@ -1084,8 +852,9 @@ def delete_dataset(slug: str, *, bypass_active_job_guard: bool = False) -> Delet
         LookupError: slug doesn't exist.
         RuntimeError: an active import job still targets this slug (unless
             ``bypass_active_job_guard`` is set for internal rollback only).
-        ValueError: dataset's source_root is outside DATA_ROOT (refused to rm
-            an unexpected path).
+        ValueError: could not derive any dataset folder under DATA_ROOT to remove
+            (rare; usually means ``source_root`` points outside ``DATA_ROOT`` and
+            no ``<slug>`` folder exists under ``DATA_ROOT``).
     """
     if not bypass_active_job_guard and has_active_job_for_slug(slug):
         raise RuntimeError(
@@ -1101,6 +870,13 @@ def delete_dataset(slug: str, *, bypass_active_job_guard: bool = False) -> Delet
             raise LookupError(slug)
         dataset_id = int(row["dataset_id"])
         source_root = row.get("source_root") or ""
+
+        # Drop any import_jobs rows for this slug (finished, failed, or stale
+        # queued/running) so deletes do not leave ghosts that confuse the UI.
+        conn.execute(
+            text("DELETE FROM import_jobs WHERE dataset_slug = :slug"),
+            {"slug": slug},
+        )
 
         # Cascade kills runs / proteins / proteoforms / identification_matches /
         # protein_relation_mapping (FKs use ON DELETE CASCADE).

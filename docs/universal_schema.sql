@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS datasets (
     capabilities JSONB NOT NULL DEFAULT '{}'::jsonb,
     extra_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    source_zip_sha256 CHAR(64) NULL,
+    source_dataset_fingerprint CHAR(32) NULL,
 
     CONSTRAINT ck_datasets_analysis_mode
         CHECK (analysis_mode IN ('BOTTOM_UP', 'TOP_DOWN')),
@@ -36,12 +36,12 @@ COMMENT ON COLUMN datasets.description IS '数据集说明。';
 COMMENT ON COLUMN datasets.capabilities IS '能力声明，例如是否有 MS1、MS2、PrSM、谱图文件。';
 COMMENT ON COLUMN datasets.extra_metadata IS '额外元数据。';
 COMMENT ON COLUMN datasets.created_at IS '数据集创建或导入时间。';
-COMMENT ON COLUMN datasets.source_zip_sha256 IS '导入源 ZIP 的 SHA-256（hex）；删库后为空占用，可再次导入同一文件。';
+COMMENT ON COLUMN datasets.source_dataset_fingerprint IS '数据集元数据 manifest 的 MD5（小写 hex）；用于路径导入去重。';
 
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_datasets_source_zip_sha256
-    ON datasets (source_zip_sha256)
-    WHERE source_zip_sha256 IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_datasets_source_dataset_fingerprint
+    ON datasets (source_dataset_fingerprint)
+    WHERE source_dataset_fingerprint IS NOT NULL;
 
 
 CREATE TABLE IF NOT EXISTS runs (
@@ -275,7 +275,7 @@ CREATE TABLE IF NOT EXISTS import_jobs (
     dataset_slug VARCHAR(160) NULL,
     dataset_name VARCHAR(255) NULL,
     description TEXT NULL,
-    source_zip_name TEXT NULL,
+    source_path TEXT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -283,17 +283,17 @@ CREATE TABLE IF NOT EXISTS import_jobs (
         CHECK (status IN ('queued', 'running', 'success', 'failed'))
 );
 
-COMMENT ON TABLE import_jobs IS '导入任务表：记录前端 ZIP 上传后台任务的状态、阶段、进度、关联的 dataset slug 与失败原因；支持 uvicorn 重启后继续轮询。';
+COMMENT ON TABLE import_jobs IS '导入任务表：记录路径导入后台任务的状态、阶段、进度、关联的 dataset slug 与失败原因；支持 uvicorn 重启后继续轮询。';
 COMMENT ON COLUMN import_jobs.job_id IS '任务 UUID（前端轮询凭据）。';
 COMMENT ON COLUMN import_jobs.status IS '任务状态：queued / running / success / failed。';
-COMMENT ON COLUMN import_jobs.stage IS '当前阶段代码：queued / extract / init / proteins / matches / finalize / success / failed。';
+COMMENT ON COLUMN import_jobs.stage IS '当前阶段代码：queued / fingerprint / init / proteins / matches / finalize / success / failed。';
 COMMENT ON COLUMN import_jobs.stage_label IS '阶段中文标签，前端直接展示。';
 COMMENT ON COLUMN import_jobs.stage_detail IS '阶段细节，例如 "1234/4567 PrSM details"。';
 COMMENT ON COLUMN import_jobs.progress IS '0..100 的真实进度百分比。';
 COMMENT ON COLUMN import_jobs.dataset_slug IS '成功后绑定的数据集 slug，便于跳转。';
 COMMENT ON COLUMN import_jobs.dataset_name IS '导入时填写的数据集展示名称。';
 COMMENT ON COLUMN import_jobs.description IS '导入时填写的可选描述。';
-COMMENT ON COLUMN import_jobs.source_zip_name IS '上传的 zip 原始文件名。';
+COMMENT ON COLUMN import_jobs.source_path IS '用户提交的服务器端导入路径（规范化后写入）。';
 COMMENT ON COLUMN import_jobs.created_at IS '任务创建时间。';
 COMMENT ON COLUMN import_jobs.updated_at IS '任务最近一次更新时间，用于 TTL 清理。';
 

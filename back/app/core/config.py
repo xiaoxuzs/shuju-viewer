@@ -23,6 +23,8 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://postgres:postgres@localhost:5432/histone_viewer"
     )
     data_root: Path = Field(default=BACKEND_ROOT.parent / "shuju")
+    #: When True, :func:`resolve_ingest_root` results must lie under :attr:`resolved_data_root`.
+    import_path_must_be_under_data_root: bool = Field(default=False)
     api_cors_origins: str = Field(default="http://localhost:5173")
     log_level: str = Field(default="INFO")
     spectrum_cache_size: int = Field(default=256)
