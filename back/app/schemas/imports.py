@@ -56,3 +56,10 @@ class ImportJobCreatedOut(BaseModel):
 
     job_id: str
     status: str = "queued"
+
+
+class ImportPickFolderOut(BaseModel):
+    """Result of ``POST /imports/pick-folder`` (native dialog on the API host)."""
+
+    path: str | None = None
+    cancelled: bool = False

@@ -153,6 +153,7 @@ def build_mapping_from_extracted_dataset(*, ingest_root: Path) -> MzmlMappingRes
     prsms_candidates = [
         ingest_root / "toppic_prsm_cutoff" / "data_js" / "prsms",
         ingest_root / "data",
+        ingest_root / "data" / "prsms",
     ]
     spectrum_file_names: set[str] | None = None
     last_error: Exception | None = None

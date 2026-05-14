@@ -1,42 +1,47 @@
-"""Build :class:`~app.services.import_planner.types.ImportPlan` for a ZIP ingest root."""
+"""Build :class:`~app.services.import_planner.types.ImportPlan` for a resolved on-disk ingest root."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from app.services.prsm_files import has_prsm_files, ingest_root_has_supported_prsm_files
+from app.services.prsm_files import ingest_root_has_supported_prsm_files, prsm_bundle_prsm_directory
 
 from .detectors import detect_spectra_source, is_toppic_html_tree
 from .types import DatasetShape, ImportLayoutError, ImportPlan
 
 _NO_PRSM_TOPPIC = (
-    "This TopPIC HTML output is missing PrSM detail files. "
-    "Add supported prsm*.js|json|txt under data/ or under "
-    "toppic_prsm_cutoff|toppic_proteoform_cutoff/data_js/prsms/, then re-import."
+    "This TopPIC HTML layout is missing PrSM detail files. "
+    "Add supported prsm*.js|json|txt under data/, data/prsms/, or under "
+    "toppic_prsm_cutoff|toppic_proteoform_cutoff/data_js/prsms/, then run the import again."
 )
 
 _UNSUPPORTED = (
-    "Unsupported ZIP layout. Provide either a TopPIC HTML output tree "
-    "(toppic_*_cutoff/data_js/proteins.js plus PrSM detail files) "
-    "or supported PrSM detail files under data/."
+    "Unsupported dataset folder layout at the resolved ingest root (path import). "
+    "Expected either (1) TopPIC HTML output: toppic_prsm_cutoff or toppic_proteoform_cutoff "
+    "with data_js/proteins.js plus PrSM detail files (prsm*.js|json|txt in data/, data/prsms/, or under "
+    "that cutoff's data_js/prsms/), or (2) a PrSM-only bundle: supported prsm* under data/ or data/prsms/ "
+    "with mzML present in the tree so spectra use mzml_memory mode."
 )
 
 _PRSM_BUNDLE_NO_MZML = (
-    "PrSM detail bundle requires mzML mode (TopFD ms1/ms2 spectrum*.js not found in topfd/)."
+    "PrSM files under data/ or data/prsms/ require mzML-backed spectra here. Add *.mzML under the dataset tree, "
+    "or remove topfd/ms1_json and topfd/ms2_json spectrum*.js files that force TopFD JS mode."
 )
 
 
 def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
-    """Infer dataset shape, spectra source, and post-ingest steps.
+    """Infer dataset shape, spectra source, and post-ingest steps for a folder on disk.
+
+    Used for path-based imports after :func:`~app.dataset_ingest_root.resolve_ingest_root`.
 
     Rules:
     - TopPIC HTML imports **require** on-disk PrSM detail files
       (:func:`app.services.prsm_files.ingest_root_has_supported_prsm_files`).
-    - PrSM-only bundle under ``data/`` requires ``mzml_memory`` (same as job runner).
+    - PrSM-only bundle under ``data/`` or ``data/prsms/`` requires ``mzml_memory`` (same as job runner).
     """
     root = ingest_root.resolve()
     toppic = is_toppic_html_tree(root)
-    prsm_bundle = has_prsm_files(root / "data")
+    prsm_bundle = prsm_bundle_prsm_directory(root) is not None
 
     if toppic:
         if not ingest_root_has_supported_prsm_files(root):

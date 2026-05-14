@@ -1,9 +1,9 @@
 """Import PrSM-detail-only datasets (plus mzML mapping) into universal schema.
 
-This adapter exists for ZIPs that do NOT contain TopPIC HTML output trees
+This adapter exists for trees that do NOT contain TopPIC HTML output
 (`toppic_prsm_cutoff/data_js/...`). Instead, the archive provides:
 
-- data/prsm*.[js|json|txt]  (TopPIC prsm_data / JSON objects)
+- data/prsm*.[js|json|txt] or data/prsms/prsm*.[js|json|txt]  (TopPIC prsm_data / JSON objects)
 - one or more mzML(.gz) files (referenced by ms_header.spectrum_file_name)
 
 We import a minimal yet usable subset for the main viewer:
@@ -25,7 +25,7 @@ from typing import Any
 from sqlalchemy import create_engine, text
 
 from app.ingest.utils import to_float, to_int
-from app.services.prsm_files import get_prsm_root, iter_prsm_files, load_prsm_document
+from app.services.prsm_files import get_prsm_root, iter_prsm_files, load_prsm_document, prsm_bundle_prsm_directory
 
 
 @dataclass
@@ -56,9 +56,9 @@ def ingest_universal_prsm_js(
     replace: bool = True,
 ) -> UniversalImportStats:
     root = root.resolve()
-    prsms_dir = root / "data"
-    if not prsms_dir.exists():
-        raise FileNotFoundError(prsms_dir)
+    prsms_dir = prsm_bundle_prsm_directory(root)
+    if prsms_dir is None:
+        raise FileNotFoundError(root / "data")
     files = iter_prsm_files(prsms_dir)
     if not files:
         raise ValueError(f"no supported PrSM files under {prsms_dir}")

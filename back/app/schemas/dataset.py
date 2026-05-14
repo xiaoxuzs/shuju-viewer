@@ -41,7 +41,7 @@ class DatasetOut(BaseModel):
 
 
 class DatasetDeletedOut(BaseModel):
-    """`DELETE /datasets/{slug}` 的应答：标识库 / 磁盘两部分是否成功清理。"""
+    """`DELETE /datasets/{slug}` 的应答：仅删除数据库行；``deleted_disk`` 恒为 False。"""
 
     model_config = ConfigDict(from_attributes=True)
 

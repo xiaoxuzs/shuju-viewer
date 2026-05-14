@@ -1,4 +1,4 @@
-"""ZIP import planning: layout detection and prerequisites before ingest."""
+"""Import planning: layout detection and prerequisites before ingest (path or extracted tree)."""
 
 from __future__ import annotations
 

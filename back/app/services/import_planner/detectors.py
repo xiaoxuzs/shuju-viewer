@@ -1,4 +1,4 @@
-"""Read-only layout / spectra-source detection for extracted ZIP roots."""
+"""Read-only layout / spectra-source detection for a dataset root on disk."""
 
 from __future__ import annotations
 

@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.api.v1.universal_compat import cutoff_id, cutoff_label, require_dataset
 from app.schemas import CutoffOut, DatasetDeletedOut, DatasetOut
-from app.services import import_jobs
+from app.services import import_jobs, spectrum_memory_wiring
+from app.spectrum_memory import CapacityError
 
 router = APIRouter(tags=["datasets"])
 
@@ -113,6 +114,12 @@ def get_dataset_detail(
 ) -> DatasetOut:
     """按 slug 取单个数据集；slug 不存在时由依赖注入层返回 404。"""
     dataset = require_dataset(session, slug)
+    try:
+        spectrum_memory_wiring.ensure_mzml_dataset_resident(session, int(dataset["dataset_id"]))
+    except CapacityError as exc:
+        raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
     return DatasetOut(
         id=dataset["dataset_id"],
         slug=dataset["slug"],
@@ -131,13 +138,12 @@ def get_dataset_detail(
 
 @router.delete("/datasets/{slug}", response_model=DatasetDeletedOut)
 def delete_dataset(slug: str) -> DatasetDeletedOut:
-    """删除一个数据集：
+    """删除一个数据集（仅数据库；磁盘上的导入目录一律保留，由用户自行管理）。
 
     1. 在 ``datasets`` 表上做 ``DELETE`` —— 由 ``ON DELETE CASCADE`` 顺带清掉
        runs / proteins / proteoforms / identification_matches /
        protein_relation_mapping 中所有关联行。
-    2. 删掉 ``DATA_ROOT`` 下与该 slug 关联的解压目录（如果存在）；为安全起见
-       只允许在 ``DATA_ROOT`` 子树内执行 ``rmtree``。
+    2. 清理同 slug 的 ``import_jobs`` 记录，避免 UI 残留幽灵任务。
     3. 若有进行中的导入任务还指向同一个 slug，会拒绝删除（防止竞争）。
     """
     try:
@@ -146,8 +152,6 @@ def delete_dataset(slug: str) -> DatasetDeletedOut:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"dataset not found: {slug}") from exc
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     return DatasetDeletedOut(
         slug=slug,
         deleted_db=result.deleted_db,

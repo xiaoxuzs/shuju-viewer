@@ -16,8 +16,6 @@ and ``finalize``.
 from __future__ import annotations
 
 import json
-import re
-import shutil
 import threading
 import time
 import uuid
@@ -49,6 +47,7 @@ from app.services.mzml_mapping import (
     build_mapping_from_extracted_dataset,
     normalize_spectrum_file_name,
 )
+from app.spectrum_memory import release_dataset
 
 log = get_logger(__name__)
 
@@ -237,16 +236,6 @@ _PHASE_LABELS: dict[str, str] = {
     "success":     "导入完成",
     "failed":      "导入失败",
 }
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _slug_dir_name(slug: str) -> str:
-    safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", slug.strip()).strip("._-")
-    return safe or "dataset"
 
 
 # ---------------------------------------------------------------------------
@@ -538,8 +527,9 @@ def run_path_import_job(
         dup = find_dataset_with_fingerprint(fp.fingerprint)
         if dup is not None:
             raise RuntimeError(
-                f"该数据集的元数据指纹与已有数据集重复（slug={dup.slug}，名称={dup.dataset_name}）。"
-                "请先删除已有数据集或更换数据目录。"
+                f"This dataset's metadata fingerprint matches an existing dataset "
+                f"(slug={dup.slug}, name={dup.dataset_name}). "
+                "Delete the existing dataset or choose a different data directory."
             )
 
         try:
@@ -833,7 +823,7 @@ def start_path_import_background(
 
 
 # ---------------------------------------------------------------------------
-# Dataset deletion (DB + disk)
+# Dataset deletion (DB only; on-disk import trees are never removed here)
 # ---------------------------------------------------------------------------
 
 
@@ -846,15 +836,12 @@ class DeleteResult:
 
 
 def delete_dataset(slug: str, *, bypass_active_job_guard: bool = False) -> DeleteResult:
-    """Delete a dataset row (DB) and its on-disk folder (under DATA_ROOT).
+    """Remove the dataset row and cascaded DB rows; do not delete any files on disk.
 
     Raises:
         LookupError: slug doesn't exist.
         RuntimeError: an active import job still targets this slug (unless
             ``bypass_active_job_guard`` is set for internal rollback only).
-        ValueError: could not derive any dataset folder under DATA_ROOT to remove
-            (rare; usually means ``source_root`` points outside ``DATA_ROOT`` and
-            no ``<slug>`` folder exists under ``DATA_ROOT``).
     """
     if not bypass_active_job_guard and has_active_job_for_slug(slug):
         raise RuntimeError(
@@ -863,13 +850,13 @@ def delete_dataset(slug: str, *, bypass_active_job_guard: bool = False) -> Delet
 
     with _db_engine.begin() as conn:
         row = conn.execute(
-            text("SELECT dataset_id, source_root FROM datasets WHERE slug = :slug"),
+            text("SELECT dataset_id FROM datasets WHERE slug = :slug"),
             {"slug": slug},
         ).mappings().one_or_none()
         if row is None:
             raise LookupError(slug)
         dataset_id = int(row["dataset_id"])
-        source_root = row.get("source_root") or ""
+        release_dataset(dataset_id)
 
         # Drop any import_jobs rows for this slug (finished, failed, or stale
         # queued/running) so deletes do not leave ghosts that confuse the UI.
@@ -885,79 +872,10 @@ def delete_dataset(slug: str, *, bypass_active_job_guard: bool = False) -> Delet
             {"dataset_id": dataset_id},
         )
 
-    # ---- Disk side ---------------------------------------------------------
-    data_root = settings.resolved_data_root.resolve()
-    expected_dir = (data_root / _slug_dir_name(slug)).resolve()
-    incoming_dir = (data_root / f"{_slug_dir_name(slug)}.incoming").resolve()
-
-    # Walk a path up to its top-level directory directly under ``data_root``;
-    # this lets us delete the whole dataset folder even if ``source_root``
-    # happens to point at a nested subdir (e.g. an ingest_root that was a
-    # subfolder of the wrapper).
-    def _top_under_data_root(p: Path) -> Path | None:
-        try:
-            p.relative_to(data_root)
-        except ValueError:
-            return None
-        cur = p
-        while cur.parent != data_root and cur.parent != cur:
-            cur = cur.parent
-        return cur if cur.parent == data_root else None
-
-    # Build an ordered, de-duplicated list of folders to try removing.
-    candidates: list[Path] = []
-    seen: set[Path] = set()
-
-    def _add_candidate(p: Path | None) -> None:
-        if p is None:
-            return
-        if p in seen:
-            return
-        seen.add(p)
-        candidates.append(p)
-
-    if source_root:
-        try:
-            _add_candidate(_top_under_data_root(Path(source_root).resolve()))
-        except OSError:
-            pass
-    _add_candidate(_top_under_data_root(expected_dir))
-    # Also clean up any leftover ``<slug>.incoming`` from a crashed import.
-    _add_candidate(_top_under_data_root(incoming_dir))
-
-    if not candidates:
-        raise ValueError(
-            f"could not derive any dataset folder under data_root {data_root} for slug {slug!r}"
-        )
-
-    primary = candidates[0]
-    folder_existed = False
-    deleted_disk = False
-    for cand in candidates:
-        if not cand.exists():
-            continue
-        folder_existed = True
-        try:
-            shutil.rmtree(cand)
-            # Mark success the first time anything was actually removed.
-            if cand == primary or not deleted_disk:
-                deleted_disk = True
-        except OSError:
-            log.exception("could not remove dataset folder %s", cand)
-
-    log.info(
-        "deleted dataset slug=%s dataset_id=%s primary=%s candidates=%s "
-        "folder_existed=%s deleted_disk=%s",
-        slug,
-        dataset_id,
-        primary,
-        [str(c) for c in candidates],
-        folder_existed,
-        deleted_disk,
-    )
+    log.info("deleted dataset from DB only slug=%s dataset_id=%s", slug, dataset_id)
     return DeleteResult(
         deleted_db=True,
-        deleted_disk=deleted_disk,
-        folder=str(primary),
-        folder_existed=folder_existed,
+        deleted_disk=False,
+        folder=None,
+        folder_existed=False,
     )

@@ -1,6 +1,7 @@
-"""Dynamic spectra API backed by in-memory mzML (lazy-loaded).
+"""Dynamic spectra API backed by in-memory mzML (``app.spectrum_memory``).
 
-This is used when datasets.capabilities.spectra_source == "mzml_memory".
+Datasets with ``capabilities.spectra_source == "mzml_memory"`` are preloaded
+when ``GET /datasets/{{slug}}`` runs; this route reads from that pool only.
 """
 
 from __future__ import annotations
@@ -15,11 +16,12 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.services.incoming_path_relocate import try_fix_stale_incoming_absolute_path
+from app.services import spectrum_memory_wiring
 from app.services.mzml_mapping import (
     build_mapping_from_extracted_dataset,
     normalize_spectrum_file_name,
 )
-from app.services.mzml_store import STORE
+from app.spectrum_memory import CapacityError, NotResidentError, get_mzml_spectrum, release_dataset
 
 
 router = APIRouter(tags=["mzml-spectra"])
@@ -51,6 +53,7 @@ def mzml_spectrum(
 
     run_metadata = row.get("run_metadata") or {}
     mzml_path = run_metadata.get("mzml_file_path")
+    path_committed = False
     if not mzml_path:
         # Backfill mapping for older imports (or interrupted finalize):
         # derive mapping from datasets.source_root on disk.
@@ -92,6 +95,7 @@ def mzml_spectrum(
         )
         # get_db() does not auto-commit; persist backfill or the next request still sees old rows.
         session.commit()
+        path_committed = True
 
     raw_path = Path(str(mzml_path))
     missing_before = not raw_path.is_file()
@@ -110,15 +114,24 @@ def mzml_spectrum(
             },
         )
         session.commit()
+        path_committed = True
 
-    # Lazy-load: only load on the first actual spectrum request.
-    if not STORE.is_loaded(run_id):
+    if path_committed:
+        release_dataset(dataset_id)
         try:
-            STORE.load_run(run_id=run_id, mzml_path=path)
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"mzML load failed: {exc}") from exc
+            spectrum_memory_wiring.ensure_mzml_dataset_resident(session, dataset_id)
+        except CapacityError as exc:
+            raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
 
-    spec = STORE.get_spectrum(run_id=run_id, scan_number=scan_number)
+    try:
+        spec = get_mzml_spectrum(dataset_id, run_id, scan_number)
+    except NotResidentError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "谱图内存未加载：请先在数据集列表中打开该数据集以预载 mzML。",
+        ) from exc
     if spec is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"scan not found in mzML: {scan_number}")
 

@@ -1,13 +1,8 @@
-"""In-memory mzML store (lazy-loaded by run_id).
-这是进程内存缓存，必须按 run_id 做 key（导入期写入 runs.run_metadata.mzml_file_path）
-禁止在导入期加载 mzML（太慢/太占内存），第一次谱图请求时才加载整个 mzML 并建立 scan 索引 。
+"""Legacy per-run mzML cache (deprecated).
 
-Design constraints:
-- MUST NOT load mzML at import time.
-- MUST load mzML fully into memory on first spectrum request for a run.
-- MUST key the cache by ``run_id`` (strict DB mapping).
-
-Implementation is adapted from ``mzml-demo/app.py``.
+Canonical implementation: :mod:`app.spectrum_memory` (dataset-level bundle,
+global byte budget, MRU/LRU). This module is kept for reference and for the
+parsing helpers pattern; new code should use ``spectrum_memory`` + wiring.
 """
 
 from __future__ import annotations

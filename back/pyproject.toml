@@ -22,7 +22,13 @@ dependencies = [
     "lxml>=6.1.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=9",
+]
+
 [tool.uv]
+default-groups = ["dev"]
 package = false
 
 [tool.ruff]

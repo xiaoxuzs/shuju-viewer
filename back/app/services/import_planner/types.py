@@ -1,4 +1,4 @@
-"""Types for ZIP import planning (layout, spectra source, downstream steps)."""
+"""Types for import planning (layout, spectra source, downstream steps)."""
 
 from __future__ import annotations
 

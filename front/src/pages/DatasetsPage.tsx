@@ -1,5 +1,5 @@
 /**
- * 数据集列表：展示已导入项目卡片；支持填写服务器路径触发后台导入，空状态时仍提示 CLI 备选。
+ * Datasets list: imported dataset cards; local folder path import; empty state still points to the ingest CLI.
  */
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
@@ -16,7 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { deleteDataset, enqueueImport, fetchDatasets, fetchImportJob } from "@/api/client";
+import { deleteDataset, enqueueImport, fetchDatasets, fetchImportJob, pickImportFolder } from "@/api/client";
 import type { DatasetOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PageHeader } from "@/components/common/page-header";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { basenamePath, slugifyFolderName } from "@/lib/serverPathFromDirectoryInput";
 import { cn } from "@/lib/utils";
 
 function sleep(ms: number): Promise<void> {
@@ -43,6 +44,7 @@ export function DatasetsPage() {
   const [dsName, setDsName] = useState("");
   const [description, setDescription] = useState("");
   const [importBusy, setImportBusy] = useState(false);
+  const [folderPickBusy, setFolderPickBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
   // Delete dialog state
@@ -78,9 +80,31 @@ export function DatasetsPage() {
     setImportError(null);
   }, []);
 
+  const onBrowseFolder = useCallback(async () => {
+    setImportError(null);
+    setFolderPickBusy(true);
+    try {
+      const res = await pickImportFolder();
+      if (res.cancelled || !res.path) return;
+      setSourcePath(res.path);
+      const leaf = basenamePath(res.path);
+      setSlug((s) => (s.trim() ? s : slugifyFolderName(leaf)));
+      setDsName((n) => (n.trim() ? n : leaf));
+    } catch (e) {
+      let msg = (e as Error).message || "Could not open folder picker.";
+      if (axios.isAxiosError(e)) {
+        const detail = (e.response?.data as { detail?: string } | undefined)?.detail;
+        if (detail) msg = detail;
+      }
+      setImportError(msg);
+    } finally {
+      setFolderPickBusy(false);
+    }
+  }, []);
+
   const runImport = useCallback(async () => {
     if (!sourcePath.trim() || !slug.trim() || !dsName.trim()) {
-      setImportError("请填写服务器上的数据集路径、slug 和显示名称。");
+      setImportError("Please enter or browse to a dataset folder path, plus a slug and display name.");
       return;
     }
     setImportError(null);
@@ -138,7 +162,7 @@ export function DatasetsPage() {
         actions={
           <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
             <FolderOpen className="h-4 w-4" />
-            从路径导入
+            Import from folder
           </Button>
         }
       />
@@ -162,8 +186,8 @@ export function DatasetsPage() {
       {data && data.length === 0 && (
         <Card>
           <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            No datasets ingested yet. Zip your TopPIC output folder and use &quot;Import from ZIP&quot;, or run the
-            universal-schema ingest CLI:
+            No datasets ingested yet. Use <strong>Import from folder</strong> for a TopPIC output directory on this
+            machine, or run the universal-schema ingest CLI:
             <pre className="mt-3 overflow-x-auto rounded-md bg-muted/50 p-3 text-left text-xs">
 {`cd back
 uv run python -m app.ingest.universal_toppic_adapter ingest \\
@@ -253,25 +277,47 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
         >
           <Card className="w-full max-w-md border-border/80 shadow-xl">
             <CardHeader>
-              <CardTitle id="import-dialog-title">从路径导入数据集</CardTitle>
+              <CardTitle id="import-dialog-title">Import dataset from folder</CardTitle>
               <CardDescription>
-                填写<strong>服务器本机</strong>上已解压的 TopPIC 结果目录路径（可包含一层外层文件夹；后端会自动解析
-                <span className="font-mono">topfd</span> / <span className="font-mono">toppic_*_cutoff</span>{" "}
-                所在根目录）。导入前会计算元数据指纹用于去重，不复制文件。
+                Pick the <strong>TopPIC output folder</strong> on this machine (you may select a wrapper folder; the
+                backend finds the ingest root with <span className="font-mono">topfd</span> /{" "}
+                <span className="font-mono">toppic_*_cutoff</span>). A metadata fingerprint is used for deduplication;
+                files are not copied. <strong>Browse folder</strong> opens a native dialog on the same computer as the
+                API (typical local setup); you can still paste a path manually.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground" htmlFor="import-path">
-                  数据集路径（服务器）
+                  Dataset folder path
                 </label>
-                <Input
-                  id="import-path"
-                  placeholder="例如 E:\viewer\shuju\MyDataset 或 /data/results/run1"
-                  value={sourcePath}
-                  disabled={importBusy}
-                  onChange={(e) => setSourcePath(e.target.value)}
-                />
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    id="import-path"
+                    className="min-w-0 sm:flex-1"
+                    placeholder="e.g. E:\\viewer\\shuju\\MyDataset"
+                    value={sourcePath}
+                    disabled={importBusy || folderPickBusy}
+                    onChange={(e) => setSourcePath(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="inline-flex shrink-0 items-center self-start sm:self-auto"
+                    disabled={importBusy || folderPickBusy}
+                    onClick={() => void onBrowseFolder()}
+                  >
+                    {folderPickBusy ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                        Picking…
+                      </>
+                    ) : (
+                      "Browse folder…"
+                    )}
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground" htmlFor="import-slug">
@@ -281,7 +327,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                   id="import-slug"
                   placeholder="e.g. mz20160222ds_histone48"
                   value={slug}
-                  disabled={importBusy}
+                  disabled={importBusy || folderPickBusy}
                   onChange={(e) => setSlug(e.target.value)}
                 />
               </div>
@@ -293,7 +339,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                   id="import-name"
                   placeholder="Human-readable name"
                   value={dsName}
-                  disabled={importBusy}
+                  disabled={importBusy || folderPickBusy}
                   onChange={(e) => setDsName(e.target.value)}
                 />
               </div>
@@ -306,7 +352,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                   rows={2}
                   placeholder="Optional notes"
                   value={description}
-                  disabled={importBusy}
+                  disabled={importBusy || folderPickBusy}
                   onChange={(e) => setDescription(e.target.value)}
                   className={cn(
                     "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm",
@@ -353,7 +399,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                   type="button"
                   variant="ghost"
                   size="sm"
-                  disabled={importBusy}
+                  disabled={importBusy || folderPickBusy}
                   onClick={() => {
                     setImportOpen(false);
                     resetImportForm();
@@ -361,7 +407,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                 >
                   Cancel
                 </Button>
-                <Button type="button" size="sm" disabled={importBusy} onClick={() => void runImport()}>
+                <Button type="button" size="sm" disabled={importBusy || folderPickBusy} onClick={() => void runImport()}>
                   {importBusy ? "Working…" : "Start import"}
                 </Button>
               </div>

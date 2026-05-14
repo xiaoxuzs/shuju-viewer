@@ -46,15 +46,29 @@ def has_prsm_files(directory: Path, *, suffixes: tuple[str, ...] = SUPPORTED_PRS
 def ingest_root_has_supported_prsm_files(ingest_root: Path) -> bool:
     """True when the extracted archive contains supported PrSM detail filenames.
 
-    ZIP import requires this for TopPIC HTML trees so PrSM headers can be read
+    Path / folder import requires this for TopPIC HTML trees so PrSM headers can be read
     for mzML run assignment and detail APIs.
     """
     if has_prsm_files(ingest_root / "data"):
+        return True
+    if has_prsm_files(ingest_root / "data" / "prsms"):
         return True
     for cutoff_dir in ("toppic_prsm_cutoff", "toppic_proteoform_cutoff"):
         if has_prsm_files(ingest_root / cutoff_dir / "data_js" / "prsms"):
             return True
     return False
+
+
+def prsm_bundle_prsm_directory(ingest_root: Path) -> Path | None:
+    """For PRSM-only bundles: directory whose direct children include ``prsm*`` files.
+
+    Accepts either ``<root>/data`` or ``<root>/data/prsms`` (some TopPIC runs use the latter).
+    """
+    root = ingest_root.resolve()
+    for d in (root / "data", root / "data" / "prsms"):
+        if has_prsm_files(d):
+            return d
+    return None
 
 
 def prsm_detail_path(directory: Path, prsm_id: int) -> Path | None:

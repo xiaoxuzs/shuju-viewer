@@ -77,6 +77,12 @@ export interface ImportJobCreatedOut {
   status: string;
 }
 
+/** ``POST /imports/pick-folder`` — native dialog on the API host (local). */
+export interface ImportPickFolderOut {
+  path: string | null;
+  cancelled: boolean;
+}
+
 /** 蛋白质列表行（某 cutoff 下一条记录）。 */
 export interface ProteinListItemOut {
   id: number;

@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     api_cors_origins: str = Field(default="http://localhost:5173")
     log_level: str = Field(default="INFO")
     spectrum_cache_size: int = Field(default=256)
+    #: When True, ``POST /imports/pick-folder`` opens a native folder dialog on the API host (local desktop).
+    import_native_folder_picker: bool = Field(default=True)
+    #: Restrict the folder picker to requests from loopback (recommended when the picker is enabled).
+    import_picker_loopback_only: bool = Field(default=True)
 
     @property
     def cors_origin_list(self) -> list[str]:

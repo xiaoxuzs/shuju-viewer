@@ -9,6 +9,7 @@ import type {
   ImportEnqueueIn,
   ImportJobCreatedOut,
   ImportJobOut,
+  ImportPickFolderOut,
   Page,
   PrsmDetailOut,
   PrsmListItemOut,
@@ -47,6 +48,16 @@ export async function enqueueImport(body: ImportEnqueueIn): Promise<ImportJobCre
     timeout: 600_000,
     headers: { "Content-Type": "application/json" },
   });
+  return data;
+}
+
+/** Opens a native folder dialog on the API host (blocks until the user picks or cancels). */
+export async function pickImportFolder(): Promise<ImportPickFolderOut> {
+  const { data } = await api.post<ImportPickFolderOut>(
+    "/imports/pick-folder",
+    {},
+    { timeout: 0, headers: { "Content-Type": "application/json" } },
+  );
   return data;
 }
 
