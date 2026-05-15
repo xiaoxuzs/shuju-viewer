@@ -86,6 +86,23 @@ class EvictionCoordinator:
                 return None
             return scans.get(scan_number)
 
+    def get_mzml_run_spectra(self, dataset_id: int, run_id: int) -> dict[int, dict[str, Any]] | None:
+        """Return the resident scan map for one run.
+
+        The returned mapping is owned by the in-memory bundle and must be
+        treated as read-only by callers. This intentionally exposes the
+        smallest surface needed by LC-MS map builders without coupling them to
+        the coordinator internals.
+        """
+        with self._lock:
+            b = self._bundles.get(dataset_id)
+            if b is None:
+                raise NotResidentError(
+                    f"dataset {dataset_id} is not resident; open the dataset first"
+                )
+            self._queue.touch(dataset_id)
+            return b.run_to_spectra.get(run_id)
+
     def release_dataset(self, dataset_id: int) -> None:
         with self._lock:
             b = self._bundles.pop(dataset_id, None)

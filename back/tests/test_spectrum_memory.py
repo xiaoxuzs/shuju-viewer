@@ -158,6 +158,30 @@ def test_eviction_coordinator_get_spectrum_hit(tmp_path: Path) -> None:
     assert out["scan"] == 42
 
 
+def test_eviction_coordinator_get_run_spectra_hit(tmp_path: Path) -> None:
+    mdb = _mzml_bundle_mod()
+    p = tmp_path / "run-map.mzML"
+    p.write_bytes(b"x")
+    spec = MzmlBundleSpec(dataset_id=302, runs=(MzmlRunFileSpec(run_id=1, mzml_path=p),))
+
+    coord = EvictionCoordinator()
+    coord._max = 10_000
+
+    with (
+        patch("app.spectrum_memory.eviction_coordinator.pre_load_reserve_bytes", return_value=50),
+        patch.object(
+            mdb.DatasetMzmlBundle,
+            "load",
+            side_effect=_fake_load_factory(accounted=200),
+        ),
+    ):
+        coord.ensure_dataset_resident(spec)
+
+    spectra = coord.get_mzml_run_spectra(302, run_id=1)
+    assert spectra is not None
+    assert spectra[42]["scan"] == 42
+
+
 def test_eviction_coordinator_release_drops_and_frees_accounting(tmp_path: Path) -> None:
     mdb = _mzml_bundle_mod()
     p = tmp_path / "e.mzML"

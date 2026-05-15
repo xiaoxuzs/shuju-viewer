@@ -1,7 +1,8 @@
 """Whole-dataset mzML memory pool (MRU/LRU, global byte budget).
 
 Public API for other packages: :func:`ensure_dataset_resident`,
-:func:`get_mzml_spectrum`, :func:`release_dataset`, :func:`residency_of`.
+:func:`get_mzml_spectrum`, :func:`get_mzml_run_spectra`,
+:func:`release_dataset`, :func:`residency_of`.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ __all__ = [
     "NotResidentError",
     "Residency",
     "ensure_dataset_resident",
+    "get_mzml_run_spectra",
     "get_mzml_spectrum",
     "release_dataset",
     "residency_of",
@@ -36,6 +38,10 @@ def ensure_dataset_resident(spec: MzmlBundleSpec) -> None:
 
 def get_mzml_spectrum(dataset_id: int, run_id: int, scan_number: int) -> dict[str, Any] | None:
     return _get_coordinator().get_mzml_spectrum(dataset_id, run_id, scan_number)
+
+
+def get_mzml_run_spectra(dataset_id: int, run_id: int) -> dict[int, dict[str, Any]] | None:
+    return _get_coordinator().get_mzml_run_spectra(dataset_id, run_id)
 
 
 def release_dataset(dataset_id: int) -> None:

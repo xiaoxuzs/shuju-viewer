@@ -36,6 +36,7 @@ import { SpectrumModal } from "@/features/prsm/SpectrumModal";
 import { MatchedPeakSpectrumPanel } from "@/features/prsm/MatchedPeakSpectrumPanel";
 import { MatchedPeaksTable } from "@/features/prsm/MatchedPeaksTable";
 import { FragmentationView } from "@/features/prsm/FragmentationView";
+import { Lcms3DPanel } from "@/features/lcms3d/Lcms3DPanel";
 
 type Marker = { x: number; label: string } | null;
 
@@ -400,6 +401,15 @@ export function PrsmDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      <Lcms3DPanel
+        datasetId={prsm.dataset_id}
+        runId={prsm.run_id}
+        spectraSource={spectraSource}
+        ms1Scan={ms1Scan}
+        ms1SpecId={ms1Id}
+        precursorMz={prsm.precursor_mz ?? null}
+      />
 
       {/* Matched peaks table */}
       <Card className="mb-6">
