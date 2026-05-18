@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from functools import lru_cache
 from typing import Any
 
 from app.lcms_map.binning import build_point_cloud
@@ -12,6 +13,12 @@ from app.lcms_map.providers import load_frames
 
 def build_lcms_map(request: LcmsMapRequest) -> dict[str, Any]:
     """Build a frontend-ready 3D LC-MS point cloud."""
+    return _build_lcms_map_cached(request)
+
+
+@lru_cache(maxsize=256)
+def _build_lcms_map_cached(request: LcmsMapRequest) -> dict[str, Any]:
+    """Build and cache bounded LC-MS maps for repeated PrSM detail opens."""
     started = time.perf_counter()
     frames = load_frames(request)
 

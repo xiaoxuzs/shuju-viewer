@@ -2,7 +2,7 @@
  * PrSM 详情：聚合 PrSM JSON、MS1/MS2 原始谱与解析结果，渲染序列、谱图、
  * 碎片化视图、匹配峰表及全屏谱图模态框；内联注释说明 zoom 与数据流。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
@@ -59,6 +59,10 @@ export function PrsmDetailPage() {
   const { slug = "", cutoff = "", prsmId = "" } = useParams();
   const prsmIdNum = Number(prsmId);
 
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [slug, cutoff, prsmId]);
+
   const prsmQuery = useQuery({
     queryKey: ["prsm", slug, cutoff, prsmIdNum],
     queryFn: () => fetchPrsm(slug, cutoff, prsmIdNum),
@@ -70,11 +74,15 @@ export function PrsmDetailPage() {
     queryKey: ["dataset", slug],
     queryFn: () => fetchDataset(slug),
     enabled: Boolean(slug),
-    // Always fresh: backend may infer ``spectra_source`` for legacy imports; avoid stale TopFD routing.
-    staleTime: 0,
-    refetchOnMount: "always",
+    // Keep the resolved source stable while the detail page mounts; the LC-MS
+    // panel is disabled until this is known, so it never fires a wrong default request.
+    staleTime: 5 * 60_000,
   });
-  const spectraSource = (datasetQuery.data?.capabilities?.["spectra_source"] as string | undefined) ?? "topfd_js";
+  const spectraSource = useMemo(() => {
+    if (!datasetQuery.data) return null;
+    return (datasetQuery.data.capabilities?.["spectra_source"] as string | undefined) ?? "topfd_js";
+  }, [datasetQuery.data]);
+  const spectraSourceReady = spectraSource != null;
 
   const parsed = useMemo(() => {
     if (!prsm) return null;
@@ -101,6 +109,7 @@ export function PrsmDetailPage() {
     },
     enabled:
       Boolean(prsm) &&
+      spectraSourceReady &&
       (spectraSource === "mzml_memory"
         ? ms1Scan != null && Number.isFinite(ms1Scan)
         : ms1Id != null && Number.isFinite(ms1Id)),
@@ -117,6 +126,7 @@ export function PrsmDetailPage() {
     },
     enabled:
       Boolean(prsm) &&
+      spectraSourceReady &&
       (spectraSource === "mzml_memory"
         ? ms2Scan != null && Number.isFinite(ms2Scan)
         : ms2Id != null && Number.isFinite(ms2Id)),
@@ -140,8 +150,6 @@ export function PrsmDetailPage() {
   // Zoom state: the inline and modal views have independent state so the
   // modal can remember its zoom across open/close cycles without affecting
   // the small inline chart.
-  const [ms1InlineZoom, setMs1InlineZoom] = useState<Zoom>(DEFAULT_ZOOM);
-  const [ms2InlineZoom, setMs2InlineZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [ms1ModalZoom, setMs1ModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [ms2ModalZoom, setMs2ModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [ms1ModalOpen, setMs1ModalOpen] = useState(false);
@@ -162,11 +170,9 @@ export function PrsmDetailPage() {
   // different scan loaded). This keeps the modal zoom stable across
   // open/close events, which only change `ms1ModalOpen`/`ms2ModalOpen`.
   useEffect(() => {
-    setMs1InlineZoom(DEFAULT_ZOOM);
     setMs1ModalZoom(DEFAULT_ZOOM);
   }, [spectraSource === "mzml_memory" ? ms1Scan : ms1Id]);
   useEffect(() => {
-    setMs2InlineZoom(DEFAULT_ZOOM);
     setMs2ModalZoom(DEFAULT_ZOOM);
     setPeakDetail(null);
   }, [spectraSource === "mzml_memory" ? ms2Scan : ms2Id]);
@@ -176,9 +182,7 @@ export function PrsmDetailPage() {
   }, [prsmIdNum]);
 
   useEffect(() => {
-    setMs1InlineZoom(DEFAULT_ZOOM);
     setMs1ModalZoom(DEFAULT_ZOOM);
-    setMs2InlineZoom(DEFAULT_ZOOM);
     setMs2ModalZoom(DEFAULT_ZOOM);
   }, [spectrumIntensityMode]);
 
@@ -332,6 +336,7 @@ export function PrsmDetailPage() {
               </div>
             ) : (
               <SpectrumChart
+                key={`ms1-inline-${spectraSource}-${ms1Scan ?? ms1Id ?? "none"}-${spectrumIntensityMode}`}
                 peaks={ms1ChartPeaks}
                 xLabel="m/z (MS1)"
                 yLabel="intensity"
@@ -339,8 +344,6 @@ export function PrsmDetailPage() {
                 height={260}
                 marker={precursorMarker}
                 emptyHint="no MS1 peaks"
-                zoom={ms1InlineZoom}
-                onZoomChange={setMs1InlineZoom}
                 onOpenFull={() => setMs1ModalOpen(true)}
               />
             )}
@@ -363,14 +366,13 @@ export function PrsmDetailPage() {
               </div>
             ) : (
               <SpectrumChart
+                key={`ms2-inline-${spectraSource}-${ms2Scan ?? ms2Id ?? "none"}-${spectrumIntensityMode}`}
                 peaks={ms2ChartPeaks}
                 xLabel="m/z (MS2)"
                 yLabel="intensity"
                 yIntensityScale={spectrumIntensityMode}
                 height={320}
                 emptyHint="no MS2 peaks"
-                zoom={ms2InlineZoom}
-                onZoomChange={setMs2InlineZoom}
                 onOpenFull={() => setMs2ModalOpen(true)}
               />
             )}
@@ -552,6 +554,8 @@ function buildMs2ChartPeaks(
   // Build a matched-ion lookup by nearest m/z.
   const matched = deconv.filter((d) => d.matchedIons.length > 0 && d.monoMz != null);
   const matchedSorted = [...matched].sort((a, b) => (a.monoMz ?? 0) - (b.monoMz ?? 0));
+  const tol = 0.02;
+  let matchedIndex = 0;
   const sortedMz = matchedSorted.map((d) => d.monoMz ?? 0);
 
   function findMatch(mz: number): MsPeakRow | null {
@@ -580,8 +584,30 @@ function buildMs2ChartPeaks(
     return best;
   }
 
+  function findMatchLinear(mz: number): MsPeakRow | null {
+    while (
+      matchedIndex < matchedSorted.length &&
+      (matchedSorted[matchedIndex].monoMz ?? 0) < mz - tol
+    ) {
+      matchedIndex++;
+    }
+
+    let best: MsPeakRow | null = null;
+    let bestDist = Infinity;
+    for (let i = Math.max(0, matchedIndex - 1); i <= matchedIndex + 1 && i < matchedSorted.length; i++) {
+      const candidate = matchedSorted[i];
+      const dist = Math.abs((candidate.monoMz ?? 0) - mz);
+      if (dist < bestDist && dist < tol) {
+        best = candidate;
+        bestDist = dist;
+      }
+    }
+    return best;
+  }
+  void findMatch;
+
   return s.peaks.map((p): ChartPeak => {
-    const m = findMatch(p.mz);
+    const m = findMatchLinear(p.mz);
     const ion = m?.matchedIons[0];
     return {
       mz: p.mz,

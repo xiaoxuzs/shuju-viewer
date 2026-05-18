@@ -38,7 +38,7 @@ def main() -> int:
         return 2
 
     base = os.getenv("VIEWER_API_BASE", "http://127.0.0.1:8000/api/v1").rstrip("/")
-    max_seconds = float(os.getenv("VIEWER_LCMS_MAX_SECONDS", "3.0"))
+    max_seconds = float(os.getenv("VIEWER_LCMS_MAX_SECONDS", "0.5"))
 
     params: dict[str, str] = {
         "ms_level": "1",

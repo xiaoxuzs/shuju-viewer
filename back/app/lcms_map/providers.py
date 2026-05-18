@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+import re
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 from app.lcms_map.contracts import LcmsMapRequest, SpectrumFrame
-from app.services.spectrum_cache import SpectrumNotFoundError, get_ms1_spectrum, get_ms2_spectrum
+from app.services.spectrum_cache import (
+    SpectrumNotFoundError,
+    get_ms1_spectrum,
+    get_ms2_spectrum,
+    resolve_ms1_spectrum_path,
+)
 from app.spectrum_memory import get_mzml_run_spectra
+
+_SCAN_RE = re.compile(rb'"scan"\s*:\s*(-?\d+)')
+_RT_RE = re.compile(rb'"retention_time"\s*:\s*(-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)')
+_PEAK_RE = re.compile(rb'"mz"\s*:\s*"([^"]+)"\s*,\s*"intensity"\s*:\s*"([^"]+)"', re.DOTALL)
 
 
 def load_frames(request: LcmsMapRequest) -> list[SpectrumFrame]:
@@ -23,23 +35,76 @@ def _load_topfd_frames(request: LcmsMapRequest) -> list[SpectrumFrame]:
     if center is None:
         return []
 
-    loader = get_ms1_spectrum if request.ms_level == 1 else get_ms2_spectrum
     radius = max(0, int(request.frame_radius))
     start = max(0, int(center) - radius)
     stop = int(center) + radius
-    frames: list[SpectrumFrame] = []
+    spec_ids = list(range(start, stop + 1))
+    mz_min: float | None = None
+    mz_max: float | None = None
+    if request.ms_level == 1 and request.precursor_mz is not None and request.mz_window is not None:
+        half = float(request.mz_window)
+        mz_min = max(0.0, float(request.precursor_mz) - half)
+        mz_max = float(request.precursor_mz) + half
 
-    for spec_id in range(start, stop + 1):
+    def load_one(spec_id: int) -> SpectrumFrame | None:
+        if mz_min is not None and mz_max is not None:
+            path = resolve_ms1_spectrum_path(request.slug, request.source_root, spec_id)
+            return _frame_from_topfd_window(path, spec_id=spec_id, ms_level=request.ms_level, mz_min=mz_min, mz_max=mz_max)
+
+        loader = get_ms1_spectrum if request.ms_level == 1 else get_ms2_spectrum
         try:
             raw = loader(request.slug, request.source_root, spec_id)
         except SpectrumNotFoundError:
-            continue
-        frame = _frame_from_topfd(raw, spec_id=spec_id, ms_level=request.ms_level)
-        if frame is not None:
-            frames.append(frame)
+            return None
+        return _frame_from_topfd(raw, spec_id=spec_id, ms_level=request.ms_level)
+
+    if len(spec_ids) <= 1:
+        frames = [frame for frame in (load_one(spec_id) for spec_id in spec_ids) if frame is not None]
+    else:
+        workers = min(8, len(spec_ids))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            frames = [frame for frame in executor.map(load_one, spec_ids) if frame is not None]
 
     frames.sort(key=lambda frame: (frame.rt_seconds, frame.scan, frame.spec_id or 0))
     return frames
+
+
+def _frame_from_topfd_window(
+    path: Path,
+    *,
+    spec_id: int,
+    ms_level: int,
+    mz_min: float,
+    mz_max: float,
+) -> SpectrumFrame | None:
+    if not path.exists():
+        return None
+    data = path.read_bytes()
+    scan_match = _SCAN_RE.search(data)
+    rt_match = _RT_RE.search(data)
+    scan = int(scan_match.group(1)) if scan_match else 0
+    rt_seconds = float(rt_match.group(1)) if rt_match else 0.0
+    mz: list[float] = []
+    intensity: list[float] = []
+    for match in _PEAK_RE.finditer(data):
+        peak_mz = float(match.group(1))
+        if peak_mz < mz_min:
+            continue
+        if peak_mz > mz_max:
+            break
+        peak_intensity = float(match.group(2))
+        if peak_intensity <= 0:
+            continue
+        mz.append(peak_mz)
+        intensity.append(peak_intensity)
+    return SpectrumFrame(
+        spec_id=spec_id,
+        scan=scan,
+        rt_seconds=rt_seconds,
+        ms_level=ms_level,
+        mz=mz,
+        intensity=intensity,
+    )
 
 
 def _frame_from_topfd(raw: dict[str, Any], *, spec_id: int, ms_level: int) -> SpectrumFrame | None:

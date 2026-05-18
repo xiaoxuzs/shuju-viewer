@@ -62,13 +62,21 @@ def _resolve_spectrum(slug: str, source_root: str | None, sub: str, spec_id: int
     return (_candidate_roots(slug, source_root)[0] / rel).resolve()
 
 
+def resolve_ms1_spectrum_path(slug: str, source_root: str | None, spec_id: int) -> Path:
+    return _resolve_spectrum(slug, source_root, "ms1_json", spec_id)
+
+
+def resolve_ms2_spectrum_path(slug: str, source_root: str | None, spec_id: int) -> Path:
+    return _resolve_spectrum(slug, source_root, "ms2_json", spec_id)
+
+
 def get_ms1_spectrum(slug: str, source_root: str | None, spec_id: int) -> dict[str, Any]:
-    path = _resolve_spectrum(slug, source_root, "ms1_json", spec_id)
+    path = resolve_ms1_spectrum_path(slug, source_root, spec_id)
     return _load_spectrum(str(path))
 
 
 def get_ms2_spectrum(slug: str, source_root: str | None, spec_id: int) -> dict[str, Any]:
-    path = _resolve_spectrum(slug, source_root, "ms2_json", spec_id)
+    path = resolve_ms2_spectrum_path(slug, source_root, spec_id)
     return _load_spectrum(str(path))
 
 

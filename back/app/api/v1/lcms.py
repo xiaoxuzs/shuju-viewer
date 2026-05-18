@@ -31,7 +31,7 @@ def lcms_3d_map(
     precursor_mz: float | None = Query(None, gt=0),
     rt_window_seconds: float = Query(240.0, gt=0, le=7200),
     mz_window: float | None = Query(80.0, gt=0, le=5000),
-    frame_radius: int = Query(16, ge=0, le=200),
+    frame_radius: int = Query(18, ge=0, le=200),
     rt_bins: int = Query(96, ge=8, le=512),
     mz_bins: int = Query(160, ge=8, le=1024),
     max_points: int = Query(45_000, ge=100, le=200_000),

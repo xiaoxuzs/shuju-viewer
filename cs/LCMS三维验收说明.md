@@ -43,6 +43,7 @@ python cs/LCMS三维性能测验.py
 可选参数：
 
 - `VIEWER_API_BASE`：默认 `http://127.0.0.1:8000/api/v1`
-- `VIEWER_LCMS_MAX_SECONDS`：默认 `3.0`
+- `VIEWER_LCMS_MAX_SECONDS`：默认 `0.5`
+- `VIEWER_LCMS_FRAME_RADIUS`：默认 `18`（中心帧前后各 18 帧，共 37 帧叠加）
 
 验收重点不是读取全量原始文件，而是确认服务端返回的是已经分箱和限点后的用户可交互数据。
