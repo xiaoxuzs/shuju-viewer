@@ -51,6 +51,36 @@ from app.spectrum_memory import release_dataset
 
 log = get_logger(__name__)
 
+_PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
+    "resolve_ingest_root_worker_s",
+    "fingerprint_job_updates_s",
+    "fingerprint_compute_s",
+    "duplicate_check_by_fingerprint_s",
+    "plan_zip_ingest_s",
+    "mzml_mapping_validate_s",
+    "job_stage_init_update_s",
+    "ingest_universal_toppic_s",
+    "ingest_universal_prsm_js_s",
+    "assign_toppic_runs_from_prsm_headers_s",
+    "description_update_s",
+    "db_finalize_paths_and_metadata_s",
+    "job_status_success_update_s",
+    "total_path_import_worker_s",
+)
+
+
+def _format_timing_log(timing: dict[str, float], order: tuple[str, ...]) -> str:
+    parts: list[str] = []
+    seen: set[str] = set()
+    for key in order:
+        if key in timing:
+            parts.append(f"{key}={timing[key]:.3f}")
+            seen.add(key)
+    for key in sorted(timing):
+        if key not in seen:
+            parts.append(f"{key}={timing[key]:.3f}")
+    return " ".join(parts)
+
 
 # ---------------------------------------------------------------------------
 # Schema bootstrap & TTL
@@ -489,7 +519,8 @@ def run_path_import_job(
     def _slice(label: str) -> None:
         nonlocal _t
         now = time.perf_counter()
-        timing[label] = now - _t
+        elapsed = now - _t
+        timing[label] = timing.get(label, 0.0) + elapsed
         _t = now
 
     try:
@@ -498,6 +529,7 @@ def run_path_import_job(
 
         if settings.import_path_must_be_under_data_root:
             ingest_root.resolve().relative_to(settings.resolved_data_root.resolve())
+        _slice("resolve_ingest_root_worker_s")
 
         _update_job(
             job_id,
@@ -508,11 +540,15 @@ def run_path_import_job(
             message="解析数据集根路径…",
             progress=_PHASE_RANGES["fingerprint"][0],
         )
+        _slice("fingerprint_job_updates_s")
 
         fp = compute_dataset_metadata_fingerprint(
             ingest_root,
             on_progress=_fingerprint_progress_handler(job_id),
         )
+        timing["fingerprint_compute_s"] = fp.elapsed_seconds
+        _t = time.perf_counter()
+
         if fp.file_count == 0:
             raise RuntimeError("所选路径下没有可统计文件，拒绝导入。")
         _update_job(
@@ -522,7 +558,7 @@ def run_path_import_job(
                 f"指纹完成：{fp.file_count} 个文件，耗时 {fp.elapsed_seconds:.3f}s，digest={fp.fingerprint}"
             ),
         )
-        _slice("fingerprint_s")
+        _slice("fingerprint_job_updates_s")
 
         dup = find_dataset_with_fingerprint(fp.fingerprint)
         if dup is not None:
@@ -531,12 +567,13 @@ def run_path_import_job(
                 f"(slug={dup.slug}, name={dup.dataset_name}). "
                 "Delete the existing dataset or choose a different data directory."
             )
+        _slice("duplicate_check_by_fingerprint_s")
 
         try:
             plan = plan_zip_ingest(ingest_root)
         except ImportLayoutError as exc:
             raise RuntimeError(str(exc)) from exc
-        _slice("plan_s")
+        _slice("plan_zip_ingest_s")
 
         mzml_mapping: dict[str, Path] | None = None
         spectra_source = plan.spectra_source
@@ -554,6 +591,7 @@ def run_path_import_job(
             _slice("mzml_mapping_validate_s")
         else:
             timing["mzml_mapping_validate_s"] = 0.0
+            _t = time.perf_counter()
 
         _update_job(
             job_id,
@@ -563,7 +601,10 @@ def run_path_import_job(
             message="Importing into database…",
             progress=_PHASE_RANGES["init"][0],
         )
+        _slice("job_stage_init_update_s")
+
         if plan.shape == DatasetShape.TOPPIC_HTML:
+            timing["ingest_universal_prsm_js_s"] = 0.0
             stats = ingest_universal_toppic(
                 root=ingest_root,
                 database_url=settings.database_url,
@@ -589,6 +630,7 @@ def run_path_import_job(
                 )
                 _slice("assign_toppic_runs_from_prsm_headers_s")
         elif plan.shape == DatasetShape.PRSM_BUNDLE:
+            timing["ingest_universal_toppic_s"] = 0.0
             stats = ingest_universal_prsm_js(
                 root=ingest_root,
                 database_url=settings.database_url,
@@ -754,18 +796,6 @@ def run_path_import_job(
             ) from exc
         _slice("db_finalize_paths_and_metadata_s")
 
-        timing["total_path_import_job_s"] = time.perf_counter() - _t0
-        timing_parts = " ".join(f"{k}={v:.3f}" for k, v in sorted(timing.items()))
-        log.info(
-            "import job %s done dataset_id=%s run_id=%s proteins=%s proteoforms=%s matches=%s | timing %s",
-            job_id,
-            stats.dataset_id,
-            stats.run_id,
-            stats.proteins,
-            stats.proteoforms,
-            stats.matches,
-            timing_parts,
-        )
         _update_job(
             job_id,
             status="success",
@@ -780,12 +810,26 @@ def run_path_import_job(
                 f"matches={stats.matches}"
             ),
         )
+        _slice("job_status_success_update_s")
+
+        timing["total_path_import_worker_s"] = time.perf_counter() - _t0
+        timing_parts = _format_timing_log(timing, _PATH_IMPORT_WORKER_TIMING_ORDER)
+        log.info(
+            "import job %s done dataset_id=%s run_id=%s proteins=%s proteoforms=%s matches=%s | timing %s",
+            job_id,
+            stats.dataset_id,
+            stats.run_id,
+            stats.proteins,
+            stats.proteoforms,
+            stats.matches,
+            timing_parts,
+        )
     except Exception as exc:  # noqa: BLE001
-        timing["total_path_import_job_s"] = time.perf_counter() - _t0
+        timing["total_path_import_worker_s"] = time.perf_counter() - _t0
         log.warning(
             "import job %s failed | timing %s",
             job_id,
-            " ".join(f"{k}={v:.3f}" for k, v in sorted(timing.items())),
+            _format_timing_log(timing, _PATH_IMPORT_WORKER_TIMING_ORDER),
         )
         log.exception("import job %s failed", job_id)
         _update_job(
