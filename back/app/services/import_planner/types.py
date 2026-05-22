@@ -11,6 +11,7 @@ class DatasetShape(str, Enum):
 
     TOPPIC_HTML = "toppic_html"
     PRSM_BUNDLE = "prsm_bundle"
+    DIANN_DIA = "diann_dia"
     UNSUPPORTED = "unsupported"
 
 
@@ -23,10 +24,10 @@ class ImportPlan:
     """Immutable plan produced before DB ingest or heavy I/O."""
 
     shape: DatasetShape
-    """``TOPPIC_HTML`` or ``PRSM_BUNDLE``."""
+    """``TOPPIC_HTML``, ``PRSM_BUNDLE``, or ``DIANN_DIA``."""
 
     spectra_source: str
-    """``topfd_js`` or ``mzml_memory`` (same strings as ``datasets.capabilities``)."""
+    """Spectra source string used in ``datasets.capabilities``."""
 
     need_toppic_multirun_pass: bool
     """When True, run :func:`assign_toppic_runs_from_prsm_headers` after fast TopPIC ingest."""

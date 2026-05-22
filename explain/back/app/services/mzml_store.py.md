@@ -4,11 +4,10 @@
 
 ## L1-L9（模块定位与约束）
 
-- 这是 mzML 的**进程内存缓存**：
-  - 必须按 `run_id` 做 key（导入期写入 `runs.run_metadata.mzml_file_path`）
-  - 禁止在导入期加载 mzML（太慢/太占内存）
+- 这是 mzML 的**进程内存缓存（legacy 单 run LRU）**：
+  - 新 mzML-memory 数据集优先走 **`app.spectrum_memory`** 整包驻留；本模块仍可能被旧代码路径引用。
+  - 按 `run_id` 做 key（`runs.run_metadata.mzml_file_path`）
   - 第一次谱图请求时才加载整个 mzML 并建立 scan 索引
-- 说明该实现改编自 `mzml-demo/app.py`
 
 ## L13-L20（导入）
 

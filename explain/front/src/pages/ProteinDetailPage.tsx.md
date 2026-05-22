@@ -1,5 +1,7 @@
 ## `front/src/pages/ProteinDetailPage.tsx` 逐行解释
 
+> 来源文件：`front/src/pages/ProteinDetailPage.tsx`
+
 > 目标：protein 详情页。展示该 protein 的统计信息（proteoform 数、PrSM 数、最佳 e-value、最佳 PrSM 链接），并列出其下属 proteoforms 表格，支持跳转到 proteoform detail 或 PrSM detail。
 
 ---

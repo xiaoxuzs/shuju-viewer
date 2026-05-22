@@ -1,5 +1,7 @@
 ## `front/src/lib/utils.ts` 逐行解释
 
+> 来源文件：`front/src/lib/utils.ts`
+
 > 该文件放一些“全局通用的小工具函数”：样式类名合并（Tailwind 常见需求）与数值格式化（表格/统计卡片展示）。
 
 ---

@@ -244,6 +244,12 @@ CREATE INDEX IF NOT EXISTS ix_identification_matches_entity
 CREATE INDEX IF NOT EXISTS ix_identification_matches_q_value
     ON identification_matches(q_value);
 
+CREATE INDEX IF NOT EXISTS idx_im_dataset_q
+    ON identification_matches(dataset_id, q_value);
+
+CREATE INDEX IF NOT EXISTS idx_im_dataset_run
+    ON identification_matches(dataset_id, run_id);
+
 CREATE INDEX IF NOT EXISTS ix_identification_matches_e_value
     ON identification_matches(e_value);
 

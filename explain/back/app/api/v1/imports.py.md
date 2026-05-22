@@ -1,81 +1,39 @@
 # `back/app/api/v1/imports.py` 逐行解释
 
 > 来源文件：`back/app/api/v1/imports.py`
+> 模块职责：路径导入 HTTP 入口——原生文件夹选择、入队后台导入任务、轮询 job 状态。
 
-## L1-L6（模块说明）
+## 结构概览
 
-- 该模块负责：前端上传 ZIP → **先写入临时文件** → 计算指纹、建 `import_jobs` 行 → **后台线程**内再解压到数据根并完成 ingest（见 `import_jobs.run_zip_import_job`）。
-- 模块 docstring 仍写 “unpack under ``shuju``” 为历史表述；实际路径由配置 `DATA_ROOT` / `resolved_data_root` 决定。
-- 强调：上传**流式落盘**（`copyfileobj` 分块）；任务状态在 **`import_jobs`** 表，便于跨 reload 轮询。
+| 路由 | 函数 | 作用 |
+|------|------|------|
+| `POST /imports/pick-folder` | `pick_import_folder` | API 主机原生选目录 |
+| `POST /imports` | `enqueue_import` | JSON body 提交 `source_path` 并启动后台任务 |
+| `GET /imports/{job_id}` | `get_import_job` | 轮询进度/阶段/错误 |
 
-## L8-L18（依赖导入）
+## L28-L33（`_client_is_loopback`）
 
-- `shutil`、`tempfile`、`Path`：将 `UploadFile` 落到 `NamedTemporaryFile`
-- FastAPI 参数类型：
-  - `UploadFile`：上传文件句柄（支持流式读取）
-  - `File/Form`：声明 multipart form 字段
-  - `HTTPException/status`：抛出 HTTP 错误
-- `ImportJobCreatedOut/ImportJobOut`：API 输出模型
-- `import_jobs`：服务层（创建 job、启动后台线程、查询 job）
-- `sha256_hex_of_file`：计算 ZIP sha256，用于“相同 ZIP 防重复导入”
+- 判断请求是否来自 localhost，配合 `IMPORT_PICKER_LOOPBACK_ONLY` 限制原生 picker 仅本地开发可用。
 
-## L20
+## L36-L58（`pick_import_folder`）
 
-- 创建 `router = APIRouter(tags=["imports"])`
+- 需 `settings.import_native_folder_picker=True`，否则 403。
+- 调用 `pick_folder_native()`；取消返回 `{cancelled: true}`；成功返回绝对路径。
 
-## L23-L99：`POST /imports`（enqueue_import）
+## L61-L119（`enqueue_import`）
 
-### L24-L29（参数定义）
+- 校验 `source_path` 非空、存在、为目录；`resolve()` 为绝对路径。
+- **Fail fast**：`resolve_ingest_root(p)` 在入队前验证 TopPIC 树可解析。
+- `create_job(..., source_path=resolved)` 写入 `import_jobs` 行。
+- `start_path_import_background(...)` 启动 daemon 线程执行 `run_path_import_job`。
+- 记录 `enqueue_timing` 分段日志（path checks / resolve / create job / total）。
 
-- `file`：必须是 zip（描述里明确是 TopPIC 输出树 ZIP）
-- `slug/name/description`：数据集标识与展示信息（来自表单字段）
+## L122-L139（`get_import_job`）
 
-### L30-L35（文件类型校验）
+- 委托 `import_jobs.get_job`；未知 id → 404；读取时惰性 GC 7 天前的 finished job。
 
-- 必须有文件名且以 `.zip` 结尾，否则 400。
+## 与相邻模块的耦合
 
-### L36-L62（流式落盘到临时文件）
-
-- `NamedTemporaryFile(..., delete=False)` + `shutil.copyfileobj(..., length=1024*1024)`（1 MiB 块）。
-- 大小为 0 → **400**。
-- `HTTPException` / 其它异常：若已有 `zip_path` 则尽力 `unlink`；非 HTTP 异常转 **500**。
-- `finally`：`await file.close()`（吞异常），避免句柄泄露。
-
-### L64-L68（临时文件缺失）
-
-- `zip_path is None` → **500**（理论上不应发生）。
-
-### L69-L83（重复 ZIP 检测）
-
-- 计算 zip sha256：`zip_sha256_hex = sha256_hex_of_file(zip_path)`
-- 调用 `import_jobs.find_dataset_with_zip_sha256(...)`：
-  - 若数据库里已有 `datasets.source_zip_sha256` 相同的行，则认为该 ZIP 已被导入过
-  - 删除临时文件并返回 409
-  - `detail` 返回结构化信息（message + 已存在 dataset 的 slug/name），前端会把它拼到错误提示里
-
-### L85-L99（创建 job + 启动后台导入）
-
-- `import_jobs.create_job(...)`：
-  - 插入 `import_jobs` 表（status=queued）
-  - 存储 `slug/name/description/source_zip_name`
-- `import_jobs.start_zip_import_background(...)`：
-  - 以 daemon thread 启动后台导入（解压 + ingest + 原子替换目录）
-  - 传入 zip_path、slug/name/description、zip sha256
-
-### L99：返回
-
-- `ImportJobCreatedOut(job_id=..., status="queued")`；路由装饰器上 `status_code=202`。
-
-## L102-L119：`GET /imports/{job_id}`
-
-- `import_jobs.get_job(job_id)` 从 DB 取当前 job 状态（并顺便 GC 过旧 job）
-- job 不存在：404
-- 否则映射为 `ImportJobOut` 返回给前端轮询显示进度条
-
----
-
-## 附录：源码顶层符号索引（与 `imports.py` 全文检索对齐）
-
-- `enqueue_import`
-- `get_import_job`
-
+- **dataset_ingest_root**：入队前解析 ingest 根。
+- **import_jobs**：任务持久化与后台 worker。
+- **DatasetsPage.tsx**：`enqueueImport` + `fetchImportJob` 轮询；`pickImportFolder` 填路径。

@@ -21,8 +21,8 @@
   - `parseMsPeaks`：去卷积 peak + matched ions
   - `parseRawSpectrum`：把谱图 JSON 归一化成前端 `RawSpectrum`
 - 可视化组件：
-  - `SpectrumChart`：D3 光谱图（支持 wheel zoom / brush zoom / tooltip）
-  - `SequenceView`、`FragmentationView`、`MatchedPeaksTable`、`MatchedPeakSpectrumPanel`、`SpectrumModal`
+  - `SpectrumChart`、`SequenceView`、`FragmentationView`、`MatchedPeaksTable`、`MatchedPeakSpectrumPanel`、`SpectrumModal`
+  - **`Lcms3DPanel`**：MS1 单扫描 Three.js 三维棒状谱图
 
 ## L42-L52：`useModalHeight`
 
@@ -133,14 +133,20 @@
 - 右侧 MS2：
   - 同上，但 peaks 叠加 matched ions
 
-### Fragmentation view（L334-L356）
+### Fragmentation view（L334-L409）
 
-- 仅当：
-  - `parsed.protein` 存在
-  - 且 `parsed.peaks.length > 0`
-- 用 FragmentationView 在“质量空间”展示去卷积峰与离子注释
+- 仅当 `parsed.protein` 与 peaks 存在时渲染 `FragmentationView`。
 
-### Matched peaks table + detail panel（L358-L388）
+### LC-MS 3D 单扫描谱图（L411-L415）
+
+- **`Lcms3DPanel`**（`features/lcms3d`）：
+  - `peaks`：来自 `ms1RawSpectrum?.peaks`（`parseRawSpectrum` 归一化后的 MS1 峰列表）。
+  - `scan`：`ms1RawSpectrum.scan` 或 fallback `ms1Scan`。
+  - `retentionTimeSeconds`：`ms1RawSpectrum.retentionTime`。
+- 与上方 inline MS1 二维图共用同一 `ms1Query` 数据；Three.js 棒状图展示当前 MS1 scan 的三维强度分布。
+- **不依赖**已删除的 `lcms3d/api.ts`；无额外 HTTP 请求。
+
+### Matched peaks table + detail panel（L417+）
 
 - MatchedPeaksTable：
   - onMatchedPeakClick 设置 `peakDetail`

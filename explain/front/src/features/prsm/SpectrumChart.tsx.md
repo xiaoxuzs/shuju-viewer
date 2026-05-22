@@ -1,5 +1,7 @@
 ## `front/src/features/prsm/SpectrumChart.tsx` 逐行解释
 
+> 来源文件：`front/src/features/prsm/SpectrumChart.tsx`
+
 > 目标：把一个质谱谱图（stick spectrum）画成交互式 SVG：包含坐标轴、网格、峰（未匹配灰色 + 匹配离子着色）、可选标记线（precursor）、可选引导虚线、可选包络同位素“空心圆”覆盖层、悬浮 tooltip、框选 X 缩放（brush）、滚轮缩放（X/Y 两轴）、双击复位、以及“受控/非受控”两种 zoom 状态管理。
 
 下面按源码行号解释（以仓库当前版本为准）。

@@ -1,5 +1,7 @@
 ## `front/src/components/ui/card.tsx` 逐行解释
 
+> 来源文件：`front/src/components/ui/card.tsx`
+
 > 一组轻量 Card 组件：`Card` + `CardHeader/Title/Description/Content/Footer`，通过 forwardRef 便于在上层组合与扩展。
 
 ---

@@ -1,5 +1,7 @@
 ## `front/src/pages/ProteinsPage.tsx` 逐行解释
 
+> 来源文件：`front/src/pages/ProteinsPage.tsx`
+
 > 目标：protein 列表页。按 (dataset slug, cutoff) 分页拉取 proteins，支持搜索（name/description），默认按 `best_prsm_e_value` 升序排序，让“最佳匹配更好”的蛋白排在前面。
 
 ---

@@ -1,6 +1,8 @@
 ## `back/tests/test_import_jobs_layout.py` 逐行解释
 
-> 针对 `prsm_files.ingest_root_has_supported_prsm_files` 与「TopPIC 树判定」的**轻量布局测试**：用 `tmp_path` 造最小目录结构，不跑完整 ZIP 导入。
+> 来源文件：`back/tests/test_import_jobs_layout.py`
+
+> 针对 `prsm_files.ingest_root_has_supported_prsm_files` 与「TopPIC 树判定」的**轻量布局测试**：用 `tmp_path` 造最小目录结构，不跑完整路径导入。
 
 ---
 

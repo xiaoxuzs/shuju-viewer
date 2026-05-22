@@ -1,5 +1,7 @@
 ## `front/src/features/prsm/SpectrumModal.tsx` 逐行解释
 
+> 来源文件：`front/src/features/prsm/SpectrumModal.tsx`
+
 > 目标：提供一个轻量的全屏 overlay 容器，用于在 PrSM 详情页里“放大查看谱图”。它只负责 UI 框架（遮罩、标题栏、关闭行为、禁用 body 滚动），不负责谱图状态（zoom 等由父组件持有）。
 
 ---

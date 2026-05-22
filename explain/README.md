@@ -1,6 +1,6 @@
 # explain 文件夹说明（主目录）
 
-本目录存放与源码**一一对应**的逐行/分段解释文档：路径与仓库里的 `back/`、`front/`、`docs/`、`shuju/` 等**镜像一致**，仅在末尾多一层 `.md` 后缀。例如：
+本目录存放与源码**一一对应**的逐行/分段解释文档：路径与仓库里的 `back/`、`front/src/` **镜像一致**，仅在末尾多一层 `.md` 后缀。例如：
 
 | 源码文件 | 解释文件 |
 |----------|----------|
@@ -11,62 +11,48 @@
 
 ## 与源码对照的约定
 
-- 各 **`explain/.../*.md`**（本 README 除外）建议在标题下写明 **`来源文件:`**，路径与仓库内 `back/`、`front/` 等源码相对路径一致。
+- 各 **`explain/.../*.md`**（本 README 除外）在标题下写明 **`来源文件:`**，路径与仓库内 `back/`、`front/src/` 源码相对路径一致。
 - 正文中的 **`Lx–Ly`** 以当前 checkout 的文本行号为准；合并或重构后若行号漂移，应以源码为真，再回头更新解释中的行号段。
+- **只解释代码**：不维护 `docs/`、`.html` 文档或 `cs/` 测验脚本的 explain。
 
 ---
 
-## 顶层子文件夹分别是什么
+## 顶层子文件夹
 
 ### `explain/back/` — 后端（Python / FastAPI）
 
-对应 **`back/`**：HTTP 服务、数据库访问、导入任务、谱图与 mzML 等业务逻辑。
+对应 **`back/`**：HTTP 服务、数据库访问、路径导入、指纹去重、谱图与 mzML 等业务逻辑。
 
-- **`explain/back/app/`** — 应用主包（`back/app/`），与 `main.py`、子包同层级。
-  - **`api/`** — Web API 层：路由注册、依赖注入、版本化接口。
-    - **`api/v1/`** — **REST API v1**：数据集、导入任务、蛋白质、proteoform、PrSM、谱图（TopFD JS / mzML）、通用兼容接口等；每个 `*.py` 通常对应一组 HTTP 路径与请求/响应模型。
-  - **`core/`** — **基础设施**：配置（环境变量、数据根路径）、数据库引擎/会话、日志等；被 `api`、`services`、`ingest` 共用。
-  - **`schemas/`** — **Pydantic / 序列化模型**：请求体、响应体、与 OpenAPI 文档对应的类型定义；与 `api/v1` 路由配合使用。
-  - **`services/`** — **领域服务**：ZIP 导入与任务状态（`import_jobs`）、**ZIP 导入规划（`import_planner`，解压后布局与谱图模式预判）**、谱图缓存、mzML 存储与路径映射、PrSM 明细文件发现（`prsm_files`）、JS 解析、ZIP 指纹等；**不**直接绑定 URL，供 API 与后台任务调用。
-  - **`ingest/`** — **数据导入适配器**：把 TopPIC 输出树或 `prsm*.js` 包等形态写入通用库表；与 `services/import_jobs` 编排在一起完成一次导入。
-  - 根下的 **`main.py.md`** 解释应用入口：挂载路由、中间件、生命周期等。
+- **`api/`** — Web API 层：路由注册、依赖注入、版本化接口。
+  - **`api/v1/`** — REST API v1：数据集、路径导入任务、蛋白质、proteoform、PrSM、谱图（TopFD JS / mzML）、通用兼容接口等。
+- **`core/`** — 基础设施：配置、数据库引擎/会话、日志。
+- **`schemas/`** — Pydantic 请求/响应模型。
+- **`services/`** — 领域服务：导入任务（`import_jobs`）、导入规划（`import_planner`）、路径搬迁、原生文件夹选择、谱图缓存、mzML 存储与映射、PrSM 明细文件发现、JS 解析、spectrum_memory 接线等。
+- **`fingerprint/`** — 数据集元数据 manifest MD5 指纹（路径导入去重）。
+- **`dataset_ingest_root/`** — 用户选择路径解析为 TopPIC ingest 根目录。
+- **`spectrum_memory/`** — mzML 进程内内存缓存、LRU/MRU 驱逐与大小核算。
+- **`ingest/`** — 数据导入适配器：TopPIC HTML 树或 `prsm*.js` bundle 写入 universal schema。
+- **`main.py.md`** — 应用入口：挂载路由、中间件、生命周期。
+
+### `explain/back/tests/` — 后端单元测试
+
+对应 **`back/tests/`**：导入规划、指纹、根路径解析、spectrum_memory、prsm_files 等 pytest。
 
 ### `explain/front/` — 前端（TypeScript / React）
 
-对应 **`front/src/`**：浏览器中的 UI、路由页面、调用后端的客户端。
+对应 **`front/src/`**：浏览器 UI、路由页面、调用后端的客户端。
 
-- **`explain/front/src/api/`** — **HTTP 客户端与类型**：`client.ts`（请求封装）、`types.ts`（与后端约定一致的数据形状）。
-- **`explain/front/src/pages/`** — **按路由划分的页面**：数据集列表/详情、蛋白质、proteoform、PrSM 列表与详情等；负责拉数、组合子组件。
-- **`explain/front/src/features/prsm/`** — **PrSM 专用功能模块**：解析 `prsm*.js` 片段、谱图绘制、匹配峰表、碎裂视图、序列视图、弹窗等；与 `pages/PrsmDetailPage` 紧密配合。
-- **`explain/front/src/components/`** — 跨页面复用的 UI 组件（布局壳、分页、表格等）；解释见索引中对应 `*.tsx.md`。
-
-入口层（`main.tsx`、`App.tsx`）的解释也在 `explain/front/src/` 下。
-
-### `explain/docs/` — 项目文档（Markdown / SQL）
-
-对应 **`docs/`**：架构说明、部署、数据格式、SQL  schema、懒加载与导入流程等**设计/运维文档**的逐段说明；**不是**可执行后端代码，但描述与 `back/` 行为一致。
-
-### `explain/shuju/` — 脚本与样本数据侧（若有）
-
-对应 **`shuju/`**：例如解压/处理样本数据的脚本等；解释文件按同样规则放在 `explain/shuju/` 下。数据体量大的原始谱图 JS、ZIP 等一般**不做**逐文件解释，见 **`逐行解释索引.md`** 中的说明与边界。
-
-### `explain/back/tests/` — 后端单元测试（若有）
-
-对应 **`back/tests/`**：对导入规划、`prsm_files`、布局检测等写 pytest；解释文件同样为 `*.py.md`，便于对照「规则 → 测试用例」。
-
-### `explain/mzml-demo/` — 独立演示程序（Demo）
-
-对应 **`mzml-demo/`**：用于验证与演示 “mzML 全量读入内存 + `prsm*.js` 合并展示” 的最小可运行服务。
-
-- **`explain/mzml-demo/app.py.md`**：FastAPI demo 服务主体（内存 mzML store、prsm.js 解析与合并、静态页面）。
-- **`explain/mzml-demo/scripts/prsmup.py.md`**：从 `prsm.xml + ms2.msalign` 生成 `prsm<id>.js` 的脚本（便于在没有 TopPIC HTML 包时生成 demo 输入）。
+- **`api/`** — HTTP 客户端与类型（`client.ts`、`types.ts`）。
+- **`pages/`** — 按路由划分的页面。
+- **`features/prsm/`** — PrSM 解析、谱图绘制、匹配峰表、碎裂/序列视图。
+- **`features/lcms3d/`** — LC-MS 三维可视化面板（Three.js）。
+- **`components/`** — 跨页面复用 UI 组件。
+- **`lib/`** — 工具函数与路径导入辅助。
 
 ---
 
 ## 阅读建议
 
 1. 从 **`逐行解释索引.md`** 找到你关心的源码路径，再打开对应的 `explain/.../*.md`。
-2. 想理解「一次 ZIP 导入从上传到落库」可结合 **`explain/docs/mzml-spectra-import-flow.md.md`** 与 **`explain/back/app/services/import_jobs.py.md`**。
+2. 想理解「路径导入从选文件夹到落库」可结合 **`explain/back/app/api/v1/imports.py.md`**、**`explain/back/app/services/import_jobs.py.md`**、**`explain/back/app/fingerprint/`** 与 **`explain/back/app/dataset_ingest_root/`**。
 3. 想理解「页面如何请求 PrSM / 谱图」可从 **`explain/front/src/pages/PrsmDetailPage.tsx.md`** 与 **`explain/front/src/api/client.ts.md`** 入手。
-
-若你希望本 README 再增加「与 `back/pyproject.toml` / `front/package.json` 的对应关系」或「环境变量一览」，可以说明要偏运维还是偏开发，再在后续补一小节。

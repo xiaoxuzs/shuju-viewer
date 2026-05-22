@@ -1,5 +1,7 @@
 ## `front/src/components/common/stat.tsx` 逐行解释
 
+> 来源文件：`front/src/components/common/stat.tsx`
+
 > 一个通用“统计卡片”组件：上方小标题（label）+ 大号数值（value）+ 可选提示（hint）。
 
 ---

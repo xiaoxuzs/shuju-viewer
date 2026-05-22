@@ -42,14 +42,14 @@
 ## L109-L129：`GET /datasets/{slug}`
 
 - `require_dataset(session, slug)`：不存在则 compat 层 404。
-- 返回 `DatasetOut`（同样 `_capabilities_out` + `_cutoffs_payload`）。
+- **mzML 预载**：`spectrum_memory_wiring.ensure_mzml_dataset_resident`；`CapacityError` → 507；映射失败 → 500。
+- 返回 `DatasetOut`（`_capabilities_out` + `_cutoffs_payload`）。
 
 ## L132-L157：`DELETE /datasets/{slug}`
 
-- 委托 `import_jobs.delete_dataset(slug)`：
+- 委托 `import_jobs.delete_dataset(slug)`（**仅删 DB 行** + 清理 import_jobs；磁盘 import 树保留，`deleted_disk` 恒 False）：
   - `LookupError` → **404**
   - `RuntimeError`（活动导入任务等）→ **409**
-  - `ValueError`（路径不在 `DATA_ROOT` 下等）→ **400**
 - 返回 `DatasetDeletedOut`（`deleted_db` / `deleted_disk` / `folder` / `folder_existed`）。
 
 ---

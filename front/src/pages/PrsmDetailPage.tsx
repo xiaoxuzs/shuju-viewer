@@ -138,6 +138,10 @@ export function PrsmDetailPage() {
     () => buildRawChartPeaks(ms1Query.data),
     [ms1Query.data],
   );
+  const ms1RawSpectrum = useMemo<RawSpectrum | null>(
+    () => parseRawSpectrum(ms1Query.data ?? null),
+    [ms1Query.data],
+  );
   const ms2RawSpectrum = useMemo<RawSpectrum | null>(
     () => parseRawSpectrum(ms2Query.data ?? null),
     [ms2Query.data],
@@ -405,12 +409,9 @@ export function PrsmDetailPage() {
       )}
 
       <Lcms3DPanel
-        datasetId={prsm.dataset_id}
-        runId={prsm.run_id}
-        spectraSource={spectraSource}
-        ms1Scan={ms1Scan}
-        ms1SpecId={ms1Id}
-        precursorMz={prsm.precursor_mz ?? null}
+        peaks={ms1RawSpectrum?.peaks ?? null}
+        scan={ms1RawSpectrum?.scan ?? ms1Scan ?? null}
+        retentionTimeSeconds={ms1RawSpectrum?.retentionTime ?? null}
       />
 
       {/* Matched peaks table */}

@@ -1,6 +1,8 @@
 ## `back/app/services/import_planner/__init__.py` 逐行解释
 
-> 包入口：对外导出 ZIP 导入**规划**所需的类型与唯一入口函数 `plan_zip_ingest`。
+> 来源文件：`back/app/services/import_planner/__init__.py`
+
+> 包入口：导出 ingest **规划**所需的类型与 `plan_zip_ingest`（函数名历史沿用；输入为磁盘上的 ingest 根路径，非 ZIP 流）。
 
 ---
 

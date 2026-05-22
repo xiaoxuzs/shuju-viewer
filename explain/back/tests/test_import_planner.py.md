@@ -1,5 +1,7 @@
 ## `back/tests/test_import_planner.py` 逐行解释
 
+> 来源文件：`back/tests/test_import_planner.py`
+
 > 覆盖 `plan_zip_ingest` 的规则：**TopPIC HTML 必须有 PrSM 明细**、**bundle 必须 mzml_memory**、**仅有 TopFD spectrum 的 bundle 被拒绝**。
 
 ---

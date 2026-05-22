@@ -1,5 +1,7 @@
 ## `back/app/services/import_planner/types.py` 逐行解释
 
+> 来源文件：`back/app/services/import_planner/types.py`
+
 > 定义导入规划用到的枚举、异常与不可变数据类 `ImportPlan`。
 
 ---

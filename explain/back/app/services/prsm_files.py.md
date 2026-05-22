@@ -53,7 +53,7 @@
 
 ## L46-L57：`ingest_root_has_supported_prsm_files` — 解压根下是否“某处”有 PrSM 明细
 
-- **L46-L51**：docstring：ZIP 导入在 **TopPIC HTML 树** 场景下要求磁盘上存在可读的 PrSM 明细，以便 mzML 多 run 分配与详情 API 读 `detail_path`。
+- **L46-L51**：docstring：路径导入在 **TopPIC HTML 树** 场景下要求磁盘上存在可读的 PrSM 明细，以便 mzML 多 run 分配与详情 API 读 `detail_path`。
 - **L52-L53**：若 `ingest_root/data/` 下已有支持的 `prsm*` 文件 → 直接 `True`（与 prsm-only bundle 共用 `data/` 的情况也满足）。
 - **L54-L56**：否则遍历 `toppic_prsm_cutoff`、`toppic_proteoform_cutoff` 下的 `data_js/prsms/`，任一路径下 `has_prsm_files` 为真即 `True`。
 - **L57**：都不满足则 `False`。

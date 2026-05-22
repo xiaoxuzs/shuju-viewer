@@ -1,5 +1,7 @@
 ## `front/src/components/ui/badge.tsx` 逐行解释
 
+> 来源文件：`front/src/components/ui/badge.tsx`
+
 > `Badge` 是一个小型标签组件，用 `class-variance-authority (cva)` 做 variant 变体管理，统一不同语义的颜色/边框（default/secondary/destructive/outline/success）。
 
 ---

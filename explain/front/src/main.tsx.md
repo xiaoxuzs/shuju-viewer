@@ -1,5 +1,7 @@
 ## `front/src/main.tsx` 逐行解释
 
+> 来源文件：`front/src/main.tsx`
+
 > 目标：前端入口文件。负责创建 React 根节点，挂载 Router（`BrowserRouter`）与数据获取层（TanStack Query 的 `QueryClientProvider`），并加载全局样式。
 
 ---

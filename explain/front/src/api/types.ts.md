@@ -1,5 +1,7 @@
 ## `front/src/api/types.ts` 逐行解释
 
+> 来源文件：`front/src/api/types.ts`
+
 > 目标：把后端 FastAPI（Pydantic）响应模型在前端用 TypeScript 接口表示出来，以便：
 > - `api.get<T>()` 能推断 `data` 的结构；
 > - React 组件能获得稳定字段名与可空性约束；
@@ -65,24 +67,21 @@
 
 ---
 
-### L48-L70：导入任务类型 `ImportJobOut` / `ImportJobCreatedOut`
+### L49-L84：路径导入类型
 
-#### `ImportJobOut`（L49-L65）
+#### `ImportEnqueueIn`（L49-L54）
 
-- `job_id`：任务 uuid
-- `status`：queued/running/success/failed（后端也允许 string 扩展）
-- `message`：提示文本
-- `error`：失败错误文本
-- `dataset_slug`：任务最终绑定的数据集 slug（失败/未完成时可为 null）
-- `progress`：0..100 的真实进度
-- `stage`：阶段码（extract/init/proteins/matches/...）
-- `stage_label`：面向用户的阶段名称（当前构建里是中文）
-- `stage_detail`：自由格式细节（例如 “1234/4567 PrSM details”）
-- `created_at`/`updated_at`：时间戳字符串
+- `source_path`：服务端文件夹绝对路径。
+- `slug` / `name` / 可选 `description`。
 
-#### `ImportJobCreatedOut`（L67-L70）
+#### `ImportJobOut`（L57-L73）
 
-- POST `/imports` 的创建响应：包含 `job_id` 与初始 `status`。
+- `stage`：`queued | fingerprint | init | proteins | matches | finalize | success | failed`（无 extract）。
+- 其余字段同前：progress、stage_label、stage_detail、error 等。
+
+#### `ImportJobCreatedOut` / `ImportPickFolderOut`（L75-L84）
+
+- 入队响应与原生 picker 结果。
 
 ---
 

@@ -1,5 +1,7 @@
 ## `back/app/services/import_planner/detectors.py` 逐行解释
 
+> 来源文件：`back/app/services/import_planner/detectors.py`
+
 > **只读**检测：判断解压根是否为 TopPIC HTML 树，以及谱图来源是 TopFD JS 还是 mzML memory（不读 mzML 内容）。
 
 ---

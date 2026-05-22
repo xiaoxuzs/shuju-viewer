@@ -1,5 +1,7 @@
 ## `front/src/features/prsm/MatchedPeaksTable.tsx` 逐行解释
 
+> 来源文件：`front/src/features/prsm/MatchedPeaksTable.tsx`
+
 > 目标：把 `ms_peaks`（去卷积峰列表）渲染成可筛选的表格，并在“每个峰可能对应多个 matched ions”的情况下，提供“按离子展开为多行”的视图。表格行可点击以打开 matched-peak detail 面板，同时能高亮当前选中的 detail 项。
 
 ---

@@ -1,5 +1,7 @@
 ## `front/src/components/common/page-header.tsx` 逐行解释
 
+> 来源文件：`front/src/components/common/page-header.tsx`
+
 > 页面通用标题区组件：可选面包屑（含首页图标）、主标题/描述、右侧操作区（按钮等）。
 
 ---

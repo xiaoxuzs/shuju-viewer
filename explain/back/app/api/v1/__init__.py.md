@@ -14,7 +14,7 @@
 
 - 导入各子模块（每个模块各自提供 `router`）：
   - `datasets`：数据集列表/详情/删除
-  - `imports`：上传 ZIP 并创建后台导入任务 + 轮询任务
+  - `imports`：路径导入（POST `/imports`）+ 原生选目录 + 轮询 job
   - `proteins`：按 cutoff 的蛋白列表/详情
   - `proteoforms`：按 cutoff 的 proteoform 列表/详情
   - `prsms`：按 cutoff 的 PrSM 列表/详情

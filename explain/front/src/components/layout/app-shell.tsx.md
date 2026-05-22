@@ -1,5 +1,7 @@
 ## `front/src/components/layout/app-shell.tsx` 逐行解释
 
+> 来源文件：`front/src/components/layout/app-shell.tsx`
+
 > 全局页面壳：顶部导航栏 + 主内容区域。并在进入具体数据集路由后，根据 URL 参数 `slug` 显示第二级入口（当前数据集）。
 
 ---

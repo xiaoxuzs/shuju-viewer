@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import {
   ArrowRight,
+  Activity,
   Database,
   FileText,
   FolderOpen,
@@ -17,18 +18,47 @@ import {
 } from "lucide-react";
 
 import { deleteDataset, enqueueImport, fetchDatasets, fetchImportJob, pickImportFolder } from "@/api/client";
-import type { DatasetOut } from "@/api/types";
+import type { DatasetOut, ImportJobOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { clampImportProgress, formatImportStageLabel } from "@/lib/importStages";
 import { basenamePath, slugifyFolderName } from "@/lib/serverPathFromDirectoryInput";
 import { cn } from "@/lib/utils";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function analysisModeLabel(mode: DatasetOut["analysis_mode"]): string {
+  return mode === "BOTTOM_UP" ? "Bottom-Up" : "Top-Down";
+}
+
+function statusLabel(status: string | null): string {
+  if (!status) return "unknown";
+  const normalized = status.toLowerCase();
+  const labels: Record<string, string> = {
+    ready: "Ready",
+    importing: "Importing",
+    failed: "Failed",
+  };
+  return labels[normalized] ?? status;
+}
+
+function statusVariant(status: string | null): "outline" | "secondary" | "success" | "destructive" {
+  const normalized = status?.toLowerCase();
+  if (normalized === "ready") return "success";
+  if (normalized === "failed") return "destructive";
+  if (normalized === "importing") return "secondary";
+  return "outline";
+}
+
+function metadataNumber(ds: DatasetOut, key: string): number | null {
+  const value = ds.extra_metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export function DatasetsPage() {
@@ -44,6 +74,7 @@ export function DatasetsPage() {
   const [dsName, setDsName] = useState("");
   const [description, setDescription] = useState("");
   const [importBusy, setImportBusy] = useState(false);
+  const [currentImportJob, setCurrentImportJob] = useState<ImportJobOut | null>(null);
   const [folderPickBusy, setFolderPickBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
@@ -78,6 +109,7 @@ export function DatasetsPage() {
     setDsName("");
     setDescription("");
     setImportError(null);
+    setCurrentImportJob(null);
   }, []);
 
   const onBrowseFolder = useCallback(async () => {
@@ -109,6 +141,7 @@ export function DatasetsPage() {
     }
     setImportError(null);
     setImportBusy(true);
+    setCurrentImportJob(null);
     try {
       const { job_id: jobId } = await enqueueImport({
         source_path: sourcePath.trim(),
@@ -119,6 +152,7 @@ export function DatasetsPage() {
 
       for (;;) {
         const job = await fetchImportJob(jobId);
+        setCurrentImportJob(job);
         if (job.status === "success") {
           await sleep(400);
           await queryClient.invalidateQueries({ queryKey: ["datasets"] });
@@ -197,6 +231,14 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
     --name "MZ20160222DS_histone48" \\
     --mode full --replace`}
             </pre>
+            <div className="mt-4 rounded-md border border-border/60 bg-muted/30 p-3 text-left">
+              <div className="font-medium text-foreground">尚无 Bottom-Up 数据集</div>
+              <div className="mt-1">
+                For DIA-NN data, choose an ingest root containing <strong>all_report.parquet</strong> plus mzML
+                files or a Bruker <strong>.d</strong> directory. The parquet and spectra must live under the same
+                selected root.
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -207,6 +249,9 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
             const totalProteins = ds.cutoffs.reduce((a, c) => a + c.protein_count, 0);
             const totalProteoforms = ds.cutoffs.reduce((a, c) => a + c.proteoform_count, 0);
             const totalPrsms = ds.cutoffs.reduce((a, c) => a + c.prsm_count, 0);
+            const isBottomUp = ds.analysis_mode === "BOTTOM_UP";
+            const qValueCutoff = metadataNumber(ds, "q_value_cutoff");
+            const buRunCount = ds.bu_runs?.length ?? 0;
             return (
               <Link
                 key={ds.id}
@@ -218,9 +263,11 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                          <Database className="h-5 w-5" />
+                          {isBottomUp ? <Activity className="h-5 w-5" /> : <Database className="h-5 w-5" />}
                         </div>
                         <Badge variant="outline">{ds.slug}</Badge>
+                        <Badge variant={isBottomUp ? "default" : "secondary"}>{analysisModeLabel(ds.analysis_mode)}</Badge>
+                        <Badge variant={statusVariant(ds.status)}>{statusLabel(ds.status)}</Badge>
                       </div>
                       <div className="flex items-center gap-1 text-muted-foreground">
                         <button
@@ -248,18 +295,46 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                     {ds.description && <CardDescription>{ds.description}</CardDescription>}
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <Metric icon={<FileText className="h-3.5 w-3.5" />} label="Proteins" value={totalProteins} />
-                      <Metric icon={<Layers className="h-3.5 w-3.5" />} label="Proteoforms" value={totalProteoforms} />
-                      <Metric icon={<ListTree className="h-3.5 w-3.5" />} label="PrSMs" value={totalPrsms} />
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {ds.cutoffs.map((c) => (
-                        <Badge key={c.id} variant="secondary" className="font-mono text-[10px]">
-                          {c.kind}
-                        </Badge>
-                      ))}
-                    </div>
+                    {isBottomUp ? (
+                      <>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <Metric icon={<FileText className="h-3.5 w-3.5" />} label="Runs" value={buRunCount} />
+                          <Metric
+                            icon={<Layers className="h-3.5 w-3.5" />}
+                            label="Q max"
+                            value={qValueCutoff ?? "0.01"}
+                          />
+                          <Metric
+                            icon={<ListTree className="h-3.5 w-3.5" />}
+                            label="Software"
+                            value={ds.source_software ?? "DIA-NN"}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          <Badge variant="outline">No cutoffs</Badge>
+                          {ds.bu_runs?.map((run) => (
+                            <Badge key={run.run_id} variant="secondary" className="font-mono text-[10px]">
+                              {run.raw_format ?? "run"}
+                            </Badge>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <Metric icon={<FileText className="h-3.5 w-3.5" />} label="Proteins" value={totalProteins} />
+                          <Metric icon={<Layers className="h-3.5 w-3.5" />} label="Proteoforms" value={totalProteoforms} />
+                          <Metric icon={<ListTree className="h-3.5 w-3.5" />} label="PrSMs" value={totalPrsms} />
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {ds.cutoffs.map((c) => (
+                            <Badge key={c.id} variant="secondary" className="font-mono text-[10px]">
+                              {c.kind}
+                            </Badge>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </Link>
@@ -373,15 +448,27 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                       className="h-4 w-4 shrink-0 animate-spin text-primary"
                       aria-hidden
                     />
-                    <span className="text-xs font-medium text-foreground">Importing…</span>
+                    <span className="text-xs font-medium text-foreground">
+                      {formatImportStageLabel(currentImportJob?.stage ?? null, currentImportJob?.stage_label ?? null)}
+                    </span>
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                      {clampImportProgress(currentImportJob?.progress).toFixed(0)}%
+                    </span>
                   </div>
+                  {currentImportJob?.stage_detail && (
+                    <div className="text-xs text-muted-foreground">{currentImportJob.stage_detail}</div>
+                  )}
                   <div
                     className="relative h-2 w-full overflow-hidden rounded-full bg-muted"
                     role="progressbar"
                     aria-label="Import in progress"
+                    aria-valuenow={clampImportProgress(currentImportJob?.progress)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
                   >
                     <div
-                      className="absolute left-0 top-0 h-full w-2/5 rounded-full bg-primary animate-import-indeterminate"
+                      className="absolute left-0 top-0 h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${clampImportProgress(currentImportJob?.progress)}%` }}
                       aria-hidden
                     />
                   </div>
@@ -494,15 +581,16 @@ function Metric({
 }: {
   icon: React.ReactNode;
   label: string;
-  value: number;
+  value: React.ReactNode;
 }) {
+  const formattedValue = typeof value === "number" ? value.toLocaleString() : value;
   return (
     <div className="rounded-md border border-border/60 bg-muted/40 p-2">
       <div className="flex items-center gap-1 text-muted-foreground">
         {icon}
         <span className="uppercase tracking-wider">{label}</span>
       </div>
-      <div className="mt-0.5 font-semibold text-foreground">{value.toLocaleString()}</div>
+      <div className="mt-0.5 font-semibold text-foreground">{formattedValue}</div>
     </div>
   );
 }

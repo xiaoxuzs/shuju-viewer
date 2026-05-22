@@ -1,5 +1,7 @@
 ## `front/src/components/ui/input.tsx` 逐行解释
 
+> 来源文件：`front/src/components/ui/input.tsx`
+
 > `Input` 基础输入框组件：封装 Tailwind 样式、focus ring 与 disabled 状态，并通过 forwardRef 让表单库更容易接入。
 
 ---

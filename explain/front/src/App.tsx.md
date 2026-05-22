@@ -16,7 +16,7 @@
 ## L7-L15（页面与布局组件）
 
 - `AppShell`：全局布局（导航、容器、Outlet）
-- `DatasetsPage`：数据集列表页（导入 ZIP、删除数据集）
+- `DatasetsPage`：数据集列表页（路径导入、删除数据集）
 - `DatasetPage`：单个数据集概览（cutoff 卡片）
 - `ProteinsPage` / `ProteinDetailPage`
 - `ProteoformsPage` / `ProteoformDetailPage`

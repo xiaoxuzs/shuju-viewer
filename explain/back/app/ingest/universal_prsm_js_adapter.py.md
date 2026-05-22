@@ -4,13 +4,13 @@
 
 ## L1-L16（模块定位）
 
-- 该 adapter 用于一种特殊 ZIP：
+- 该 adapter 用于 **PrSM bundle** 数据集布局：
   - 没有 TopPIC HTML 输出树（没有 `toppic_prsm_cutoff/data_js/...`）
   - 只有 `data/prsm*.js`（PrSM 详情 JS 对象）
-  - 以及 1+ 个 mzML 文件（运行期用 mzML memory 谱图 API 读取）
+  - 以及 1+ 个 mzML 文件（运行期用 mzML memory / `spectrum_memory` 读取）
 - 导入目标依然是 universal schema 的 7 表子集：
   - datasets / runs / proteins / proteoforms / protein_relation_mapping / identification_matches
-- 谱图峰数组不入库，依赖 mzML 内存 store
+- 谱图峰数组不入库，依赖 `spectrum_memory` 进程内池
 
 ## L18-L29（导入）
 

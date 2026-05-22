@@ -1,5 +1,7 @@
 ## `front/src/pages/ProteoformDetailPage.tsx` 逐行解释
 
+> 来源文件：`front/src/pages/ProteoformDetailPage.tsx`
+
 > 目标：proteoform 详情页。展示该形式的质量与修饰统计，并列出该 proteoform 下的 PrSM 列表（可跳转到 PrSM detail）。同时提供“回到 protein”的链接。
 
 ---

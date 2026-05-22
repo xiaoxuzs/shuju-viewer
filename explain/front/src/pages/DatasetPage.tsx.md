@@ -1,5 +1,7 @@
 ## `front/src/pages/DatasetPage.tsx` 逐行解释
 
+> 来源文件：`front/src/pages/DatasetPage.tsx`
+
 > 目标：单个数据集概览页。拉取 `/datasets/{slug}`，展示 cutoffs 汇总统计，并提供进入 proteins / proteoforms / prsms 列表页的入口。
 
 ---

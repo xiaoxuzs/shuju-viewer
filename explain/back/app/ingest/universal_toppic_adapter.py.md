@@ -2,7 +2,7 @@
 
 > 来源文件：`back/app/ingest/universal_toppic_adapter.py`
 >
-> 注意：该文件很长，本文按“功能块 + 行号段”解释。它是 **TopPIC/TopFD HTML 输出树** 导入 universal schema 的主适配器，也是 ZIP 后台导入（`import_jobs.py`）调用的核心写模型之一。
+> 注意：该文件很长，本文按“功能块 + 行号段”解释。它是 **TopPIC/TopFD HTML 输出树** 导入 universal schema 的主适配器，也是路径导入后台任务（`import_jobs.run_path_import_job`）调用的核心写模型之一。
 
 ---
 

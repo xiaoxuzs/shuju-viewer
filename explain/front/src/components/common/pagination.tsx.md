@@ -1,5 +1,7 @@
 ## `front/src/components/common/pagination.tsx` 逐行解释
 
+> 来源文件：`front/src/components/common/pagination.tsx`
+
 > 一个轻量分页组件：显示当前页范围（from–to / total），并提供首页/上一页/下一页/末页按钮。
 
 ---

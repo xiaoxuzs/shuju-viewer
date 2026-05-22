@@ -1,5 +1,7 @@
 ## `front/src/components/ui/button.tsx` 逐行解释
 
+> 来源文件：`front/src/components/ui/button.tsx`
+
 > `Button` 基础组件：用 `cva` 管理 variant/size，并支持 `asChild`（通过 Radix `Slot` 把按钮样式套到任意元素上，例如 `<Link>`）。
 
 ---

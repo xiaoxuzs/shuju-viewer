@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.dataset_ingest_root.resolver import has_bu_diann_layout
 from app.services.prsm_files import ingest_root_has_supported_prsm_files, prsm_bundle_prsm_directory
 
-from .detectors import detect_spectra_source, is_toppic_html_tree
+from .detectors import detect_bu_spectra_source, detect_spectra_source, is_toppic_html_tree
 from .types import DatasetShape, ImportLayoutError, ImportPlan
 
 _NO_PRSM_TOPPIC = (
@@ -41,7 +42,15 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
     """
     root = ingest_root.resolve()
     toppic = is_toppic_html_tree(root)
+    bu_diann = has_bu_diann_layout(root)
     prsm_bundle = prsm_bundle_prsm_directory(root) is not None
+
+    if bu_diann:
+        return ImportPlan(
+            shape=DatasetShape.DIANN_DIA,
+            spectra_source=detect_bu_spectra_source(root),
+            need_toppic_multirun_pass=False,
+        )
 
     if toppic:
         if not ingest_root_has_supported_prsm_files(root):

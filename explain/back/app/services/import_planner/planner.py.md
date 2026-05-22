@@ -1,5 +1,7 @@
 ## `back/app/services/import_planner/planner.py` 逐行解释
 
+> 来源文件：`back/app/services/import_planner/planner.py`
+
 > 核心：`plan_zip_ingest(ingest_root)` 在**不写库**的前提下，推断 `DatasetShape`、`spectra_source` 以及 TopPIC 场景是否需要 **multirun 后处理**。
 
 ---
@@ -29,4 +31,4 @@
   - 否则返回 `ImportPlan(PRSM_BUNDLE, "mzml_memory", need_toppic_multirun_pass=False)`（bundle 仍由 `ingest_universal_prsm_js` 处理，不跑 TopPIC multirun pass）。
 - **L61**：其它情况 → `ImportLayoutError(_UNSUPPORTED)`。
 
-与 `import_jobs.run_zip_import_job` 的衔接：**先 `plan_zip_ingest`，再按需校验 mzML mapping，再按 `plan.shape` 分支调用 adapter**。
+与 `import_jobs.run_path_import_job` 的衔接：**先 `plan_zip_ingest`，再按需校验 mzML mapping，再按 `plan.shape` 分支调用 adapter**。

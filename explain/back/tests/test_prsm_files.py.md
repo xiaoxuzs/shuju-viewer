@@ -1,5 +1,7 @@
 ## `back/tests/test_prsm_files.py` 逐行解释
 
+> 来源文件：`back/tests/test_prsm_files.py`
+
 > 单元测试 `prsm_files`：**多后缀列举与排序**、`prsm_detail_path` 优先级、`load_prsm_document` + `get_prsm_root` + `extract_spectrum_file_name` 的端到端行为。
 
 ---

@@ -1,5 +1,7 @@
 ## `front/src/features/prsm/MatchedPeakSpectrumPanel.tsx` 逐行解释
 
+> 来源文件：`front/src/features/prsm/MatchedPeakSpectrumPanel.tsx`
+
 > 目标：当用户在 `MatchedPeaksTable` 点选某个“匹配离子行”时，在页面下方展开一个“局部谱图”面板：以该去卷积峰的 isotope envelope（若能在 raw spectrum 中找到）为中心，展示局部 m/z window；对 envelope 中每个同位素峰画空心圆，并在 apex 峰标注离子（如 `Z• 19`）；Y 轴可用百分比（相对局部最大值）显示；同时提供一个 “masses” 表格 tab 复刻 TopMSV 的局部峰列表。
 
 ---

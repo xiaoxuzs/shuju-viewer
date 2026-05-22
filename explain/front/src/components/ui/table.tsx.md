@@ -1,5 +1,7 @@
 ## `front/src/components/ui/table.tsx` 逐行解释
 
+> 来源文件：`front/src/components/ui/table.tsx`
+
 > 一组 Table 组件封装：`Table/Header/Body/Row/Head/Cell`，统一样式并提升可复用性（尤其是 sticky header、hover 行高亮）。
 
 ---

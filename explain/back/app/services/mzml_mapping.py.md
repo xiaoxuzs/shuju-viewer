@@ -4,11 +4,11 @@
 
 ## L1-L9（模块定位）
 
-- 该模块在**导入期**运行（ZIP 解压之后）用于构建 strict 的 run ↔ mzML 映射。
+- 该模块在**导入期**运行（路径 ingest 根已解析后）用于构建 strict 的 run ↔ mzML 映射。
 - 关键约束：**不得读取 mzML 内容**（只做文件发现与命名匹配），真正加载 mzML 发生在运行期第一次谱图请求（见 `mzml_store.py`）。
 - 映射双方：
   - PrSM 详情文件中 `ms_header.spectrum_file_name`（“期望的谱文件名”）
-  - ZIP 中实际存在的 `*.mzML/*.mzml[.gz]` 文件
+  - ingest 根目录下实际存在的 `*.mzML/*.mzml[.gz]` 文件
 
 ## L11-L16（导入）
 

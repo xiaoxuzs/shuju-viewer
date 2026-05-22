@@ -1,5 +1,7 @@
 ## `front/src/features/prsm/SequenceView.tsx` 逐行解释
 
+> 来源文件：`front/src/features/prsm/SequenceView.tsx`
+
 > 目标：渲染 PrSM 的序列视图（proteoform 在 protein 上的片段）、断点（cleavage / break points）括号、质量偏移（mass shift）背景与注释，尽量像 TopMSV 的 `draw_prsm.ts` 一样“像素级忠实”。该组件用一个 SVG 一次性绘制全部几何元素，而不是用 HTML 分行拼接。
 
 ---

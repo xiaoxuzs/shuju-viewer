@@ -1,41 +1,25 @@
 # `back/app/schemas/dataset.py` 逐行解释
 
 > 来源文件：`back/app/schemas/dataset.py`
+> 模块职责：数据集列表/详情与删除响应的 Pydantic 模型。
 
-## L1（模块定位）
+## L10-L20（`CutoffOut`）
 
-- 定义 dataset 与 cutoff 的 API 输出模型，以及删除数据集的返回模型。
+- 虚拟 cutoff 卡片：`kind`（prsm/proteoform）、`label`、三种实体计数。
+- `id` 为合成整数（见 `universal_compat.cutoff_id`），非 DB 表主键。
 
-## L3-L8（导入）
+## L23-L40（`DatasetOut`）
 
-- `datetime`：created_at/updated_at
-- `BaseModel/ConfigDict`：Pydantic 模型与配置
+- `source_path`：对应 `datasets.source_root`（ingest 根在磁盘上的路径）。
+- `capabilities`：JSON 能力集，含 `spectra_source`（`topfd_js` | `mzml_memory`）。
+- `updated_at` 可选：universal schema 无此列，读路径通常返回 null。
+- `cutoffs`：嵌套 cutoff 统计列表。
 
-## L10-L21：`CutoffOut`
+## L43-L51（`DatasetDeletedOut`）
 
-- `id`：合成稳定整数（由后端 compat 层决定，前端依赖）
-- `kind`：`"prsm"` / `"proteoform"` 等
-- `label`：展示用字符串
-- 三个计数：protein/proteoform/prsm
+- DELETE 应答：`deleted_db` 是否删库行；`deleted_disk` 恒 False（当前删除 API 不删磁盘树，见 `import_jobs.delete_dataset` docstring）。
 
-## L23-L41：`DatasetOut`
+## 与相邻模块的耦合
 
-- 用于数据集列表卡片与详情页
-- 字段：
-  - `id`：dataset_id（数据库主键）
-  - `slug`：URL/唯一标识
-  - `name/description`
-  - `source_path`：通常是 `datasets.source_root`
-  - `capabilities`：JSON 能力声明（例如 `{"spectra_source":"mzml_memory"}`，用于前端选择谱图 API 路径）
-  - `created_at`
-  - `updated_at`：universal schema 没有该列，所以后端通常返回 None，但模型保留以兼容旧前端形状
-  - `cutoffs`：嵌套 `CutoffOut[]`
-
-## L43-L53：`DatasetDeletedOut`
-
-- `DELETE /datasets/{slug}` 的结果：
-  - `deleted_db`：数据库行是否删除成功（cascade 同步清理子表）
-  - `deleted_disk`：磁盘目录是否删除成功
-  - `folder`：尝试删除的主目录路径
-  - `folder_existed`：该目录在删除前是否存在
-
+- **datasets.py** 组装 `DatasetOut`；指纹列 `source_dataset_fingerprint` 不在 API 输出中暴露。
+- **front DatasetsPage** 展示 slug/name/cutoffs；详情页读 `capabilities`。

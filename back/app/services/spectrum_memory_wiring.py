@@ -22,7 +22,7 @@ def _capabilities_effective(raw: Any, *, source_software: str | None) -> dict[st
 
 
 def _is_mzml_memory_dataset(caps: dict[str, Any]) -> bool:
-    return caps.get("spectra_source") == "mzml_memory"
+    return caps.get("spectra_source") in {"mzml_memory", "mixed"}
 
 
 def _resolve_path_on_disk(raw_path: Path) -> Path | None:
@@ -53,6 +53,7 @@ def build_mzml_bundle_spec(session: Session, dataset_id: int) -> MzmlBundleSpec 
     caps = _capabilities_effective(ds.get("capabilities"), source_software=ds.get("source_software"))
     if not _is_mzml_memory_dataset(caps):
         return None
+    is_mixed = caps.get("spectra_source") == "mixed"
 
     rows = session.execute(
         text(
@@ -64,10 +65,14 @@ def build_mzml_bundle_spec(session: Session, dataset_id: int) -> MzmlBundleSpec 
                   SELECT 1 FROM identification_matches im
                   WHERE im.dataset_id = r.dataset_id AND im.run_id = r.run_id
               )
+              AND (
+                  CAST(:is_mixed AS boolean) = false
+                  OR jsonb_extract_path_text(r.run_metadata, 'raw_format') = 'mzml'
+              )
             ORDER BY r.run_id
             """
         ),
-        {"dataset_id": dataset_id},
+        {"dataset_id": dataset_id, "is_mixed": is_mixed},
     ).mappings().all()
 
     source_root = Path(str(ds.get("source_root") or "")).resolve()
@@ -108,13 +113,14 @@ def build_mzml_bundle_spec(session: Session, dataset_id: int) -> MzmlBundleSpec 
                     "patch": json.dumps({"mzml_file_path": str(path)}, ensure_ascii=False),
                 },
             )
-            session.execute(
-                text(
-                    "UPDATE datasets SET capabilities = capabilities || CAST(:cap_patch AS jsonb) "
-                    "WHERE dataset_id = :dataset_id"
-                ),
-                {"dataset_id": dataset_id, "cap_patch": '{"spectra_source": "mzml_memory"}'},
-            )
+            if not is_mixed:
+                session.execute(
+                    text(
+                        "UPDATE datasets SET capabilities = capabilities || CAST(:cap_patch AS jsonb) "
+                        "WHERE dataset_id = :dataset_id"
+                    ),
+                    {"dataset_id": dataset_id, "cap_patch": '{"spectra_source": "mzml_memory"}'},
+                )
         else:
             if mzml_raw:
                 try:

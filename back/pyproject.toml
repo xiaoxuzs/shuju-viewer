@@ -20,6 +20,7 @@ dependencies = [
     "pyteomics>=4.7.5",
     "numpy>=2.0.0",
     "lxml>=6.1.0",
+    "pyarrow>=23.0.0",
 ]
 
 [dependency-groups]

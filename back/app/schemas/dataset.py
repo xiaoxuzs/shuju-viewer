@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.bu import BuRunSummary
 
 
 class CutoffOut(BaseModel):
@@ -34,10 +37,15 @@ class DatasetOut(BaseModel):
     name: str
     description: str | None
     source_path: str
-    capabilities: dict[str, object] = {}
+    capabilities: dict[str, object] = Field(default_factory=dict)
+    analysis_mode: Literal["TOP_DOWN", "BOTTOM_UP"] | None = None
+    status: str | None = None
+    source_software: str | None = None
+    extra_metadata: dict[str, Any] | None = None
+    bu_runs: list[BuRunSummary] | None = None
     created_at: datetime
     updated_at: datetime | None = None
-    cutoffs: list[CutoffOut] = []
+    cutoffs: list[CutoffOut] = Field(default_factory=list)
 
 
 class DatasetDeletedOut(BaseModel):

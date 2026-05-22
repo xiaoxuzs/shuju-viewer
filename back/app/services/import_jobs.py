@@ -38,6 +38,9 @@ from app.ingest.universal_toppic_adapter import (
     assign_toppic_runs_from_prsm_headers,
     ingest_universal_toppic,
 )
+from app.ingest.bu.diann_parquet_reader import find_diann_report, inspect_report
+from app.ingest.bu.run_discovery import discover_bu_runs, match_diann_runs_to_files
+from app.ingest.bu.universal_diann_adapter import ingest_universal_diann
 from app.ingest.universal_prsm_js_adapter import ingest_universal_prsm_js
 from app.services.import_planner import ImportLayoutError, plan_zip_ingest
 from app.services.import_planner.types import DatasetShape
@@ -58,9 +61,11 @@ _PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
     "duplicate_check_by_fingerprint_s",
     "plan_zip_ingest_s",
     "mzml_mapping_validate_s",
+    "bu_mzml_mapping_validate_s",
     "job_stage_init_update_s",
     "ingest_universal_toppic_s",
     "ingest_universal_prsm_js_s",
+    "ingest_universal_diann_s",
     "assign_toppic_runs_from_prsm_headers_s",
     "description_update_s",
     "db_finalize_paths_and_metadata_s",
@@ -263,6 +268,30 @@ _PHASE_LABELS: dict[str, str] = {
     "proteins":    "正在导入蛋白与形态…",
     "matches":     "正在导入鉴定结果（PrSM 详情）…",
     "finalize":    "正在收尾索引…",
+    "success":     "导入完成",
+    "failed":      "导入失败",
+}
+
+_BU_PHASE_RANGES: dict[str, tuple[float, float]] = {
+    "queued":      (0.0, 1.0),
+    "fingerprint": (1.0, 8.0),
+    "init":        (8.0, 12.0),
+    "runs":        (12.0, 18.0),
+    "proteins":    (18.0, 35.0),
+    "peptides":    (35.0, 50.0),
+    "matches":     (50.0, 92.0),
+    "finalize":    (92.0, 99.5),
+}
+
+_BU_PHASE_LABELS: dict[str, str] = {
+    "queued":      "排队中",
+    "fingerprint": "计算指纹",
+    "init":        "初始化数据集",
+    "runs":        "登记谱图文件",
+    "proteins":    "导入蛋白",
+    "peptides":    "导入肽段",
+    "matches":     "导入鉴定",
+    "finalize":    "收尾",
     "success":     "导入完成",
     "failed":      "导入失败",
 }
@@ -477,6 +506,38 @@ def _make_adapter_progress_handler(job_id: str) -> Callable[[ProgressEvent], Non
     return handle
 
 
+def _make_bu_adapter_progress_handler(job_id: str) -> Callable[[ProgressEvent], None]:
+    def handle(event: ProgressEvent) -> None:
+        start, end = _BU_PHASE_RANGES.get(event.phase, (0.0, 100.0))
+        if event.total <= 0:
+            local = 0.0
+        else:
+            local = min(1.0, max(0.0, event.current / event.total))
+        pct = max(0.0, min(99.5, start + (end - start) * local))
+        _update_job(
+            job_id,
+            progress=pct,
+            stage=event.phase,
+            stage_label=_BU_PHASE_LABELS.get(event.phase, event.phase),
+            stage_detail=event.message,
+            message=event.message,
+        )
+
+    return handle
+
+
+def _validate_bu_mzml_mapping(ingest_root: Path) -> None:
+    """Validate DIA-NN Run values against discovered mzML files before ingest."""
+    report = find_diann_report(ingest_root)
+    info = inspect_report(report)
+    run_files = discover_bu_runs(ingest_root)
+    if not any(run_file.raw_format == "mzml" for run_file in run_files):
+        raise RuntimeError("DIA-NN dataset requires mzML mapping validation, but no mzML files were found.")
+    matched = match_diann_runs_to_files(info.run_names, run_files)
+    if not any(run_file.raw_format == "mzml" for run_file in matched.values()):
+        raise RuntimeError("DIA-NN report did not map any Run value to an mzML file.")
+
+
 # ---------------------------------------------------------------------------
 # Background job runner
 # ---------------------------------------------------------------------------
@@ -577,7 +638,21 @@ def run_path_import_job(
 
         mzml_mapping: dict[str, Path] | None = None
         spectra_source = plan.spectra_source
-        if spectra_source == "mzml_memory":
+        is_bu_diann = plan.shape == DatasetShape.DIANN_DIA
+        if is_bu_diann and spectra_source in {"mzml_memory", "mixed"}:
+            _update_job(
+                job_id,
+                stage_detail="Validating DIA-NN mzML mapping…",
+                message="Validating DIA-NN mzML mapping…",
+            )
+            try:
+                _validate_bu_mzml_mapping(ingest_root)
+            except Exception as exc:  # noqa: BLE001
+                raise RuntimeError(f"DIA-NN mzML mapping validation failed: {exc}") from exc
+            _slice("bu_mzml_mapping_validate_s")
+            timing["mzml_mapping_validate_s"] = 0.0
+            _t = time.perf_counter()
+        elif spectra_source == "mzml_memory":
             _update_job(
                 job_id,
                 stage_detail="Validating mzML mapping…",
@@ -588,8 +663,10 @@ def run_path_import_job(
             except MzmlMappingError as exc:
                 raise RuntimeError(f"mzML mapping validation failed: {exc}") from exc
             mzml_mapping = mapping_result.mapping
+            timing["bu_mzml_mapping_validate_s"] = 0.0
             _slice("mzml_mapping_validate_s")
         else:
+            timing["bu_mzml_mapping_validate_s"] = 0.0
             timing["mzml_mapping_validate_s"] = 0.0
             _t = time.perf_counter()
 
@@ -604,6 +681,7 @@ def run_path_import_job(
         _slice("job_stage_init_update_s")
 
         if plan.shape == DatasetShape.TOPPIC_HTML:
+            timing["ingest_universal_diann_s"] = 0.0
             timing["ingest_universal_prsm_js_s"] = 0.0
             stats = ingest_universal_toppic(
                 root=ingest_root,
@@ -631,6 +709,7 @@ def run_path_import_job(
                 _slice("assign_toppic_runs_from_prsm_headers_s")
         elif plan.shape == DatasetShape.PRSM_BUNDLE:
             timing["ingest_universal_toppic_s"] = 0.0
+            timing["ingest_universal_diann_s"] = 0.0
             stats = ingest_universal_prsm_js(
                 root=ingest_root,
                 database_url=settings.database_url,
@@ -640,6 +719,20 @@ def run_path_import_job(
             )
             _slice("ingest_universal_prsm_js_s")
             timing["assign_toppic_runs_from_prsm_headers_s"] = 0.0
+        elif plan.shape == DatasetShape.DIANN_DIA:
+            timing["ingest_universal_toppic_s"] = 0.0
+            timing["ingest_universal_prsm_js_s"] = 0.0
+            timing["assign_toppic_runs_from_prsm_headers_s"] = 0.0
+            stats = ingest_universal_diann(
+                root=ingest_root,
+                database_url=settings.database_url,
+                slug=slug,
+                name=name,
+                replace=True,
+                spectra_source=spectra_source,
+                progress_callback=_make_bu_adapter_progress_handler(job_id),
+            )
+            _slice("ingest_universal_diann_s")
         else:
             raise RuntimeError("internal error: unsupported import plan shape")
 
@@ -690,23 +783,24 @@ def run_path_import_job(
                         },
                     )
 
-                conn.execute(
-                    text(
-                        "UPDATE datasets "
-                        "SET capabilities = capabilities || CAST(:cap_patch AS jsonb) "
-                        "WHERE dataset_id = :dataset_id"
-                    ),
-                    {
-                        "dataset_id": stats.dataset_id,
-                        "cap_patch": (
-                            '{"spectra_source": "mzml_memory"}'
-                            if spectra_source == "mzml_memory"
-                            else '{"spectra_source": "topfd_js"}'
+                if not is_bu_diann:
+                    conn.execute(
+                        text(
+                            "UPDATE datasets "
+                            "SET capabilities = capabilities || CAST(:cap_patch AS jsonb) "
+                            "WHERE dataset_id = :dataset_id"
                         ),
-                    },
-                )
+                        {
+                            "dataset_id": stats.dataset_id,
+                            "cap_patch": (
+                                '{"spectra_source": "mzml_memory"}'
+                                if spectra_source == "mzml_memory"
+                                else '{"spectra_source": "topfd_js"}'
+                            ),
+                        },
+                    )
 
-                if spectra_source == "mzml_memory":
+                if not is_bu_diann and spectra_source == "mzml_memory":
                     if mzml_mapping is None:
                         raise RuntimeError("internal error: mzml_mapping is missing for mzml_memory dataset")
 

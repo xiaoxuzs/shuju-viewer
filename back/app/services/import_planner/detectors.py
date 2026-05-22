@@ -35,3 +35,17 @@ def detect_spectra_source(ingest_root: Path) -> str:
     if has_topfd_ms1 and has_topfd_ms2:
         return "topfd_js"
     return "mzml_memory"
+
+
+def detect_bu_spectra_source(ingest_root: Path) -> str:
+    """Pick DIA-NN Bottom-Up spectrum source: mzML memory, Bruker TDF, or mixed."""
+    root = ingest_root.resolve()
+    has_mzml = bool(collect_mzml_files(root))
+    has_tdf = any(p.is_dir() for p in root.rglob("*.d"))
+    if has_mzml and has_tdf:
+        return "mixed"
+    if has_mzml:
+        return "mzml_memory"
+    if has_tdf:
+        return "tdf_memory"
+    return "mzml_memory"

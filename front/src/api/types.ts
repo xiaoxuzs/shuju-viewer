@@ -39,10 +39,24 @@ export interface DatasetOut {
   description: string | null;
   source_path: string;
   capabilities: Record<string, unknown>;
+  analysis_mode: "TOP_DOWN" | "BOTTOM_UP" | string | null;
+  status: string | null;
+  source_software: string | null;
+  extra_metadata: Record<string, unknown> | null;
+  bu_runs: BuRunSummary[] | null;
   created_at: string;
   /** universal schema 没有 updated_at 列；后端总是返回 null。 */
   updated_at: string | null;
   cutoffs: CutoffOut[];
+}
+
+export interface BuRunSummary {
+  run_id: number;
+  file_name: string;
+  raw_format: string | null;
+  diann_run_name: string | null;
+  match_count: number | null;
+  has_im: boolean | null;
 }
 
 /** ``POST /imports`` JSON body: path-based import on the server. */

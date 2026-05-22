@@ -106,3 +106,18 @@ def test_plan_prsm_bundle_rejects_when_topfd_only(tmp_path: Path) -> None:
 
     with pytest.raises(ImportLayoutError):
         plan_zip_ingest(tmp_path)
+
+
+def test_plan_bu_diann_mixed(tmp_path: Path) -> None:
+    report = tmp_path / "DIANN_2.0" / "all_report.parquet"
+    report.parent.mkdir(parents=True)
+    report.write_bytes(b"parquet marker")
+    (tmp_path / "run.mzML").write_text("<mzML />", encoding="utf-8")
+    d = tmp_path / "sample.d"
+    d.mkdir()
+
+    plan = plan_zip_ingest(tmp_path)
+
+    assert plan.shape == DatasetShape.DIANN_DIA
+    assert plan.spectra_source == "mixed"
+    assert plan.need_toppic_multirun_pass is False

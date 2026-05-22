@@ -1,5 +1,7 @@
 ## `front/src/features/prsm/FragmentationView.tsx` 逐行解释
 
+> 来源文件：`front/src/features/prsm/FragmentationView.tsx`
+
 > 目标：渲染“碎裂/序列阶梯（sequence ladder）+ 去卷积峰 stick plot + ppm 误差图”的复合视图。它是对 TopMSV 中 `mono mass` MS2 图的移植：上方两行 ladder 显示 N/C 端离子覆盖，中间显示去卷积峰（mono mass 轴），底部显示匹配离子的 ppm error 点。X 轴不做缩放，而是通过“固定密度（px/Da）+ 原生横向滚动”实现平移浏览。
 
 ---

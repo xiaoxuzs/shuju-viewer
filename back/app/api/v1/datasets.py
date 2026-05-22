@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.api.v1.universal_compat import cutoff_id, cutoff_label, require_dataset
-from app.schemas import CutoffOut, DatasetDeletedOut, DatasetOut
+from app.schemas import BuRunSummary, CutoffOut, DatasetDeletedOut, DatasetOut
 from app.services import import_jobs, spectrum_memory_wiring
 from app.spectrum_memory import CapacityError
 
@@ -25,7 +25,15 @@ def _capabilities_out(raw: Any, *, source_software: str | None) -> dict[str, Any
     return caps
 
 
-def _cutoffs_payload(session: Session, dataset_id: int) -> list[CutoffOut]:
+def _json_object(raw: Any) -> dict[str, Any]:
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _is_bottom_up(value: Any) -> bool:
+    return str(value or "").upper() == "BOTTOM_UP"
+
+
+def _cutoffs_payload(session: Session, dataset_id: int, *, analysis_mode: str | None = None) -> list[CutoffOut]:
     """Synthesize legacy cutoffs from ``identification_matches.source_cutoff``.
 
     All three counts are filtered by ``extra_metadata.source_cutoff`` so the
@@ -33,6 +41,8 @@ def _cutoffs_payload(session: Session, dataset_id: int) -> list[CutoffOut]:
     though proteins and proteoforms are stored as cutoff-independent rows in
     the universal schema.
     """
+    if _is_bottom_up(analysis_mode):
+        return []
     rows = session.execute(
         text(
             """
@@ -77,6 +87,69 @@ def _cutoffs_payload(session: Session, dataset_id: int) -> list[CutoffOut]:
     ]
 
 
+def _run_metadata(raw: Any) -> dict[str, Any]:
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _bu_runs_by_dataset(session: Session, dataset_ids: list[int]) -> dict[int, list[BuRunSummary]]:
+    """Return BU run summaries grouped by dataset id using a single runs query."""
+    if not dataset_ids:
+        return {}
+    rows = session.execute(
+        text(
+            """
+            SELECT dataset_id, run_id, file_name, run_metadata
+            FROM runs
+            WHERE dataset_id = ANY(:dataset_ids)
+            ORDER BY dataset_id, run_id
+            """
+        ),
+        {"dataset_ids": dataset_ids},
+    ).mappings().all()
+    grouped: dict[int, list[BuRunSummary]] = {}
+    for row in rows:
+        meta = _run_metadata(row.get("run_metadata"))
+        dataset_id = int(row["dataset_id"])
+        grouped.setdefault(dataset_id, []).append(
+            BuRunSummary(
+                run_id=int(row["run_id"]),
+                file_name=str(row["file_name"] or ""),
+                raw_format=meta.get("raw_format"),
+                diann_run_name=meta.get("diann_run_name"),
+            )
+        )
+    return grouped
+
+
+def _dataset_out(
+    *,
+    row: Any,
+    cutoffs: list[CutoffOut],
+    bu_runs: list[BuRunSummary] | None,
+) -> DatasetOut:
+    return DatasetOut(
+        id=row["dataset_id"],
+        slug=row["slug"],
+        name=row["dataset_name"],
+        description=row["description"],
+        source_path=row["source_root"],
+        capabilities=_capabilities_out(row.get("capabilities"), source_software=row.get("source_software")),
+        analysis_mode=row.get("analysis_mode"),
+        status=row.get("status"),
+        source_software=row.get("source_software"),
+        extra_metadata=_json_object(row.get("extra_metadata")),
+        bu_runs=bu_runs,
+        created_at=row["created_at"],
+        updated_at=None,
+        cutoffs=cutoffs,
+    )
+
+
+def _ensure_dataset_spectra_resident(session: Session, dataset: dict[str, Any]) -> None:
+    """Trigger mzML residency for mzML or mixed datasets; wiring filters runs."""
+    spectrum_memory_wiring.ensure_mzml_dataset_resident(session, int(dataset["dataset_id"]))
+
+
 @router.get("/datasets", response_model=list[DatasetOut])
 def list_datasets(session: Session = Depends(get_db)) -> list[DatasetOut]:
     """返回全部数据集，按 id 排序；每个元素附带嵌套的 cutoff 统计。"""
@@ -85,23 +158,20 @@ def list_datasets(session: Session = Depends(get_db)) -> list[DatasetOut]:
             """
             SELECT
                 dataset_id, slug, dataset_name, description,
-                source_software, source_root, created_at, capabilities
+                analysis_mode, status, source_software, source_root,
+                created_at, capabilities, extra_metadata
             FROM datasets
             ORDER BY dataset_id
             """
         )
     ).mappings().all()
+    bu_dataset_ids = [int(d["dataset_id"]) for d in datasets if _is_bottom_up(d.get("analysis_mode"))]
+    bu_runs_by_dataset = _bu_runs_by_dataset(session, bu_dataset_ids)
     return [
-        DatasetOut(
-            id=d["dataset_id"],
-            slug=d["slug"],
-            name=d["dataset_name"],
-            description=d["description"],
-            source_path=d["source_root"],
-            capabilities=_capabilities_out(d.get("capabilities"), source_software=d.get("source_software")),
-            created_at=d["created_at"],
-            updated_at=None,
-            cutoffs=_cutoffs_payload(session, d["dataset_id"]),
+        _dataset_out(
+            row=d,
+            cutoffs=_cutoffs_payload(session, d["dataset_id"], analysis_mode=d.get("analysis_mode")),
+            bu_runs=bu_runs_by_dataset.get(int(d["dataset_id"])) if _is_bottom_up(d.get("analysis_mode")) else None,
         )
         for d in datasets
     ]
@@ -115,24 +185,21 @@ def get_dataset_detail(
     """按 slug 取单个数据集；slug 不存在时由依赖注入层返回 404。"""
     dataset = require_dataset(session, slug)
     try:
-        spectrum_memory_wiring.ensure_mzml_dataset_resident(session, int(dataset["dataset_id"]))
+        _ensure_dataset_spectra_resident(session, dataset)
     except CapacityError as exc:
         raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
-    return DatasetOut(
-        id=dataset["dataset_id"],
-        slug=dataset["slug"],
-        name=dataset["dataset_name"],
-        description=dataset["description"],
-        source_path=dataset["source_root"],
-        capabilities=_capabilities_out(
-            dataset.get("capabilities"),
-            source_software=dataset.get("source_software"),
-        ),
-        created_at=dataset["created_at"],
-        updated_at=None,
-        cutoffs=_cutoffs_payload(session, dataset["dataset_id"]),
+    dataset_id = int(dataset["dataset_id"])
+    bu_runs_by_dataset = (
+        _bu_runs_by_dataset(session, [dataset_id])
+        if _is_bottom_up(dataset.get("analysis_mode"))
+        else {}
+    )
+    return _dataset_out(
+        row=dataset,
+        cutoffs=_cutoffs_payload(session, dataset_id, analysis_mode=dataset.get("analysis_mode")),
+        bu_runs=bu_runs_by_dataset.get(dataset_id) if _is_bottom_up(dataset.get("analysis_mode")) else None,
     )
 
 

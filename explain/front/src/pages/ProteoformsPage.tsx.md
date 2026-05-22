@@ -1,5 +1,7 @@
 ## `front/src/pages/ProteoformsPage.tsx` 逐行解释
 
+> 来源文件：`front/src/pages/ProteoformsPage.tsx`
+
 > 目标：proteoform 列表页。按 (slug, cutoff) 分页拉取 proteoforms，默认按 `prsm_number` 降序，让“PrSM 多的形式”排在前面，便于优先查看。
 
 ---

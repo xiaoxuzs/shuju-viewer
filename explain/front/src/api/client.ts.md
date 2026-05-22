@@ -1,5 +1,7 @@
 ## `front/src/api/client.ts` 逐行解释
 
+> 来源文件：`front/src/api/client.ts`
+
 > 目标：封装前端对后端 FastAPI `/api/v1` 的所有 HTTP 调用。该文件提供一个带 `baseURL`/超时配置的 axios 实例，并把每个后端路由映射成一个类型安全的函数（返回值类型来自 `front/src/api/types.ts`）。
 
 ---
@@ -55,14 +57,16 @@
 
 ---
 
-### L43-L49：`enqueueImport`（上传 ZIP 并创建导入任务）
+### L46-L52：`enqueueImport`（路径导入并入队后台任务）
 
-- **L43**：英文注释：上传 ZIP（TopPIC 输出树）并返回 job id。
-- **L44-L48**：POST `/imports`：
-  - body 为 `FormData`（包含 zip 文件）
-  - timeout 设置为 600s（10 分钟），因为上传 + 后端预处理可能较久
+- POST `/imports`，JSON body：`ImportEnqueueIn`（`source_path`、`slug`、`name`、`description`）。
+- `Content-Type: application/json`；timeout 600s（入队 + 后台 ingest 可能较久）。
+- 返回 `ImportJobCreatedOut`（`job_id`），前端轮询 `fetchImportJob`。
 
-注意：真正的“解压/入库”在后端后台任务里执行；这里返回的是 job id，用于轮询。
+### L54-L62：`pickImportFolder`（API 主机原生选目录）
+
+- POST `/imports/pick-folder`，空 body；`timeout: 0`（对话框阻塞至用户选择）。
+- 返回 `ImportPickFolderOut`（`path` 或 `cancelled`）；需后端 `IMPORT_NATIVE_FOLDER_PICKER=true`。
 
 ---
 
@@ -134,7 +138,7 @@
 ### L163-L171：mzML-memory 模式：按 (dataset_id, run_id, scan_number) 动态取谱图
 
 - `fetchMzmlSpectrum`：GET `/datasets/{datasetId}/runs/{runId}/spectra/{scanNumber}`。
-- 注释指出：首次请求某 run 时，后端会把对应 mzML 加载进全局内存 store（后端实现见 `back/app/services/mzml_store.py`）。
+- mzML-memory 数据集需先驻留：`spectrum_memory` 池（经 `spectrum_memory_wiring.ensure_mzml_dataset_resident`）；legacy 路径仍可能用 `mzml_store.py`。
 
 同样返回原始 JSON，前端再解析/归一化。
 

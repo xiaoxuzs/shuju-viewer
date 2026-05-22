@@ -1,5 +1,7 @@
 ## `front/src/pages/PrsmsPage.tsx` 逐行解释
 
+> 来源文件：`front/src/pages/PrsmsPage.tsx`
+
 > 目标：PrSM 列表页。按 (slug, cutoff) 分页拉取 PrSM，默认按 `e_value` 升序（更好的匹配排前），并提供跳转到 PrSM detail 的链接。
 
 ---

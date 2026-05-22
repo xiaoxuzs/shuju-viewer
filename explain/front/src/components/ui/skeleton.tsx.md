@@ -1,5 +1,7 @@
 ## `front/src/components/ui/skeleton.tsx` 逐行解释
 
+> 来源文件：`front/src/components/ui/skeleton.tsx`
+
 > `Skeleton` 是加载占位组件：用灰色块 + pulse 动画模拟内容正在加载。
 
 ---
