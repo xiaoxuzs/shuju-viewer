@@ -4,6 +4,8 @@ from app.schemas.common import Page
 from app.schemas.bu import (
     BuMatchDetailOut,
     BuMatchListItemOut,
+    BuMatchedIon,
+    BuChromatogramOut,
     BuOverviewCounts,
     BuOverviewOut,
     BuQcBlock,
@@ -17,6 +19,9 @@ from app.schemas.bu import (
     BuRtWindow,
     BuRunDetail,
     BuRunSummary,
+    BuSpectrumPrecursor,
+    BuSpectrumV1,
+    BuXicOut,
 )
 from app.schemas.dataset import CutoffOut, DatasetDeletedOut, DatasetOut
 from app.schemas.protein import (
@@ -45,6 +50,11 @@ __all__ = [
     "BuPeptideProteinRef",
     "BuMatchListItemOut",
     "BuMatchDetailOut",
+    "BuMatchedIon",
+    "BuSpectrumPrecursor",
+    "BuSpectrumV1",
+    "BuXicOut",
+    "BuChromatogramOut",
     "BuRunDetail",
     "BuRtWindow",
     "BuProteinMini",

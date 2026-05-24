@@ -8,7 +8,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.v1.universal_compat import require_dataset
+
+def require_dataset(session: Session, slug: str) -> dict[str, Any]:
+    from app.api.v1.universal_compat import require_dataset as _require_dataset
+
+    return _require_dataset(session, slug)
 
 
 def require_bu_dataset(session: Session, slug: str) -> dict[str, Any]:
@@ -43,4 +47,3 @@ def require_bu_match(session: Session, dataset_id: int, match_id: int) -> dict[s
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="match_not_found")
     return dict(row)
-

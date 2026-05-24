@@ -1,11 +1,14 @@
 import { api } from "@/api/client";
 import type {
   BuListParams,
+  BuChromatogramOut,
   BuMatchDetailOut,
   BuMatchPage,
   BuOverviewOut,
   BuPeptidePage,
   BuProteinPage,
+  BuSpectrumV1,
+  BuXicOut,
 } from "@/features/bu/types";
 
 export async function fetchBuOverview(slug: string): Promise<BuOverviewOut> {
@@ -39,5 +42,38 @@ export async function fetchBuMatches(
 
 export async function fetchBuMatch(slug: string, matchId: number): Promise<BuMatchDetailOut> {
   const { data } = await api.get<BuMatchDetailOut>(`/datasets/${slug}/matches/${matchId}`);
+  return data;
+}
+
+export async function fetchBuMatchMs2(
+  slug: string,
+  matchId: number,
+  ppm = 20,
+): Promise<BuSpectrumV1> {
+  const { data } = await api.get<BuSpectrumV1>(`/datasets/${slug}/matches/${matchId}/spectrum/ms2`, {
+    params: { ppm },
+  });
+  return data;
+}
+
+export async function fetchBuMatchXic(
+  slug: string,
+  matchId: number,
+  ppm = 10,
+): Promise<BuXicOut> {
+  const { data } = await api.get<BuXicOut>(`/datasets/${slug}/matches/${matchId}/xic`, {
+    params: { ppm },
+  });
+  return data;
+}
+
+export async function fetchBuRunChromatogram(
+  slug: string,
+  runId: number,
+  type: "tic" | "bpc" = "tic",
+): Promise<BuChromatogramOut> {
+  const { data } = await api.get<BuChromatogramOut>(`/datasets/${slug}/runs/${runId}/chromatogram`, {
+    params: { type },
+  });
   return data;
 }

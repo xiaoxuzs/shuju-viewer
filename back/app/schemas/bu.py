@@ -168,3 +168,53 @@ class BuPeptideDetailOut(BuPeptideListItemOut):
     proteins: list[BuPeptideProteinRef] = Field(default_factory=list)
     matches_summary: BuPeptideMatchesSummary = Field(default_factory=BuPeptideMatchesSummary)
     extra_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class BuSpectrumPrecursor(BaseModel):
+    selected_mz: float | None = None
+    charge: int | None = None
+    isolation_target_mz: float | None = None
+    isolation_lower: float | None = None
+    isolation_upper: float | None = None
+
+
+class BuMatchedIon(BaseModel):
+    ion_type: Literal["b", "y"]
+    position: int
+    charge: int
+    theo_mz: float
+    exp_mz: float
+    ppm: float
+    intensity: float
+
+
+class BuSpectrumV1(BaseModel):
+    scan: int
+    native_id: str | None = None
+    ms_level: Literal[1, 2]
+    rt_seconds: float
+    rt_minutes: float
+    mz: list[float] = Field(default_factory=list)
+    intensity: list[float] = Field(default_factory=list)
+    precursor: BuSpectrumPrecursor | None = None
+    matched_ions: list[BuMatchedIon] = Field(default_factory=list)
+
+
+class BuXicOut(BaseModel):
+    rt: list[float] = Field(default_factory=list)
+    intensity: list[float] = Field(default_factory=list)
+    precursor_mz: float
+    ppm: float
+    rt_apex: float | None = None
+    rt_start: float | None = None
+    rt_stop: float | None = None
+    unit_rt: Literal["min"] = "min"
+
+
+class BuChromatogramOut(BaseModel):
+    type: Literal["tic", "bpc"]
+    unit_rt: Literal["min"] = "min"
+    rt: list[float] = Field(default_factory=list)
+    intensity: list[float] = Field(default_factory=list)
+    downsampled: bool = False
+    point_count_original: int = 0

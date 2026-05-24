@@ -128,6 +128,56 @@ export interface BuMatchDetailOut extends BuMatchListItemOut {
   extra_metadata: Record<string, unknown>;
 }
 
+export interface BuSpectrumPrecursor {
+  selected_mz: number | null;
+  charge: number | null;
+  isolation_target_mz: number | null;
+  isolation_lower: number | null;
+  isolation_upper: number | null;
+}
+
+export interface BuMatchedIon {
+  ion_type: "b" | "y";
+  position: number;
+  charge: number;
+  theo_mz: number;
+  exp_mz: number;
+  ppm: number;
+  intensity: number;
+}
+
+export interface BuSpectrumV1 {
+  scan: number;
+  native_id: string | null;
+  ms_level: 1 | 2;
+  rt_seconds: number;
+  rt_minutes: number;
+  mz: number[];
+  intensity: number[];
+  precursor: BuSpectrumPrecursor | null;
+  matched_ions: BuMatchedIon[];
+}
+
+export interface BuXicOut {
+  rt: number[];
+  intensity: number[];
+  precursor_mz: number;
+  ppm: number;
+  rt_apex: number | null;
+  rt_start: number | null;
+  rt_stop: number | null;
+  unit_rt: "min";
+}
+
+export interface BuChromatogramOut {
+  type: "tic" | "bpc";
+  unit_rt: "min";
+  rt: number[];
+  intensity: number[];
+  downsampled: boolean;
+  point_count_original: number;
+}
+
 export interface BuListParams {
   page?: number;
   page_size?: number;
