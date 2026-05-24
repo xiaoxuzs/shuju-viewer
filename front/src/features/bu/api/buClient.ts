@@ -6,6 +6,7 @@ import type {
   BuMatchPage,
   BuOverviewOut,
   BuPeptidePage,
+  BuProteinDetailOut,
   BuProteinPage,
   BuSpectrumV1,
   BuXicOut,
@@ -21,6 +22,11 @@ export async function fetchBuProteins(
   params: BuListParams = {},
 ): Promise<BuProteinPage> {
   const { data } = await api.get<BuProteinPage>(`/datasets/${slug}/proteins`, { params });
+  return data;
+}
+
+export async function fetchBuProtein(slug: string, proteinId: number): Promise<BuProteinDetailOut> {
+  const { data } = await api.get<BuProteinDetailOut>(`/datasets/${slug}/proteins/${proteinId}`);
   return data;
 }
 
@@ -53,6 +59,11 @@ export async function fetchBuMatchMs2(
   const { data } = await api.get<BuSpectrumV1>(`/datasets/${slug}/matches/${matchId}/spectrum/ms2`, {
     params: { ppm },
   });
+  return data;
+}
+
+export async function fetchBuMatchMs1(slug: string, matchId: number): Promise<BuSpectrumV1> {
+  const { data } = await api.get<BuSpectrumV1>(`/datasets/${slug}/matches/${matchId}/spectrum/ms1`);
   return data;
 }
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -34,8 +34,8 @@ def match_ms2(slug: str, match_id: int, ppm: float = 20.0, session: Session = De
     return spectrum_facade.get_match_ms2(session, dataset, match, ppm=ppm)
 
 
-@router.get("/datasets/{slug}/matches/{match_id}/spectrum/ms1")
-def match_ms1(slug: str, match_id: int, session: Session = Depends(get_db)) -> None:
+@router.get("/datasets/{slug}/matches/{match_id}/spectrum/ms1", response_model=BuSpectrumV1)
+def match_ms1(slug: str, match_id: int, session: Session = Depends(get_db)) -> BuSpectrumV1:
     dataset = require_bu_dataset(session, slug)
-    require_bu_match(session, int(dataset["dataset_id"]), match_id)
-    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, detail="not_implemented")
+    match = require_bu_match(session, int(dataset["dataset_id"]), match_id)
+    return spectrum_facade.get_match_ms1(session, dataset, match)

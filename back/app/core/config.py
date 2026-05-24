@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     import_native_folder_picker: bool = Field(default=True)
     #: Restrict the folder picker to requests from loopback (recommended when the picker is enabled).
     import_picker_loopback_only: bool = Field(default=True)
+    #: Allow lazy UniProt FASTA fetches for Bottom-Up protein coverage. Keep disabled for offline deployments.
+    bu_uniprot_enabled: bool = Field(default=False)
 
     @property
     def cors_origin_list(self) -> list[str]:

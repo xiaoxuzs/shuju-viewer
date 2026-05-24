@@ -16,6 +16,7 @@ def _match(*, raw_format: str = "mzml") -> dict[str, Any]:
         "sequence": "LLLPGELAK",
         "scan_number": -1,
         "precursor_mz": 477.3051452636719,
+        "precursor_charge": 2,
         "retention_time": 92.46,
         "extra_metadata": {"rt_start": 92.15, "rt_stop": 93.08},
         "run_metadata": {"raw_format": raw_format},
@@ -62,6 +63,44 @@ def test_match_ms2_resolves_scan_and_matches_by_ions(monkeypatch: pytest.MonkeyP
 def test_bruker_match_ms2_is_unsupported() -> None:
     with pytest.raises(HTTPException) as exc:
         spectrum_facade.get_match_ms2(None, {"dataset_id": 39}, _match(raw_format="bruker_d"))  # type: ignore[arg-type]
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "unsupported_raw_format"
+
+
+def test_match_ms1_resolves_nearby_ms1_and_adds_precursor_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    spectra = {
+        100: {
+            "scan": 100,
+            "native_id": "scan=100",
+            "ms_level": 1,
+            "rt_seconds": 92.30 * 60.0,
+            "mz": [477.305, 600.0],
+            "intensity": [100.0, 100.0],
+        },
+        101: {
+            "scan": 101,
+            "native_id": "scan=101",
+            "ms_level": 1,
+            "rt_seconds": 92.45 * 60.0,
+            "mz": [477.305, 600.0],
+            "intensity": [1000.0, 2000.0],
+        },
+    }
+    monkeypatch.setattr(spectrum_facade, "get_run_spectra", lambda *_args: spectra)
+
+    out = spectrum_facade.get_match_ms1(None, {"dataset_id": 39}, _match())  # type: ignore[arg-type]
+
+    assert out.scan == 101
+    assert out.ms_level == 1
+    assert out.markers[0].label == "precursor"
+    assert out.markers[0].mz == pytest.approx(477.3051452636719)
+    assert out.precursor and out.precursor.charge == 2
+
+
+def test_bruker_match_ms1_is_unsupported() -> None:
+    with pytest.raises(HTTPException) as exc:
+        spectrum_facade.get_match_ms1(None, {"dataset_id": 39}, _match(raw_format="bruker_d"))  # type: ignore[arg-type]
 
     assert exc.value.status_code == 404
     assert exc.value.detail == "unsupported_raw_format"

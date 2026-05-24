@@ -5,7 +5,7 @@ import { RotateCcw } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchBuMatch, fetchBuMatchMs2, fetchBuMatchXic } from "@/features/bu/api/buClient";
+import { fetchBuMatch, fetchBuMatchMs1, fetchBuMatchMs2, fetchBuMatchXic } from "@/features/bu/api/buClient";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import { BuSpectrumChart } from "@/features/bu/components/spectrum/BuSpectrumChart";
 import { BuXicChart } from "@/features/bu/components/spectrum/BuXicChart";
@@ -22,8 +22,10 @@ export function BuMatchDetailPage() {
   const { matchId = "" } = useParams();
   const parsedMatchId = Number(matchId);
   const [xicFullOpen, setXicFullOpen] = useState(false);
+  const [ms1FullOpen, setMs1FullOpen] = useState(false);
   const [ms2FullOpen, setMs2FullOpen] = useState(false);
   const [xicModalZoom, setXicModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
+  const [ms1ModalZoom, setMs1ModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [ms2ModalZoom, setMs2ModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const { data, isLoading, error } = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId],
@@ -41,11 +43,18 @@ export function BuMatchDetailPage() {
     queryFn: () => fetchBuMatchMs2(dataset.slug, parsedMatchId, MS2_PPM),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
   });
+  const ms1 = useQuery({
+    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms1"],
+    queryFn: () => fetchBuMatchMs1(dataset.slug, parsedMatchId),
+    enabled: !!isMzml && Number.isFinite(parsedMatchId),
+  });
 
   useEffect(() => {
     setXicFullOpen(false);
+    setMs1FullOpen(false);
     setMs2FullOpen(false);
     setXicModalZoom(DEFAULT_ZOOM);
+    setMs1ModalZoom(DEFAULT_ZOOM);
     setMs2ModalZoom(DEFAULT_ZOOM);
   }, [parsedMatchId]);
 
@@ -88,6 +97,25 @@ export function BuMatchDetailPage() {
                   precursorCharge={data.precursor_charge}
                   ppm={XIC_PPM}
                   onOpenFull={() => setXicFullOpen(true)}
+                />
+              </CardContent>
+            </Card>
+          )}
+          {ms1.isLoading && <Skeleton className="h-64" />}
+          {ms1.error && <p className="text-destructive">{(ms1.error as Error).message}</p>}
+          {ms1.data && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">MS1 Spectrum</CardTitle>
+                <p className="text-xs text-muted-foreground">{ZOOM_HINT}</p>
+              </CardHeader>
+              <CardContent>
+                <BuSpectrumChart
+                  spectrum={ms1.data}
+                  sequence={data.sequence}
+                  precursorCharge={data.precursor_charge}
+                  precursorMz={data.precursor_mz}
+                  onOpenFull={() => setMs1FullOpen(true)}
                 />
               </CardContent>
             </Card>
@@ -136,6 +164,25 @@ export function BuMatchDetailPage() {
             height={Math.max(BU_CHART.xicHeight, 560)}
             zoom={xicModalZoom}
             onZoomChange={setXicModalZoom}
+          />
+        </BuChartModal>
+      )}
+
+      {ms1FullOpen && ms1.data && (
+        <BuChartModal
+          title="MS1 Spectrum"
+          subtitle={`${data.sequence} · ${ZOOM_HINT}`}
+          onClose={() => setMs1FullOpen(false)}
+          actions={<ResetZoomButton zoom={ms1ModalZoom} onReset={() => setMs1ModalZoom(DEFAULT_ZOOM)} />}
+        >
+          <BuSpectrumChart
+            spectrum={ms1.data}
+            sequence={data.sequence}
+            precursorCharge={data.precursor_charge}
+            precursorMz={data.precursor_mz}
+            height={Math.max(BU_CHART.ms2Height, 620)}
+            zoom={ms1ModalZoom}
+            onZoomChange={setMs1ModalZoom}
           />
         </BuChartModal>
       )}

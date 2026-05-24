@@ -20,7 +20,7 @@ import { BuProteinsPage } from "@/features/bu/pages/BuProteinsPage";
 import { BuPeptidesPage } from "@/features/bu/pages/BuPeptidesPage";
 import { BuMatchesPage } from "@/features/bu/pages/BuMatchesPage";
 import { BuMatchDetailPage } from "@/features/bu/pages/BuMatchDetailPage";
-import { BuComingSoonPage } from "@/features/bu/pages/BuComingSoonPage";
+import { BuProteinDetailPage } from "@/features/bu/pages/BuProteinDetailPage";
 
 export default function App() {
   return (
@@ -31,7 +31,7 @@ export default function App() {
         <Route path="/datasets/:slug" element={<DatasetModeGate />}>
           <Route index element={<BuModeOnly><BuOverviewPage /></BuModeOnly>} />
           <Route path="proteins" element={<BuModeOnly><BuProteinsPage /></BuModeOnly>} />
-          <Route path="proteins/:proteinId" element={<BuModeOnly><BuComingSoonPage title="Protein detail 即将支持" /></BuModeOnly>} />
+          <Route path="proteins/:proteinId" element={<BuModeOnly><BuProteinDetailPage /></BuModeOnly>} />
           <Route path="peptides" element={<BuModeOnly><BuPeptidesPage /></BuModeOnly>} />
           <Route path="matches" element={<BuModeOnly><BuMatchesPage /></BuModeOnly>} />
           <Route path="matches/:matchId" element={<BuModeOnly><BuMatchDetailPage /></BuModeOnly>} />

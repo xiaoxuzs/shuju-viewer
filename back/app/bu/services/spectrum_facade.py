@@ -7,9 +7,9 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.bu.services.scan_resolver import resolve_ms2_scan
+from app.bu.services.scan_resolver import resolve_ms1_scan, resolve_ms2_scan
 from app.bu.services.theoretical_fragments import match_by_ions
-from app.schemas import BuSpectrumPrecursor, BuSpectrumV1
+from app.schemas import BuSpectrumMarker, BuSpectrumPrecursor, BuSpectrumV1
 from app.services import spectrum_memory_wiring
 from app.spectrum_memory import CapacityError, NotResidentError, get_mzml_run_spectra
 
@@ -59,7 +59,12 @@ def _precursor_payload(raw: dict[str, Any] | None) -> BuSpectrumPrecursor | None
     )
 
 
-def spectrum_v1(spec: dict[str, Any], *, matched_ions: list[Any] | None = None) -> BuSpectrumV1:
+def spectrum_v1(
+    spec: dict[str, Any],
+    *,
+    matched_ions: list[Any] | None = None,
+    markers: list[BuSpectrumMarker] | None = None,
+) -> BuSpectrumV1:
     rt_seconds = float(spec.get("rt_seconds") or 0.0)
     return BuSpectrumV1(
         scan=int(spec["scan"]),
@@ -71,6 +76,7 @@ def spectrum_v1(spec: dict[str, Any], *, matched_ions: list[Any] | None = None) 
         intensity=[float(v) for v in (spec.get("intensity") or [])],
         precursor=_precursor_payload(spec.get("precursor")),
         matched_ions=matched_ions or [],
+        markers=markers or [],
     )
 
 
@@ -99,6 +105,45 @@ def get_match_ms2(
         ppm=ppm,
     )
     return spectrum_v1(spec, matched_ions=matched_ions)
+
+
+def get_match_ms1(
+    session: Session,
+    dataset: dict[str, Any],
+    match: dict[str, Any],
+) -> BuSpectrumV1:
+    """Return SpectrumV1 for the match's nearby mzML MS1 scan."""
+    ensure_mzml_match(match)
+    dataset_id = int(dataset["dataset_id"])
+    run_id = int(match["run_id"])
+    spectra = get_run_spectra(session, dataset_id, run_id)
+    scan = resolve_ms1_scan(match, spectra)
+    spec = spectra.get(scan)
+    if spec is None or int(spec.get("ms_level") or 1) != 1:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="ms1_scan_not_found")
+    precursor_mz = match.get("precursor_mz")
+    charge_raw = match.get("precursor_charge")
+    try:
+        precursor_charge = int(charge_raw) if charge_raw is not None else None
+    except (TypeError, ValueError):
+        precursor_charge = None
+    markers: list[BuSpectrumMarker] = []
+    if precursor_mz is not None:
+        markers.append(
+            BuSpectrumMarker(
+                mz=float(precursor_mz),
+                label="precursor",
+                charge=precursor_charge,
+            )
+        )
+    spec_with_precursor = {
+        **spec,
+        "precursor": {
+            "selected_mz": precursor_mz,
+            "charge": precursor_charge,
+        },
+    }
+    return spectrum_v1(spec_with_precursor, markers=markers)
 
 
 def spectrum_not_implemented() -> None:

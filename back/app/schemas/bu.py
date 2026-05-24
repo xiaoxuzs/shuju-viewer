@@ -67,6 +67,35 @@ class BuProteinListItemOut(BaseModel):
     pg_quantity: float | None = None
 
 
+class BuCoverageSegment(BaseModel):
+    peptide_id: int
+    sequence: str
+    start: int | None = None
+    end: int | None = None
+    match_count: int = 0
+    best_q_value: float | None = None
+    is_ambiguous: bool = False
+    occurrence_index: int = 0
+
+
+class BuProteinPeptideRef(BaseModel):
+    peptide_id: int
+    sequence: str
+    modified_sequence: str | None = None
+    match_count: int = 0
+    best_q_value: float | None = None
+    best_match_id: int | None = None
+
+
+class BuProteinDetailOut(BuProteinListItemOut):
+    base_sequence: str | None = None
+    coverage_mode: Literal["full", "partial", "list_only", "decoy"]
+    coverage_percent: float | None = None
+    coverage_segments: list[BuCoverageSegment] = Field(default_factory=list)
+    peptides: list[BuProteinPeptideRef] = Field(default_factory=list)
+    extra_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class BuPeptideListItemOut(BaseModel):
     id: int
     sequence: str
@@ -188,6 +217,12 @@ class BuMatchedIon(BaseModel):
     intensity: float
 
 
+class BuSpectrumMarker(BaseModel):
+    mz: float
+    label: str
+    charge: int | None = None
+
+
 class BuSpectrumV1(BaseModel):
     scan: int
     native_id: str | None = None
@@ -198,6 +233,7 @@ class BuSpectrumV1(BaseModel):
     intensity: list[float] = Field(default_factory=list)
     precursor: BuSpectrumPrecursor | None = None
     matched_ions: list[BuMatchedIon] = Field(default_factory=list)
+    markers: list[BuSpectrumMarker] = Field(default_factory=list)
 
 
 class BuXicOut(BaseModel):

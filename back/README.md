@@ -34,6 +34,23 @@ uv run uvicorn app.main:app --reload --port 8000
 
 Visit http://localhost:8000/docs for the OpenAPI UI.
 
+## Offline Bottom-Up coverage
+
+Bottom-Up protein Sequence Coverage is offline by default:
+
+```powershell
+BU_UNIPROT_ENABLED=false
+```
+
+With this setting, protein detail pages never call UniProt. Coverage uses an
+existing `proteins.base_sequence` value or a single `*.fasta` / `*.fa` file
+placed anywhere under the dataset `source_root` (for example
+`reference/uniprot_human.fasta`). If no local sequence is available, the API
+returns `coverage_mode: "list_only"` and still shows the peptide table.
+
+Set `BU_UNIPROT_ENABLED=true` only when the deployment is allowed to lazily
+fetch `https://rest.uniprot.org/uniprotkb/{accession}.fasta`.
+
 ## Project layout
 
 ```

@@ -62,8 +62,15 @@ export function BuSpectrumChart({
   onOpenFull?: () => void;
   className?: string;
 }) {
-  const title = `MS2 scan #${spectrum.scan} (RT=${spectrum.rt_minutes.toFixed(2)} min) peptide: ${sequence} +${precursorCharge ?? "?"} m/z ${precursorMz?.toFixed(3) ?? "-"}`;
-  const subtitle = `matched ${spectrum.matched_ions.length}/${theoreticalCount(sequence)} theoretical b/y ions (±${ppm} ppm)`;
+  const markerMz = spectrum.markers?.find((marker) => marker.label === "precursor")?.mz ?? precursorMz;
+  const title =
+    spectrum.ms_level === 1
+      ? `MS1 scan #${spectrum.scan} (RT=${spectrum.rt_minutes.toFixed(2)} min) precursor m/z ${markerMz?.toFixed(4) ?? "-"}`
+      : `MS2 scan #${spectrum.scan} (RT=${spectrum.rt_minutes.toFixed(2)} min) peptide: ${sequence} +${precursorCharge ?? "?"} m/z ${precursorMz?.toFixed(3) ?? "-"}`;
+  const subtitle =
+    spectrum.ms_level === 1
+      ? `precursor marker ${markerMz?.toFixed(4) ?? "-"}${precursorCharge ? ` · charge +${precursorCharge}` : ""}`
+      : `matched ${spectrum.matched_ions.length}/${theoreticalCount(sequence)} theoretical b/y ions (±${ppm} ppm)`;
   const peaks = useMemo(() => {
     const mapped: ChartPeak[] = spectrum.mz.map((mz, index) => ({
       mz,
@@ -136,6 +143,7 @@ export function BuSpectrumChart({
     const yAxisG = g.append("g");
     const plotG = g.append("g").attr("clip-path", `url(#${clipId})`);
     const linesG = plotG.append("g");
+    const markersG = plotG.append("g").attr("pointer-events", "none");
     const labelsG = plotG.append("g").attr("pointer-events", "none");
     const brushG = g.append("g");
 
@@ -179,6 +187,30 @@ export function BuSpectrumChart({
         .attr("stroke", (d) => colorFor(d))
         .attr("stroke-width", (d) => (d.ion ? 1.8 : 0.7))
         .attr("opacity", (d) => (d.ion ? 1 : 0.85));
+
+      const visibleMarkers = (spectrum.markers ?? []).filter((marker) => marker.mz >= x0 && marker.mz <= x1);
+      markersG
+        .selectAll<SVGLineElement, NonNullable<BuSpectrumV1["markers"]>[number]>("line")
+        .data(visibleMarkers)
+        .join("line")
+        .attr("x1", (d) => xScale(d.mz))
+        .attr("x2", (d) => xScale(d.mz))
+        .attr("y1", 0)
+        .attr("y2", innerH)
+        .attr("stroke", BU_CHART.apex)
+        .attr("stroke-width", 1.6)
+        .attr("stroke-dasharray", "5,3");
+
+      markersG
+        .selectAll<SVGTextElement, NonNullable<BuSpectrumV1["markers"]>[number]>("text")
+        .data(visibleMarkers)
+        .join("text")
+        .attr("x", (d) => xScale(d.mz) + 5)
+        .attr("y", 14)
+        .attr("font-size", 11)
+        .attr("font-weight", 600)
+        .attr("fill", BU_CHART.apex)
+        .text((d) => `${d.label}${d.charge ? ` +${d.charge}` : ""}`);
 
       labelsG.selectAll("*").remove();
       const matched = visible.filter((p) => p.ion).sort((a, b) => b.intensity - a.intensity);
@@ -279,7 +311,7 @@ export function BuSpectrumChart({
       svgEl.removeEventListener("wheel", onWheel);
       applyZoomRef.current = null;
     };
-  }, [fullX, height, peaks, width]);
+  }, [fullX, height, peaks, spectrum.markers, width]);
 
   useEffect(() => {
     applyZoomRef.current?.(zoom);

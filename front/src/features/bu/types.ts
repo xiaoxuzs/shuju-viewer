@@ -55,6 +55,37 @@ export interface BuProteinListItemOut {
   pg_quantity: number | null;
 }
 
+export type BuCoverageMode = "full" | "partial" | "list_only" | "decoy";
+
+export interface BuCoverageSegment {
+  peptide_id: number;
+  sequence: string;
+  start: number | null;
+  end: number | null;
+  match_count: number;
+  best_q_value: number | null;
+  is_ambiguous: boolean;
+  occurrence_index: number;
+}
+
+export interface BuProteinPeptideRef {
+  peptide_id: number;
+  sequence: string;
+  modified_sequence: string | null;
+  match_count: number;
+  best_q_value: number | null;
+  best_match_id: number | null;
+}
+
+export interface BuProteinDetailOut extends BuProteinListItemOut {
+  base_sequence: string | null;
+  coverage_mode: BuCoverageMode;
+  coverage_percent: number | null;
+  coverage_segments: BuCoverageSegment[];
+  peptides: BuProteinPeptideRef[];
+  extra_metadata: Record<string, unknown>;
+}
+
 export interface BuPeptideListItemOut {
   id: number;
   sequence: string;
@@ -146,6 +177,12 @@ export interface BuMatchedIon {
   intensity: number;
 }
 
+export interface BuSpectrumMarker {
+  mz: number;
+  label: string;
+  charge: number | null;
+}
+
 export interface BuSpectrumV1 {
   scan: number;
   native_id: string | null;
@@ -156,6 +193,7 @@ export interface BuSpectrumV1 {
   intensity: number[];
   precursor: BuSpectrumPrecursor | null;
   matched_ions: BuMatchedIon[];
+  markers: BuSpectrumMarker[];
 }
 
 export interface BuXicOut {

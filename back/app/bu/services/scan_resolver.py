@@ -100,3 +100,43 @@ def resolve_ms2_scan(match: dict[str, Any], run_spectra: dict[int, dict[str, Any
         )
     candidates.sort(key=lambda item: (item[0], item[1]))
     return candidates[0][1]
+
+
+def resolve_ms1_scan(match: dict[str, Any], run_spectra: dict[int, dict[str, Any]]) -> int:
+    """Resolve the closest useful MS1 scan around the match RT apex."""
+    rt_apex = _rt_apex(match)
+    if rt_apex is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "ms1_scan_not_found",
+                "match_id": match.get("match_id"),
+                "rt_apex": rt_apex,
+            },
+        )
+
+    candidates: list[tuple[float, float, int]] = []
+    for spec_scan, spec in run_spectra.items():
+        if int(spec.get("ms_level") or 1) != 1:
+            continue
+        spec_rt = _as_float(spec.get("rt_seconds"))
+        if spec_rt is None:
+            continue
+        spec_rt_min = spec_rt / 60.0
+        delta = abs(spec_rt_min - rt_apex)
+        if delta > 0.25:
+            continue
+        tic = sum(float(value) for value in (spec.get("intensity") or []) if value is not None)
+        candidates.append((-tic, delta, int(spec_scan)))
+
+    if not candidates:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "ms1_scan_not_found",
+                "match_id": match.get("match_id"),
+                "rt_apex": rt_apex,
+            },
+        )
+    candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+    return candidates[0][2]
