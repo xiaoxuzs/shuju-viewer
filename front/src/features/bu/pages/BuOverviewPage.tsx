@@ -5,10 +5,12 @@ import { RotateCcw } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchBuOverview, fetchBuRunChromatogram } from "@/features/bu/api/buClient";
+import { fetchBuOverview, fetchBuRunChromatogram, fetchBuRunDiaWindows } from "@/features/bu/api/buClient";
 import { BuSummaryCards } from "@/features/bu/components/BuSummaryCards";
+import { RunSelector } from "@/features/bu/components/overview/RunSelector";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import { BuChromatogramChart } from "@/features/bu/components/spectrum/BuChromatogramChart";
+import { DiaWindowMap } from "@/features/bu/components/spectrum/DiaWindowMap";
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import { formatCount } from "@/features/bu/utils";
@@ -18,23 +20,37 @@ const ZOOM_HINT = "wheel to zoom (Shift = Y) · brush-drag = X";
 export function BuOverviewPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
   const [chromType, setChromType] = useState<"tic" | "bpc">("tic");
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [chromFullOpen, setChromFullOpen] = useState(false);
   const [chromModalZoom, setChromModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const { data, isLoading, error } = useQuery({
     queryKey: ["bu", dataset.slug, "overview"],
     queryFn: () => fetchBuOverview(dataset.slug),
   });
-  const mzmlRun = data?.runs.find((run) => run.raw_format === "mzml");
+  const defaultRun = data?.runs.find((run) => run.raw_format === "mzml") ?? data?.runs[0];
+  const selectedRun = data?.runs.find((run) => run.run_id === selectedRunId) ?? defaultRun;
   const chromatogram = useQuery({
-    queryKey: ["bu", dataset.slug, "chromatogram", mzmlRun?.run_id, chromType],
-    queryFn: () => fetchBuRunChromatogram(dataset.slug, mzmlRun!.run_id, chromType),
-    enabled: !!mzmlRun,
+    queryKey: ["bu", dataset.slug, "chromatogram", selectedRun?.run_id, chromType],
+    queryFn: () => fetchBuRunChromatogram(dataset.slug, selectedRun!.run_id, chromType),
+    enabled: !!selectedRun,
+  });
+  const diaWindows = useQuery({
+    queryKey: ["bu", dataset.slug, "dia-windows", selectedRun?.run_id],
+    queryFn: () => fetchBuRunDiaWindows(dataset.slug, selectedRun!.run_id),
+    enabled: selectedRun?.raw_format === "bruker_d",
   });
 
   useEffect(() => {
     setChromFullOpen(false);
     setChromModalZoom(DEFAULT_ZOOM);
-  }, [chromType, mzmlRun?.run_id]);
+  }, [chromType, selectedRun?.run_id]);
+
+  useEffect(() => {
+    if (!data) return;
+    const fallback = data.runs.find((run) => run.raw_format === "mzml") ?? data.runs[0];
+    if (!fallback) return;
+    setSelectedRunId((current) => (data.runs.some((run) => run.run_id === current) ? current : fallback.run_id));
+  }, [data]);
 
   if (isLoading) return <Skeleton className="h-64" />;
   if (error) return <p className="text-destructive">{(error as Error).message}</p>;
@@ -50,19 +66,22 @@ export function BuOverviewPage() {
             <CardTitle className="text-base">Run Chromatogram</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">{ZOOM_HINT}</p>
           </div>
-          <div className="flex rounded-md border border-border bg-muted/30 p-1 text-xs">
-            {(["tic", "bpc"] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => setChromType(type)}
-                className={`rounded px-3 py-1 uppercase transition-colors ${
-                  chromType === type ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {type}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <RunSelector runs={data.runs} selectedRunId={selectedRun?.run_id ?? null} onChange={setSelectedRunId} />
+            <div className="flex rounded-md border border-border bg-muted/30 p-1 text-xs">
+              {(["tic", "bpc"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setChromType(type)}
+                  className={`rounded px-3 py-1 uppercase transition-colors ${
+                    chromType === type ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -73,6 +92,19 @@ export function BuOverviewPage() {
           )}
         </CardContent>
       </Card>
+
+      {selectedRun?.raw_format === "bruker_d" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">DIA Isolation Windows</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {diaWindows.isLoading && <Skeleton className="h-72" />}
+            {diaWindows.error && <p className="text-destructive">{(diaWindows.error as Error).message}</p>}
+            {diaWindows.data && <DiaWindowMap diaWindows={diaWindows.data} />}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -27,6 +27,9 @@ dependencies = [
 dev = [
     "pytest>=9",
 ]
+bruker = [
+    "tdfpy>=0.1",
+]
 
 [tool.uv]
 default-groups = ["dev"]

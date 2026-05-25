@@ -216,6 +216,27 @@ export interface BuChromatogramOut {
   point_count_original: number;
 }
 
+export interface BuDiaWindowItem {
+  mz: number;
+  width: number;
+  label: string;
+}
+
+export interface BuDiaWindowsOut {
+  run_id: number;
+  window_count: number;
+  windows: BuDiaWindowItem[];
+}
+
+export interface BuMobilitySliceOut {
+  mz: number[];
+  one_over_k0: number[];
+  intensity: number[];
+  frame_id: number | null;
+  rt_min: number | null;
+  unit_rt: "min";
+}
+
 export interface BuListParams {
   page?: number;
   page_size?: number;

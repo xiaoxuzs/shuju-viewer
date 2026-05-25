@@ -6,7 +6,8 @@ import pytest
 from fastapi import HTTPException
 from pyteomics import mass
 
-from app.bu.services import chromatogram_service, spectrum_facade, xic_service
+from app.bu.services import chromatogram_service, mobility_service, spectrum_facade, xic_service
+from app.schemas import BuChromatogramOut, BuMobilitySliceOut
 
 
 def _match(*, raw_format: str = "mzml") -> dict[str, Any]:
@@ -128,15 +129,51 @@ def test_xic_uses_ms1_points_in_expanded_rt_window(monkeypatch: pytest.MonkeyPat
     assert out.intensity[1] > 0
 
 
-def test_chromatogram_rejects_bruker_run(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_bruker_match_xic_is_unsupported() -> None:
+    with pytest.raises(HTTPException) as exc:
+        xic_service.get_match_xic(None, {"dataset_id": 39}, _match(raw_format="bruker_d"))  # type: ignore[arg-type]
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "unsupported_raw_format"
+
+
+def test_chromatogram_accepts_bruker_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         chromatogram_service,
         "_run_row",
-        lambda *_args: {"run_id": 11, "run_metadata": {"raw_format": "bruker_d"}},
+        lambda *_args: {"run_id": 11, "file_path": "sample.d", "run_metadata": {"raw_format": "bruker_d"}},
+    )
+    monkeypatch.setattr(
+        chromatogram_service.tdf_chromatogram,
+        "get_chromatogram",
+        lambda **_kwargs: BuChromatogramOut(type="tic", rt=[1.0], intensity=[2.0], point_count_original=1),
     )
 
+    out = chromatogram_service.get_chromatogram(None, {"dataset_id": 39}, 11, chrom_type="tic")  # type: ignore[arg-type]
+
+    assert out.unit_rt == "min"
+    assert out.rt == [1.0]
+
+
+def test_mobility_slice_rejects_mzml_match() -> None:
     with pytest.raises(HTTPException) as exc:
-        chromatogram_service.get_chromatogram(None, {"dataset_id": 39}, 11, chrom_type="tic")  # type: ignore[arg-type]
+        mobility_service.get_match_mobility_slice({"dataset_id": 39}, _match(raw_format="mzml"))
 
     assert exc.value.status_code == 404
-    assert exc.value.detail == "incompatible_run_format"
+    assert exc.value.detail == "unsupported_raw_format"
+
+
+def test_mobility_slice_accepts_bruker_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        mobility_service.tdf_mobility_slice,
+        "get_mobility_slice",
+        lambda **_kwargs: BuMobilitySliceOut(mz=[500.0], one_over_k0=[1.1], intensity=[100.0], frame_id=7, rt_min=92.5),
+    )
+
+    out = mobility_service.get_match_mobility_slice(
+        {"dataset_id": 39},
+        {**_match(raw_format="bruker_d"), "file_path": "sample.d"},
+    )
+
+    assert out.frame_id == 7
+    assert out.mz == [500.0]

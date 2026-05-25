@@ -5,8 +5,15 @@ import { RotateCcw } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchBuMatch, fetchBuMatchMs1, fetchBuMatchMs2, fetchBuMatchXic } from "@/features/bu/api/buClient";
+import {
+  fetchBuMatch,
+  fetchBuMatchMobilitySlice,
+  fetchBuMatchMs1,
+  fetchBuMatchMs2,
+  fetchBuMatchXic,
+} from "@/features/bu/api/buClient";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
+import { MzMobilityScatter } from "@/features/bu/components/spectrum/MzMobilityScatter";
 import { BuSpectrumChart } from "@/features/bu/components/spectrum/BuSpectrumChart";
 import { BuXicChart } from "@/features/bu/components/spectrum/BuXicChart";
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
@@ -33,6 +40,7 @@ export function BuMatchDetailPage() {
     enabled: Number.isFinite(parsedMatchId),
   });
   const isMzml = data?.run.raw_format === "mzml";
+  const isBruker = data?.run.raw_format === "bruker_d";
   const xic = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "xic", XIC_PPM],
     queryFn: () => fetchBuMatchXic(dataset.slug, parsedMatchId, XIC_PPM),
@@ -47,6 +55,11 @@ export function BuMatchDetailPage() {
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms1"],
     queryFn: () => fetchBuMatchMs1(dataset.slug, parsedMatchId),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
+  });
+  const mobility = useQuery({
+    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "mobility-slice"],
+    queryFn: () => fetchBuMatchMobilitySlice(dataset.slug, parsedMatchId),
+    enabled: !!isBruker && Number.isFinite(parsedMatchId),
   });
 
   useEffect(() => {
@@ -142,11 +155,26 @@ export function BuMatchDetailPage() {
           )}
         </>
       ) : (
-        <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground">
-            D10: Bruker .d match-level MS2/XIC is not supported in v1.
-          </CardContent>
-        </Card>
+        <>
+          <Card>
+            <CardContent className="p-6 text-sm text-muted-foreground">
+              D10: Bruker .d match-level MS2/XIC is not supported in v1.
+            </CardContent>
+          </Card>
+          {isBruker && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">m/z × 1/K0 slice</CardTitle>
+                <p className="text-xs text-muted-foreground">Bruker .d MS1 frame nearest to the match RT apex</p>
+              </CardHeader>
+              <CardContent>
+                {mobility.isLoading && <Skeleton className="h-72" />}
+                {mobility.error && <p className="text-destructive">{(mobility.error as Error).message}</p>}
+                {mobility.data && <MzMobilityScatter slice={mobility.data} />}
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       {xicFullOpen && xic.data && (

@@ -254,3 +254,24 @@ class BuChromatogramOut(BaseModel):
     intensity: list[float] = Field(default_factory=list)
     downsampled: bool = False
     point_count_original: int = 0
+
+
+class BuDiaWindowItem(BaseModel):
+    mz: float
+    width: float
+    label: str
+
+
+class BuDiaWindowsOut(BaseModel):
+    run_id: int
+    window_count: int
+    windows: list[BuDiaWindowItem] = Field(default_factory=list)
+
+
+class BuMobilitySliceOut(BaseModel):
+    mz: list[float] = Field(default_factory=list)
+    one_over_k0: list[float] = Field(default_factory=list)
+    intensity: list[float] = Field(default_factory=list)
+    frame_id: int | None = None
+    rt_min: float | None = None
+    unit_rt: Literal["min"] = "min"

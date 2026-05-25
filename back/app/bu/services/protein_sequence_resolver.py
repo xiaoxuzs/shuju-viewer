@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.bu.services.peptide_mapper import normalize_aa
+from app.bu.services.fasta_index import discover_unique_fasta, load_fasta_index, normalize_aa
 from app.core.config import settings
 
 
@@ -136,45 +136,15 @@ def _load_dataset_fasta(source_root: str) -> dict[str, str] | None:
 
     root = Path(source_root)
     index: dict[str, str] | None = None
-    if root.exists() and root.is_dir():
-        fasta_files = [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in {".fa", ".fasta"}]
-        if len(fasta_files) == 1:
-            index = _read_fasta(fasta_files[0])
+    fasta_path = discover_unique_fasta(root)
+    if fasta_path is not None:
+        index = load_fasta_index(fasta_path)
 
     _FASTA_CACHE[source_root] = index
     _FASTA_CACHE.move_to_end(source_root)
     while len(_FASTA_CACHE) > _FASTA_CACHE_SIZE:
         _FASTA_CACHE.popitem(last=False)
     return index
-
-
-def _read_fasta(path: Path) -> dict[str, str]:
-    records: dict[str, str] = {}
-    current_accession: str | None = None
-    current_lines: list[str] = []
-    with path.open("r", encoding="utf-8", errors="ignore") as handle:
-        for raw_line in handle:
-            line = raw_line.strip()
-            if not line:
-                continue
-            if line.startswith(">"):
-                if current_accession and current_lines:
-                    records[current_accession.upper()] = normalize_aa("".join(current_lines))
-                current_accession = _accession_from_fasta_header(line)
-                current_lines = []
-            else:
-                current_lines.append(line)
-        if current_accession and current_lines:
-            records[current_accession.upper()] = normalize_aa("".join(current_lines))
-    return records
-
-
-def _accession_from_fasta_header(header: str) -> str:
-    token = header[1:].strip().split(None, 1)[0]
-    parts = token.split("|")
-    if len(parts) >= 2 and parts[0].lower() in {"sp", "tr"}:
-        return parts[1]
-    return parts[0]
 
 
 def _fetch_uniprot_cached(accession: str) -> tuple[str | None, dict[str, Any]]:

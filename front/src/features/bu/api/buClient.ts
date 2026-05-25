@@ -2,7 +2,9 @@ import { api } from "@/api/client";
 import type {
   BuListParams,
   BuChromatogramOut,
+  BuDiaWindowsOut,
   BuMatchDetailOut,
+  BuMobilitySliceOut,
   BuMatchPage,
   BuOverviewOut,
   BuPeptidePage,
@@ -78,6 +80,11 @@ export async function fetchBuMatchXic(
   return data;
 }
 
+export async function fetchBuMatchMobilitySlice(slug: string, matchId: number): Promise<BuMobilitySliceOut> {
+  const { data } = await api.get<BuMobilitySliceOut>(`/datasets/${slug}/matches/${matchId}/mobility-slice`);
+  return data;
+}
+
 export async function fetchBuRunChromatogram(
   slug: string,
   runId: number,
@@ -86,5 +93,10 @@ export async function fetchBuRunChromatogram(
   const { data } = await api.get<BuChromatogramOut>(`/datasets/${slug}/runs/${runId}/chromatogram`, {
     params: { type },
   });
+  return data;
+}
+
+export async function fetchBuRunDiaWindows(slug: string, runId: number): Promise<BuDiaWindowsOut> {
+  const { data } = await api.get<BuDiaWindowsOut>(`/datasets/${slug}/runs/${runId}/dia-windows`);
   return data;
 }

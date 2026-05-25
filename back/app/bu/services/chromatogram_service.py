@@ -8,8 +8,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.bu.tdf_reader import chromatogram as tdf_chromatogram
+from app.bu.tdf_reader import dia_windows as tdf_dia_windows
+from app.bu.tdf_reader.session_cache import TdfpyUnavailable
 from app.bu.services.spectrum_facade import get_run_spectra
-from app.schemas import BuChromatogramOut
+from app.schemas import BuChromatogramOut, BuDiaWindowsOut
 
 MAX_POINTS = 8000
 
@@ -22,7 +25,7 @@ def _run_row(session: Session, dataset_id: int, run_id: int) -> dict[str, Any]:
     row = session.execute(
         text(
             """
-            SELECT run_id, run_metadata
+            SELECT run_id, file_path, run_metadata
             FROM runs
             WHERE dataset_id = :dataset_id AND run_id = :run_id
             """
@@ -52,7 +55,15 @@ def get_chromatogram(
     dataset_id = int(dataset["dataset_id"])
     run = _run_row(session, dataset_id, run_id)
     run_meta = _json_object(run.get("run_metadata"))
-    if str(run_meta.get("raw_format") or "").lower() != "mzml":
+    raw_format = str(run_meta.get("raw_format") or "").lower()
+    if raw_format == "bruker_d":
+        try:
+            return tdf_chromatogram.get_chromatogram(dataset_id=dataset_id, run=run, chrom_type=chrom_type)
+        except TdfpyUnavailable as exc:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="tdfpy_unavailable") from exc
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc) or "tdf_not_found") from exc
+    if raw_format != "mzml":
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="incompatible_run_format")
 
     spectra = get_run_spectra(session, dataset_id, run_id)
@@ -79,6 +90,20 @@ def get_chromatogram(
         downsampled=downsampled,
         point_count_original=original,
     )
+
+
+def get_dia_windows(session: Session, dataset: dict[str, Any], run_id: int) -> BuDiaWindowsOut:
+    dataset_id = int(dataset["dataset_id"])
+    run = _run_row(session, dataset_id, run_id)
+    run_meta = _json_object(run.get("run_metadata"))
+    if str(run_meta.get("raw_format") or "").lower() != "bruker_d":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="incompatible_run_format")
+    try:
+        return tdf_dia_windows.get_dia_windows(dataset_id=dataset_id, run=run)
+    except TdfpyUnavailable as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="tdfpy_unavailable") from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc) or "tdf_not_found") from exc
 
 
 def unsupported() -> None:

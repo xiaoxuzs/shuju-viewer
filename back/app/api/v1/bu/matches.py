@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.bu.deps import require_bu_dataset, require_bu_match
-from app.bu.services import lists_service, spectrum_facade, xic_service
-from app.schemas import BuMatchDetailOut, BuSpectrumV1, BuXicOut
+from app.bu.services import lists_service, mobility_service, spectrum_facade, xic_service
+from app.schemas import BuMatchDetailOut, BuMobilitySliceOut, BuSpectrumV1, BuXicOut
 
 router = APIRouter()
 
@@ -39,3 +39,10 @@ def match_ms1(slug: str, match_id: int, session: Session = Depends(get_db)) -> B
     dataset = require_bu_dataset(session, slug)
     match = require_bu_match(session, int(dataset["dataset_id"]), match_id)
     return spectrum_facade.get_match_ms1(session, dataset, match)
+
+
+@router.get("/datasets/{slug}/matches/{match_id}/mobility-slice", response_model=BuMobilitySliceOut)
+def match_mobility_slice(slug: str, match_id: int, session: Session = Depends(get_db)) -> BuMobilitySliceOut:
+    dataset = require_bu_dataset(session, slug)
+    match = require_bu_match(session, int(dataset["dataset_id"]), match_id)
+    return mobility_service.get_match_mobility_slice(dataset, match)

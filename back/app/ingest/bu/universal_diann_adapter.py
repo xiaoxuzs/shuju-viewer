@@ -12,6 +12,7 @@ from rich.console import Console
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
 
+from app.bu.services.protein_sequence_backfill import backfill_protein_sequences_from_fasta
 from app.ingest.bu.diann_parquet_reader import find_diann_report, inspect_report, iter_filtered_rows, sibling_file
 from app.ingest.bu.field_mapping import (
     Q_VALUE_CUTOFF,
@@ -172,6 +173,7 @@ def ingest_universal_diann(
             proteins=proteins,
             descriptions=description_by_accession,
         )
+        sequence_backfill_stats = backfill_protein_sequences_from_fasta(conn, dataset_id=dataset_id, source_root=root)
         _emit(progress_callback, ProgressEvent("proteins", None, len(proteins), max(len(proteins), 1), "蛋白完成"))
 
         _emit(progress_callback, ProgressEvent("peptides", None, 0, max(len(peptides), 1), "导入肽段"))
@@ -217,6 +219,7 @@ def ingest_universal_diann(
                             "unique_peptides": len(peptides),
                             "unique_proteins": len(proteins),
                             "protein_relations": relation_count,
+                            "sequence_backfill": sequence_backfill_stats,
                         }
                     }
                 ),

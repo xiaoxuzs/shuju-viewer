@@ -45,11 +45,38 @@ BU_UNIPROT_ENABLED=false
 With this setting, protein detail pages never call UniProt. Coverage uses an
 existing `proteins.base_sequence` value or a single `*.fasta` / `*.fa` file
 placed anywhere under the dataset `source_root` (for example
-`reference/uniprot_human.fasta`). If no local sequence is available, the API
-returns `coverage_mode: "list_only"` and still shows the peptide table.
+`reference/uniprot_human.fasta`). New Bottom-Up imports automatically backfill
+`proteins.base_sequence` from that unique FASTA when it exists. Existing
+datasets can be backfilled without re-importing matches:
+
+```powershell
+cd back
+uv run python scripts/backfill_bu_protein_sequences.py --slug bu_pr1_dia
+```
+
+If no local sequence is available, or if more than one FASTA is found under the
+ingest root, the API returns `coverage_mode: "list_only"` and still shows the
+peptide table.
 
 Set `BU_UNIPROT_ENABLED=true` only when the deployment is allowed to lazily
 fetch `https://rest.uniprot.org/uniprotkb/{accession}.fasta`.
+
+## Bruker `.d` runtime support
+
+Bottom-Up datasets with Bruker `.d` runs use the optional `tdfpy` reader for
+run-level TIC/BPC chromatograms, DIA isolation windows, and the match-level
+m/z by ion-mobility slice. Install the optional group on hosts that need these
+views:
+
+```powershell
+cd back
+uv sync --group bruker
+```
+
+The run `file_path` or `run_metadata.tdf_path` must point to a readable Bruker
+TDF root containing `analysis.tdf` and `analysis.tdf_bin`. This does not enable
+Bruker match-level MS2 or XIC; v1 still returns `unsupported_raw_format` for
+those endpoints.
 
 ## Project layout
 
