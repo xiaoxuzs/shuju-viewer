@@ -1,4 +1,4 @@
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { Pagination } from "@/components/common/pagination";
@@ -9,21 +9,24 @@ import { BuListFilters } from "@/features/bu/components/BuListFilters";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import type { BuProteinListItemOut } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
+import { clearListParams, setListParam } from "@/features/bu/utils/listParams";
 
 export function BuProteinsPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = Number(searchParams.get("page") ?? "1") || 1;
   const search = searchParams.get("search") ?? "";
+  const hideDecoy = searchParams.get("decoy") !== "true";
   const pageSize = 50;
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["bu", dataset.slug, "proteins", page, search],
+    queryKey: ["bu", dataset.slug, "proteins", page, search, hideDecoy],
     queryFn: () =>
       fetchBuProteins(dataset.slug, {
         page,
         page_size: pageSize,
         search: search || undefined,
+        decoy: !hideDecoy,
         sort: "pg_max_lfq",
         order: "desc",
       }),
@@ -33,6 +36,21 @@ export function BuProteinsPage() {
     { key: "accession", header: "Accession", render: (row) => row.accession },
     { key: "gene", header: "Gene", render: (row) => row.gene_name ?? "-" },
     { key: "description", header: "Description", render: (row) => row.description ?? "-" },
+    {
+      key: "group",
+      header: "Protein group",
+      render: (row) => (
+        <span title={row.protein_group ?? undefined} className="block max-w-[180px] truncate">
+          {row.protein_group ?? "-"}
+        </span>
+      ),
+    },
+    {
+      key: "lfq",
+      header: "PG MaxLFQ",
+      className: "text-right font-mono text-xs",
+      render: (row) => formatDecimal(row.pg_max_lfq),
+    },
     {
       key: "peptides",
       header: "Peptides",
@@ -51,6 +69,19 @@ export function BuProteinsPage() {
       className: "text-right font-mono text-xs",
       render: (row) => formatDecimal(row.best_q_value),
     },
+    {
+      key: "actions",
+      header: "",
+      className: "text-right",
+      render: (row) => (
+        <Link
+          className="text-xs font-medium text-primary hover:underline"
+          to={`/datasets/${dataset.slug}/matches?protein_id=${row.id}`}
+        >
+          View matches
+        </Link>
+      ),
+    },
   ];
 
   if (error) return <p className="text-destructive">{(error as Error).message}</p>;
@@ -60,6 +91,12 @@ export function BuProteinsPage() {
       <BuListFilters
         search={search}
         onSearchChange={(value) => setListParam(searchParams, setSearchParams, "search", value)}
+        showDecoyToggle
+        hideDecoy={hideDecoy}
+        onHideDecoyChange={(checked) =>
+          setListParam(searchParams, setSearchParams, "decoy", checked ? "" : "true")
+        }
+        onReset={() => clearListParams(searchParams, setSearchParams, ["search", "decoy"])}
       />
       <BuDataTable
         columns={columns}
@@ -77,18 +114,4 @@ export function BuProteinsPage() {
       />
     </div>
   );
-}
-
-function setListParam(
-  searchParams: URLSearchParams,
-  setSearchParams: (nextInit: URLSearchParams) => void,
-  key: string,
-  value: string,
-  resetPage = true,
-) {
-  const next = new URLSearchParams(searchParams);
-  if (value.trim()) next.set(key, value.trim());
-  else next.delete(key);
-  if (resetPage) next.set("page", "1");
-  setSearchParams(next);
 }

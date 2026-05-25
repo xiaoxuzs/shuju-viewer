@@ -12,6 +12,7 @@ import {
   fetchBuMatchMs2,
   fetchBuMatchXic,
 } from "@/features/bu/api/buClient";
+import { BuFragmentTable } from "@/features/bu/components/match-detail/BuFragmentTable";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import { MzMobilityScatter } from "@/features/bu/components/spectrum/MzMobilityScatter";
 import { BuSpectrumChart } from "@/features/bu/components/spectrum/BuSpectrumChart";
@@ -150,6 +151,7 @@ export function BuMatchDetailPage() {
                   ppm={MS2_PPM}
                   onOpenFull={() => setMs2FullOpen(true)}
                 />
+                <BuFragmentTable ions={ms2.data.matched_ions} />
               </CardContent>
             </Card>
           )}

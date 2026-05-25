@@ -7,6 +7,7 @@ import type {
   BuMobilitySliceOut,
   BuMatchPage,
   BuOverviewOut,
+  BuPeptideDetailOut,
   BuPeptidePage,
   BuProteinDetailOut,
   BuProteinPage,
@@ -52,6 +53,11 @@ export async function fetchBuPeptides(
   params: BuListParams = {},
 ): Promise<BuPeptidePage> {
   const { data } = await api.get<BuPeptidePage>(`/datasets/${slug}/peptides`, { params });
+  return data;
+}
+
+export async function fetchBuPeptide(slug: string, peptideId: number): Promise<BuPeptideDetailOut> {
+  const { data } = await api.get<BuPeptideDetailOut>(`/datasets/${slug}/peptides/${peptideId}`);
   return data;
 }
 

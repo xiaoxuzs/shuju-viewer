@@ -34,7 +34,7 @@ export function BuProteinDetailPage() {
 
   return (
     <div className="space-y-4">
-      <BuProteinHeader protein={data} />
+      <BuProteinHeader slug={dataset.slug} protein={data} />
       <SequenceCoverage protein={data} />
       <BuPeptideLinksTable slug={dataset.slug} protein={data} />
     </div>

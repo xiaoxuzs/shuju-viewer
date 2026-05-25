@@ -33,7 +33,14 @@ export function BuPeptideLinksTable({ slug, protein }: { slug: string; protein: 
             <tbody>
               {protein.peptides.map((peptide) => (
                 <tr key={peptide.peptide_id} className="border-b border-border/60 last:border-0">
-                  <td className="py-2 font-mono">{peptide.sequence}</td>
+                  <td className="py-2 font-mono">
+                    <Link
+                      className="font-medium text-primary hover:underline"
+                      to={`/datasets/${slug}/peptides/${peptide.peptide_id}`}
+                    >
+                      {peptide.sequence}
+                    </Link>
+                  </td>
                   <td className="max-w-[260px] truncate py-2 text-muted-foreground">
                     {peptide.modified_sequence ?? "-"}
                   </td>

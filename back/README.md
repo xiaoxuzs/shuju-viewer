@@ -78,6 +78,16 @@ TDF root containing `analysis.tdf` and `analysis.tdf_bin`. This does not enable
 Bruker match-level MS2 or XIC; v1 still returns `unsupported_raw_format` for
 those endpoints.
 
+## Bottom-Up delivery notes
+
+The sample data package README at `D:\dia-shuju\README.md` has a Viewer
+handoff section with the exact local URLs, the `bu_pr1_dia` slug, FASTA
+backfill steps for offline Sequence Coverage, and Bruker `.d` setup notes.
+
+The checked acceptance record for the Bottom-Up Viewer handoff lives in
+`..\docs\BU-ACCEPTANCE.md`. Re-run the commands in that file before cutting a
+release or sharing a new machine setup.
+
 ## Project layout
 
 ```

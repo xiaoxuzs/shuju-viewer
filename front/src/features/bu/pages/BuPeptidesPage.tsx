@@ -1,4 +1,4 @@
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { Pagination } from "@/components/common/pagination";
@@ -9,21 +9,25 @@ import { BuListFilters } from "@/features/bu/components/BuListFilters";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import type { BuPeptideListItemOut } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
+import { clearListParams, setListParam } from "@/features/bu/utils/listParams";
 
 export function BuPeptidesPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = Number(searchParams.get("page") ?? "1") || 1;
   const search = searchParams.get("search") ?? "";
+  const qMaxText = searchParams.get("q_max") ?? "";
+  const qMax = Number(qMaxText);
   const pageSize = 50;
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["bu", dataset.slug, "peptides", page, search],
+    queryKey: ["bu", dataset.slug, "peptides", page, search, qMaxText],
     queryFn: () =>
       fetchBuPeptides(dataset.slug, {
         page,
         page_size: pageSize,
         search: search || undefined,
+        q_max: qMaxText && Number.isFinite(qMax) ? qMax : undefined,
         sort: "best_q_value",
         order: "asc",
       }),
@@ -51,6 +55,19 @@ export function BuPeptidesPage() {
       className: "text-right font-mono text-xs",
       render: (row) => formatDecimal(row.best_q_value),
     },
+    {
+      key: "actions",
+      header: "",
+      className: "text-right",
+      render: (row) => (
+        <Link
+          className="text-xs font-medium text-primary hover:underline"
+          to={`/datasets/${dataset.slug}/matches?search=${encodeURIComponent(row.sequence)}`}
+        >
+          All matches
+        </Link>
+      ),
+    },
   ];
 
   if (error) return <p className="text-destructive">{(error as Error).message}</p>;
@@ -60,6 +77,10 @@ export function BuPeptidesPage() {
       <BuListFilters
         search={search}
         onSearchChange={(value) => setListParam(searchParams, setSearchParams, "search", value)}
+        showQMax
+        qMax={qMaxText}
+        onQMaxChange={(value) => setListParam(searchParams, setSearchParams, "q_max", value)}
+        onReset={() => clearListParams(searchParams, setSearchParams, ["search", "q_max"])}
       />
       <BuDataTable
         columns={columns}
@@ -67,6 +88,7 @@ export function BuPeptidesPage() {
         isLoading={isLoading}
         emptyTitle="No peptides"
         emptyDescription="No peptide rows match the current filters."
+        rowHref={(row) => `/datasets/${dataset.slug}/peptides/${row.id}`}
       />
       <Pagination
         page={page}
@@ -76,18 +98,4 @@ export function BuPeptidesPage() {
       />
     </div>
   );
-}
-
-function setListParam(
-  searchParams: URLSearchParams,
-  setSearchParams: (nextInit: URLSearchParams) => void,
-  key: string,
-  value: string,
-  resetPage = true,
-) {
-  const next = new URLSearchParams(searchParams);
-  if (value.trim()) next.set(key, value.trim());
-  else next.delete(key);
-  if (resetPage) next.set("page", "1");
-  setSearchParams(next);
 }

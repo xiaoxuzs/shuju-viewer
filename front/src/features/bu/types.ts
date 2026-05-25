@@ -114,6 +114,36 @@ export interface BuPeptideListItemOut {
   example_modified: string | null;
 }
 
+export interface BuPeptideProteinRef {
+  protein_id: number;
+  accession: string;
+  gene_name: string | null;
+  protein_group: string | null;
+  is_unique: boolean;
+}
+
+export interface BuPeptideMatchSummaryItem {
+  id: number;
+  run_id: number;
+  run_name: string;
+  precursor_mz: number | null;
+  precursor_charge: number | null;
+  retention_time: number | null;
+  q_value: number | null;
+  intensity: number | null;
+}
+
+export interface BuPeptideMatchesSummary {
+  total: number;
+  items: BuPeptideMatchSummaryItem[];
+}
+
+export interface BuPeptideDetailOut extends BuPeptideListItemOut {
+  proteins: BuPeptideProteinRef[];
+  matches_summary: BuPeptideMatchesSummary;
+  extra_metadata: Record<string, unknown>;
+}
+
 export interface BuMatchListItemOut {
   id: number;
   run_id: number;

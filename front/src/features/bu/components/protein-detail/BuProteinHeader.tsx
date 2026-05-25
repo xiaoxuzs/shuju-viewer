@@ -1,9 +1,12 @@
+import { Link } from "react-router-dom";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BuProteinDetailOut } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
 
-export function BuProteinHeader({ protein }: { protein: BuProteinDetailOut }) {
+export function BuProteinHeader({ slug, protein }: { slug: string; protein: BuProteinDetailOut }) {
   return (
     <Card>
       <CardHeader>
@@ -15,6 +18,9 @@ export function BuProteinHeader({ protein }: { protein: BuProteinDetailOut }) {
           <div className="flex flex-wrap gap-2">
             {protein.gene_name && <Badge variant="secondary">{protein.gene_name}</Badge>}
             {protein.is_decoy && <Badge variant="outline">decoy</Badge>}
+            <Button asChild size="sm" variant="outline">
+              <Link to={`/datasets/${slug}/matches?protein_id=${protein.id}`}>View all matches</Link>
+            </Button>
           </div>
         </div>
       </CardHeader>

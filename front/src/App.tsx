@@ -21,6 +21,7 @@ import { BuPeptidesPage } from "@/features/bu/pages/BuPeptidesPage";
 import { BuMatchesPage } from "@/features/bu/pages/BuMatchesPage";
 import { BuMatchDetailPage } from "@/features/bu/pages/BuMatchDetailPage";
 import { BuProteinDetailPage } from "@/features/bu/pages/BuProteinDetailPage";
+import { BuPeptideDetailPage } from "@/features/bu/pages/BuPeptideDetailPage";
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="proteins" element={<BuModeOnly><BuProteinsPage /></BuModeOnly>} />
           <Route path="proteins/:proteinId" element={<BuModeOnly><BuProteinDetailPage /></BuModeOnly>} />
           <Route path="peptides" element={<BuModeOnly><BuPeptidesPage /></BuModeOnly>} />
+          <Route path="peptides/:peptideId" element={<BuModeOnly><BuPeptideDetailPage /></BuModeOnly>} />
           <Route path="matches" element={<BuModeOnly><BuMatchesPage /></BuModeOnly>} />
           <Route path="matches/:matchId" element={<BuModeOnly><BuMatchDetailPage /></BuModeOnly>} />
         </Route>
