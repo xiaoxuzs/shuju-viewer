@@ -52,6 +52,17 @@ class BuOverviewOut(BaseModel):
     created_at: datetime
 
 
+class BuRtMzHeatmapOut(BaseModel):
+    unit_rt: Literal["min"] = "min"
+    unit_mz: Literal["Th"] = "Th"
+    rt_edges: list[float] = Field(default_factory=list)
+    mz_edges: list[float] = Field(default_factory=list)
+    counts: list[list[int]] = Field(default_factory=list)
+    max_count: int = 0
+    total_points: int = 0
+    run_id: int | None = None
+
+
 class BuProteinListItemOut(BaseModel):
     id: int
     accession: str

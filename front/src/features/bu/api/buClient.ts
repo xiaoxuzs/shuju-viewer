@@ -10,12 +10,27 @@ import type {
   BuPeptidePage,
   BuProteinDetailOut,
   BuProteinPage,
+  BuRtMzHeatmapOut,
   BuSpectrumV1,
   BuXicOut,
 } from "@/features/bu/types";
 
 export async function fetchBuOverview(slug: string): Promise<BuOverviewOut> {
   const { data } = await api.get<BuOverviewOut>(`/datasets/${slug}/overview`);
+  return data;
+}
+
+export async function fetchBuRtMzHeatmap(
+  slug: string,
+  params: {
+    run_id?: number;
+    q_max?: number;
+    bins_rt?: number;
+    bins_mz?: number;
+    decoy?: boolean;
+  } = {},
+): Promise<BuRtMzHeatmapOut> {
+  const { data } = await api.get<BuRtMzHeatmapOut>(`/datasets/${slug}/overview/rt-mz`, { params });
   return data;
 }
 

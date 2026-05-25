@@ -40,6 +40,17 @@ export interface BuOverviewOut {
   created_at: string;
 }
 
+export interface BuRtMzHeatmapOut {
+  unit_rt: "min";
+  unit_mz: "Th";
+  rt_edges: number[];
+  mz_edges: number[];
+  counts: number[][];
+  max_count: number;
+  total_points: number;
+  run_id: number | null;
+}
+
 export interface BuProteinListItemOut {
   id: number;
   accession: string;

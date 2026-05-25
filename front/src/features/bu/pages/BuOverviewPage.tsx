@@ -5,9 +5,16 @@ import { RotateCcw } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchBuOverview, fetchBuRunChromatogram, fetchBuRunDiaWindows } from "@/features/bu/api/buClient";
+import {
+  fetchBuOverview,
+  fetchBuRtMzHeatmap,
+  fetchBuRunChromatogram,
+  fetchBuRunDiaWindows,
+} from "@/features/bu/api/buClient";
 import { BuSummaryCards } from "@/features/bu/components/BuSummaryCards";
+import { BuQcStats } from "@/features/bu/components/overview/BuQcStats";
 import { RunSelector } from "@/features/bu/components/overview/RunSelector";
+import { RtMzMiniHeatmap } from "@/features/bu/components/overview/RtMzMiniHeatmap";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import { BuChromatogramChart } from "@/features/bu/components/spectrum/BuChromatogramChart";
 import { DiaWindowMap } from "@/features/bu/components/spectrum/DiaWindowMap";
@@ -29,6 +36,7 @@ export function BuOverviewPage() {
   });
   const defaultRun = data?.runs.find((run) => run.raw_format === "mzml") ?? data?.runs[0];
   const selectedRun = data?.runs.find((run) => run.run_id === selectedRunId) ?? defaultRun;
+  const qMax = data?.q_value_cutoff ?? 0.01;
   const chromatogram = useQuery({
     queryKey: ["bu", dataset.slug, "chromatogram", selectedRun?.run_id, chromType],
     queryFn: () => fetchBuRunChromatogram(dataset.slug, selectedRun!.run_id, chromType),
@@ -38,6 +46,18 @@ export function BuOverviewPage() {
     queryKey: ["bu", dataset.slug, "dia-windows", selectedRun?.run_id],
     queryFn: () => fetchBuRunDiaWindows(dataset.slug, selectedRun!.run_id),
     enabled: selectedRun?.raw_format === "bruker_d",
+  });
+  const rtMz = useQuery({
+    queryKey: ["bu", dataset.slug, "rt-mz", selectedRun?.run_id, qMax],
+    queryFn: () =>
+      fetchBuRtMzHeatmap(dataset.slug, {
+        run_id: selectedRun?.run_id,
+        q_max: qMax,
+        bins_rt: 80,
+        bins_mz: 80,
+        decoy: false,
+      }),
+    enabled: !!data && !!selectedRun,
   });
 
   useEffect(() => {
@@ -59,6 +79,7 @@ export function BuOverviewPage() {
   return (
     <div className="space-y-5">
       <BuSummaryCards overview={data} />
+      <BuQcStats overview={data} />
 
       <Card>
         <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-start sm:justify-between">
@@ -90,6 +111,17 @@ export function BuOverviewPage() {
           {chromatogram.data && (
             <BuChromatogramChart chromatogram={chromatogram.data} onOpenFull={() => setChromFullOpen(true)} />
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">RT-m/z Identifications</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {rtMz.isLoading && <Skeleton className="h-72" />}
+          {rtMz.error && <p className="text-destructive">{(rtMz.error as Error).message}</p>}
+          {rtMz.data && <RtMzMiniHeatmap heatmap={rtMz.data} />}
         </CardContent>
       </Card>
 

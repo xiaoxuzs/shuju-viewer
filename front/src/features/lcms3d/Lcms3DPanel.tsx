@@ -35,16 +35,16 @@ export function Lcms3DPanel({ peaks, scan, retentionTimeSeconds }: Props) {
     <Card className="mb-6">
       <CardHeader className="flex flex-row items-baseline justify-between gap-3">
         <div>
-          <CardTitle className="text-base">LC-MS 单扫描 3D 谱图</CardTitle>
+          <CardTitle className="text-base">LC-MS Single Scan 3D Spectrum</CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            选中 MS1 扫描的三维棒状谱图（X: m/z，Y: 强度，颜色: Viridis）
+            3D bar spectrum of the selected MS1 scan (X: m/z, Y: Intensity, Color: Viridis)
           </p>
         </div>
         <span className="font-mono text-xs text-muted-foreground">{subtitle}</span>
       </CardHeader>
       <CardContent>
         {cleanPeaks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">该扫描暂无可显示的峰。</p>
+          <p className="text-sm text-muted-foreground">No peaks to display for this scan.</p>
         ) : (
           <ThreeLcmsScene peaks={cleanPeaks} height={480} />
         )}

@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.schemas import BuOverviewOut, BuOverviewCounts, BuQcBlock, BuRunSummary
+from app.schemas import BuOverviewOut, BuOverviewCounts, BuQcBlock, BuRtMzHeatmapOut, BuRunSummary
 
 
 def _json_object(raw: Any) -> dict[str, Any]:
@@ -119,3 +119,84 @@ def get_overview(session: Session, dataset: dict[str, Any]) -> BuOverviewOut:
         created_at=dataset["created_at"],
     )
 
+
+def get_rt_mz_heatmap(
+    session: Session,
+    dataset: dict[str, Any],
+    *,
+    run_id: int | None,
+    q_max: float,
+    bins_rt: int,
+    bins_mz: int,
+    decoy: bool,
+) -> BuRtMzHeatmapOut:
+    dataset_id = int(dataset["dataset_id"])
+    clauses = [
+        "dataset_id = :dataset_id",
+        "entity_type = 'PEPTIDE'",
+        "q_value <= :q_max",
+        "retention_time IS NOT NULL",
+        "precursor_mz IS NOT NULL",
+    ]
+    params: dict[str, Any] = {"dataset_id": dataset_id, "q_max": q_max}
+    if run_id is not None:
+        clauses.append("run_id = :run_id")
+        params["run_id"] = run_id
+    if not decoy:
+        clauses.append("COALESCE(is_decoy_match, false) = false")
+
+    rows = session.execute(
+        text(
+            f"""
+            SELECT retention_time, precursor_mz
+            FROM identification_matches
+            WHERE {' AND '.join(clauses)}
+            """
+        ),
+        params,
+    ).mappings().all()
+    points = [(float(row["retention_time"]), float(row["precursor_mz"])) for row in rows]
+    return build_rt_mz_heatmap(points, bins_rt=bins_rt, bins_mz=bins_mz, run_id=run_id)
+
+
+def build_rt_mz_heatmap(
+    points: list[tuple[float, float]],
+    *,
+    bins_rt: int,
+    bins_mz: int,
+    run_id: int | None,
+) -> BuRtMzHeatmapOut:
+    if not points:
+        return BuRtMzHeatmapOut(run_id=run_id)
+
+    rt_values = [point[0] for point in points]
+    mz_values = [point[1] for point in points]
+    rt_min, rt_max = min(rt_values), max(rt_values)
+    mz_min, mz_max = min(mz_values), max(mz_values)
+    if rt_min == rt_max:
+        rt_max = rt_min + 1.0
+    if mz_min == mz_max:
+        mz_max = mz_min + 1.0
+
+    rt_edges = _edges(rt_min, rt_max, bins_rt)
+    mz_edges = _edges(mz_min, mz_max, bins_mz)
+    counts = [[0 for _ in range(bins_mz)] for _ in range(bins_rt)]
+    for rt, mz in points:
+        rt_bin = min(max(int((rt - rt_min) / (rt_max - rt_min) * bins_rt), 0), bins_rt - 1)
+        mz_bin = min(max(int((mz - mz_min) / (mz_max - mz_min) * bins_mz), 0), bins_mz - 1)
+        counts[rt_bin][mz_bin] += 1
+
+    max_count = max((max(row) for row in counts), default=0)
+    return BuRtMzHeatmapOut(
+        rt_edges=rt_edges,
+        mz_edges=mz_edges,
+        counts=counts,
+        max_count=max_count,
+        total_points=len(points),
+        run_id=run_id,
+    )
+
+
+def _edges(start: float, stop: float, bins: int) -> list[float]:
+    width = (stop - start) / bins
+    return [start + width * index for index in range(bins)] + [stop]

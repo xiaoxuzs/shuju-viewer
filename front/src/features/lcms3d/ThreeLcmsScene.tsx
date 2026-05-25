@@ -92,8 +92,8 @@ export function ThreeLcmsScene({ peaks, height = 480 }: Props) {
       <div className="pointer-events-none absolute left-3 top-3 z-10 rounded bg-background/85 px-2 py-1 text-[11px] font-medium text-muted-foreground shadow-sm ring-1 ring-border">
         <div className="flex gap-3">
           <span className="text-slate-700">X: m/z</span>
-          <span className="text-slate-700">Y: 强度</span>
-          <span className="text-violet-700">颜色: 强度 (Viridis)</span>
+          <span className="text-slate-700">Y: Intensity</span>
+          <span className="text-violet-700">Color: Intensity (Viridis)</span>
         </div>
       </div>
     </div>
@@ -203,7 +203,7 @@ function makeAxes(mz: MzRange, iMax: number): THREE.Group {
 
   // axis labels
   group.add(makeTextSprite("m/z (Da)", "#0f172a", 1.1, 0.28, new THREE.Vector3(x1 + 0.9, -0.16, 0)));
-  group.add(makeTextSprite("强度", "#0f172a", 0.78, 0.28, new THREE.Vector3(x0 - 0.7, Y_SIZE + 0.4, 0)));
+  group.add(makeTextSprite("Intensity", "#0f172a", 0.78, 0.28, new THREE.Vector3(x0 - 0.7, Y_SIZE + 0.4, 0)));
   return group;
 }
 
