@@ -212,27 +212,85 @@ export function BuSpectrumChart({
         .attr("fill", BU_CHART.apex)
         .text((d) => `${d.label}${d.charge ? ` +${d.charge}` : ""}`);
 
-      labelsG.selectAll("*").remove();
+      const LABEL_W = 26;
+      const LABEL_H = 20;
+      const LABEL_X_OFFSET = -4;
+      const MAIN_FONT = 11;
+      const SUB_FONT = 7.5;
+
       const matched = visible.filter((p) => p.ion).sort((a, b) => b.intensity - a.intensity);
-      const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
+      const placed: {
+        peak: ChartPeak;
+        px: number;
+        py: number;
+        x0: number;
+        y0: number;
+        x1: number;
+        y1: number;
+      }[] = [];
+
       for (const peak of matched) {
-        const ion = peak.ion!;
-        const x = xScale(peak.mz);
-        const y = yScale(peak.intensity);
-        const label = ionLabel(ion);
-        const box = { x0: x - 16, x1: x + 22, y0: y - 24, y1: y - 4 };
-        if (box.x0 < 0 || box.x1 > innerW || box.y0 < 0) continue;
-        if (placed.some((p) => !(box.x1 < p.x0 || box.x0 > p.x1 || box.y1 < p.y0 || box.y0 > p.y1))) continue;
-        placed.push(box);
+        const px = xScale(peak.mz);
+        if (px < 0 || px > innerW) continue;
+        const py = yScale(peak.intensity);
+        if (py < 0 || py > innerH) continue;
+
+        const x0 = px + LABEL_X_OFFSET;
+        const x1 = x0 + LABEL_W;
+        const y1 = py - 2;
+        const y0 = y1 - LABEL_H;
+        if (y0 < 0 || x0 < 0 || x1 > innerW) continue;
+
+        let collides = false;
+        for (const slot of placed) {
+          if (!(x1 <= slot.x0 || x0 >= slot.x1 || y1 <= slot.y0 || y0 >= slot.y1)) {
+            collides = true;
+            break;
+          }
+        }
+        if (collides) continue;
+
+        placed.push({ peak, px, py, x0, y0, x1, y1 });
+      }
+
+      labelsG.selectAll("*").remove();
+      for (const slot of placed) {
+        const ion = slot.peak.ion!;
+        const color = colorFor(slot.peak);
+        const letter = ion.ion_type;
+
         labelsG
           .append("text")
-          .attr("x", x)
-          .attr("y", y - 7)
-          .attr("text-anchor", "middle")
-          .attr("font-size", 11)
+          .attr("x", slot.px)
+          .attr("y", slot.py - 5)
+          .attr("text-anchor", "start")
+          .attr("font-family", "Arial, Helvetica, sans-serif")
+          .attr("font-size", MAIN_FONT)
           .attr("font-weight", 600)
-          .attr("fill", colorFor(peak))
-          .text(label);
+          .attr("fill", color)
+          .text(letter);
+
+        if (ion.charge > 1) {
+          labelsG
+            .append("text")
+            .attr("x", slot.px + MAIN_FONT * 0.7)
+            .attr("y", slot.py - MAIN_FONT - 1)
+            .attr("text-anchor", "start")
+            .attr("font-family", "Arial, Helvetica, sans-serif")
+            .attr("font-size", SUB_FONT)
+            .attr("fill", color)
+            .text(`${ion.charge}+`);
+        }
+
+        labelsG
+          .append("text")
+          .attr("x", slot.px + MAIN_FONT * 0.7)
+          .attr("y", slot.py - 1)
+          .attr("text-anchor", "start")
+          .attr("font-family", "Arial, Helvetica, sans-serif")
+          .attr("font-size", SUB_FONT)
+          .attr("fill", color)
+          .text(String(ion.position));
       }
     };
     applyZoomRef.current = applyZoom;
