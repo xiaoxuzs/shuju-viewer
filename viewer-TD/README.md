@@ -11,7 +11,16 @@ The packaged mode serves the built UI from the same port as the API (`http://127
 
 Requirements on the machine: **PostgreSQL** (database `viewer-td`), **Python 3.12+** with `uv`, and **Node.js + pnpm** (only for `prepare-launch.bat`).
 
-## Dev mode (separate frontend)
+## Dev mode (separate frontend + backend)
+
+**Recommended — double-click:**
+
+| Script | Purpose |
+|--------|---------|
+| `dev-all.bat` | Open **two windows**: backend + frontend |
+| `dev-back.bat` | Backend only (`7000`, hot reload) |
+| `dev-front.bat` | Frontend only (`6100`, Vite dev server) |
+| `dev-stop.bat` | Stop processes on ports **7000** and **6100** |
 
 | Service  | URL |
 |----------|-----|
@@ -19,6 +28,8 @@ Requirements on the machine: **PostgreSQL** (database `viewer-td`), **Python 3.1
 | Backend  | http://localhost:7000/docs |
 
 > Chrome blocks port **6000** (`ERR_UNSAFE_PORT`); dev server uses **6100** instead.
+
+Legacy scripts `start-all.bat` / `start-back.bat` still work; prefer `dev-*.bat` for clearer window titles.
 
 ## First-time setup
 

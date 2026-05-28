@@ -8,6 +8,17 @@ from pathlib import Path
 _BU_REPORT_NAMES = ("all_report.parquet", "target_report.parquet")
 
 
+def has_toppic_pipeline_layout(path: Path) -> bool:
+    """Return True if *path* looks like a TopPIC pipeline package (Form B, no data/ required)."""
+    if not path.is_dir():
+        return False
+    if not (path / "topfd").is_dir() or not (path / "toppic").is_dir():
+        return False
+    has_xml = any(p.is_file() for p in (path / "toppic").rglob("*_toppic_prsm.xml"))
+    has_msalign = any(p.is_file() for p in (path / "topfd").rglob("*_ms2.msalign"))
+    return has_xml or has_msalign
+
+
 def has_dataset_layout(path: Path) -> bool:
     """Return True if *path* looks like a TopPIC HTML tree or PrSM bundle root."""
     return path.is_dir() and (
@@ -15,6 +26,7 @@ def has_dataset_layout(path: Path) -> bool:
         or (path / "topfd").is_dir()
         or (path / "toppic_proteoform_cutoff").is_dir()
         or (path / "data").is_dir()
+        or has_toppic_pipeline_layout(path)
     )
 
 

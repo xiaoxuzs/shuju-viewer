@@ -13,6 +13,7 @@ from app.schemas.imports import ImportEnqueueIn, ImportJobCreatedOut, ImportJobO
 from app.services import import_jobs
 from app.services.native_folder_dialog import NativeFolderDialogError, pick_folder_native
 from app.dataset_ingest_root import resolve_ingest_root
+from app.toppic_admission import classify_admission
 
 router = APIRouter(tags=["imports"])
 log = get_logger(__name__)
@@ -83,8 +84,11 @@ def enqueue_import(body: ImportEnqueueIn) -> ImportJobCreatedOut:
         resolved = str(p.resolve())
         _enqueue_slice("enqueue_path_checks_s")
         # Fail fast if the tree is unusable (nested root resolution).
-        resolve_ingest_root(p)
+        ingest_root = resolve_ingest_root(p)
         _enqueue_slice("enqueue_resolve_ingest_root_s")
+        decision = classify_admission(ingest_root)
+        if not decision.is_supported:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=decision.reject_reason)
     except HTTPException:
         raise
     except ValueError as exc:

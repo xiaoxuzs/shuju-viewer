@@ -18,14 +18,99 @@ Spectrum peak arrays remain on-demand via mzML in-memory store.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Connection
 
 from app.ingest.utils import to_float, to_int
 from app.services.prsm_files import get_prsm_root, iter_prsm_files, load_prsm_document, prsm_bundle_prsm_directory
+
+
+@dataclass
+class _ProteoformImportStats:
+    prsm_number: int = 0
+    best_prsm_id: int | None = None
+    best_prsm_e_value: float | None = None
+
+
+@dataclass
+class _ProteinImportStats:
+    proteoform_ids: set[int] = field(default_factory=set)
+    prsm_number: int = 0
+    best_prsm_id: int | None = None
+    best_prsm_e_value: float | None = None
+
+
+def _consider_best_prsm(
+    best_id: int | None,
+    best_e: float | None,
+    *,
+    prsm_id: int | None,
+    e_value: float | None,
+) -> tuple[int | None, float | None]:
+    """Return updated (best_prsm_id, best_prsm_e_value) after seeing one PrSM."""
+    if prsm_id is None:
+        return best_id, best_e
+    if best_e is None or (e_value is not None and e_value < best_e):
+        return prsm_id, e_value
+    return best_id, best_e
+
+
+def _record_prsm_for_stats(
+    *,
+    protein_stats: _ProteinImportStats,
+    proteoform_stats: _ProteoformImportStats,
+    proteoform_id: int,
+    source_prsm_id: int | None,
+    e_value: float | None,
+) -> None:
+    protein_stats.proteoform_ids.add(proteoform_id)
+    protein_stats.prsm_number += 1
+    protein_stats.best_prsm_id, protein_stats.best_prsm_e_value = _consider_best_prsm(
+        protein_stats.best_prsm_id,
+        protein_stats.best_prsm_e_value,
+        prsm_id=source_prsm_id,
+        e_value=e_value,
+    )
+
+    proteoform_stats.prsm_number += 1
+    proteoform_stats.best_prsm_id, proteoform_stats.best_prsm_e_value = _consider_best_prsm(
+        proteoform_stats.best_prsm_id,
+        proteoform_stats.best_prsm_e_value,
+        prsm_id=source_prsm_id,
+        e_value=e_value,
+    )
+
+
+def _apply_protein_metadata_patches(conn: Connection, patches: dict[int, dict[str, Any]]) -> None:
+    for protein_id, patch in patches.items():
+        conn.execute(
+            text(
+                """
+                UPDATE proteins
+                SET extra_metadata = COALESCE(extra_metadata, '{}'::jsonb) || CAST(:patch AS jsonb)
+                WHERE protein_id = :protein_id
+                """
+            ),
+            {"protein_id": protein_id, "patch": _json(patch)},
+        )
+
+
+def _apply_proteoform_metadata_patches(conn: Connection, patches: dict[int, dict[str, Any]]) -> None:
+    for proteoform_id, patch in patches.items():
+        conn.execute(
+            text(
+                """
+                UPDATE proteoforms
+                SET extra_metadata = COALESCE(extra_metadata, '{}'::jsonb) || CAST(:patch AS jsonb)
+                WHERE proteoform_id = :proteoform_id
+                """
+            ),
+            {"proteoform_id": proteoform_id, "patch": _json(patch)},
+        )
 
 
 @dataclass
@@ -200,6 +285,8 @@ def ingest_universal_prsm_js(
             return pfid
 
         relation_keys: set[tuple[int, int]] = set()
+        protein_stats_by_id: dict[int, _ProteinImportStats] = {}
+        proteoform_stats_by_id: dict[int, _ProteoformImportStats] = {}
 
         # Insert matches.
         for path in files:
@@ -244,6 +331,16 @@ def ingest_universal_prsm_js(
             if ms2_scan is None:
                 raise ValueError(f"missing ms2 scans in {path}")
 
+            source_prsm_id = to_int(prsm_root.get("prsm_id"))
+            e_value = to_float(prsm_root.get("e_value"))
+            _record_prsm_for_stats(
+                protein_stats=protein_stats_by_id.setdefault(protein_id, _ProteinImportStats()),
+                proteoform_stats=proteoform_stats_by_id.setdefault(proteoform_id, _ProteoformImportStats()),
+                proteoform_id=proteoform_id,
+                source_prsm_id=source_prsm_id,
+                e_value=e_value,
+            )
+
             conn.execute(
                 text(
                     """
@@ -279,13 +376,13 @@ def ingest_universal_prsm_js(
                     "precursor_mz": to_float(header.get("precursor_mz")),
                     "precursor_charge": to_int(header.get("precursor_charge")),
                     "intensity": to_float(header.get("feature_inte")),
-                    "e_value": to_float(prsm_root.get("e_value")),
+                    "e_value": e_value,
                     "q_value": to_float(prsm_root.get("fdr")),
                     "detail_path": str(path),
                     "extra_metadata": _json(
                         {
                             "source_cutoff": "prsm",
-                            "source_prsm_id": to_int(prsm_root.get("prsm_id")),
+                            "source_prsm_id": source_prsm_id,
                             "source_sequence_id": to_int(annotated.get("sequence_id")),
                             "source_proteoform_id": to_int(annotated.get("proteoform_id")),
                             "p_value": to_float(prsm_root.get("p_value")),
@@ -300,6 +397,30 @@ def ingest_universal_prsm_js(
                     ),
                 },
             )
+
+        _apply_protein_metadata_patches(
+            conn,
+            {
+                protein_id: {
+                    "compatible_proteoform_number": len(stats.proteoform_ids),
+                    "prsm_number": stats.prsm_number,
+                    "best_prsm_id": stats.best_prsm_id,
+                    "best_prsm_e_value": stats.best_prsm_e_value,
+                }
+                for protein_id, stats in protein_stats_by_id.items()
+            },
+        )
+        _apply_proteoform_metadata_patches(
+            conn,
+            {
+                proteoform_id: {
+                    "prsm_number": stats.prsm_number,
+                    "best_prsm_id": stats.best_prsm_id,
+                    "best_prsm_e_value": stats.best_prsm_e_value,
+                }
+                for proteoform_id, stats in proteoform_stats_by_id.items()
+            },
+        )
 
         # Mark READY
         conn.execute(text("UPDATE datasets SET status='READY' WHERE dataset_id=:dataset_id"), {"dataset_id": dataset_id})

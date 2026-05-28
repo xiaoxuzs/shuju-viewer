@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PageHeader } from "@/components/common/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/common/stat";
+import { cutoffHasContent } from "@/lib/utils";
 
 export function DatasetPage() {
   const { slug = "" } = useParams();
@@ -24,9 +25,10 @@ export function DatasetPage() {
   if (error) return <p className="text-destructive">{(error as Error).message}</p>;
   if (!data) return null;
 
-  const totalProteins = data.cutoffs.reduce((a, c) => a + c.protein_count, 0);
-  const totalProteoforms = data.cutoffs.reduce((a, c) => a + c.proteoform_count, 0);
-  const totalPrsms = data.cutoffs.reduce((a, c) => a + c.prsm_count, 0);
+  const activeCutoffs = data.cutoffs.filter(cutoffHasContent);
+  const totalProteins = activeCutoffs.reduce((a, c) => a + c.protein_count, 0);
+  const totalProteoforms = activeCutoffs.reduce((a, c) => a + c.proteoform_count, 0);
+  const totalPrsms = activeCutoffs.reduce((a, c) => a + c.prsm_count, 0);
 
   return (
     <>
@@ -37,18 +39,20 @@ export function DatasetPage() {
       />
 
       <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Cutoffs" value={data.cutoffs.length} />
+        <Stat label="Cutoffs" value={activeCutoffs.length} />
         <Stat label="Proteins" value={totalProteins.toLocaleString()} />
         <Stat label="Proteoforms" value={totalProteoforms.toLocaleString()} />
         <Stat label="PrSMs" value={totalPrsms.toLocaleString()} />
       </div>
 
+      {activeCutoffs.length > 0 && (
+        <>
       <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
         Cutoffs
       </h2>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {data.cutoffs.map((c) => (
+      <div className={`grid grid-cols-1 gap-4${activeCutoffs.length > 1 ? " md:grid-cols-2" : ""}`}>
+        {activeCutoffs.map((c) => (
           <Card key={c.id} className="border-border/50">
             <CardHeader>
               <div className="flex items-start justify-between">
@@ -77,6 +81,8 @@ export function DatasetPage() {
           </Card>
         ))}
       </div>
+        </>
+      )}
     </>
   );
 }

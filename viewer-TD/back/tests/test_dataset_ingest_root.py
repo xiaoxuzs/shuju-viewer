@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.dataset_ingest_root import find_ingest_root, resolve_ingest_root
-from app.dataset_ingest_root.resolver import has_bu_diann_layout
+from app.dataset_ingest_root.resolver import has_bu_diann_layout, has_toppic_pipeline_layout
 
 
 def _mkdir(p: Path) -> None:
@@ -33,6 +33,17 @@ def test_resolve_multiple_matches_errors(tmp_path: Path) -> None:
     _mkdir(outer / "b" / "topfd")
     with pytest.raises(ValueError, match="Multiple"):
         resolve_ingest_root(outer)
+
+
+def test_has_toppic_pipeline_layout(tmp_path: Path) -> None:
+    root = tmp_path / "pipeline"
+    (root / "topfd").mkdir(parents=True)
+    (root / "toppic").mkdir(parents=True)
+    (root / "topfd" / "run_ms2.msalign").write_text("x", encoding="utf-8")
+    (root / "toppic" / "run_ms2_toppic_prsm.xml").write_text("<xml />", encoding="utf-8")
+
+    assert has_toppic_pipeline_layout(root) is True
+    assert resolve_ingest_root(root) == root.resolve()
 
 
 def test_resolve_bu_diann_root(tmp_path: Path) -> None:

@@ -33,6 +33,7 @@ from app.core.db import engine as _db_engine
 from app.core.logging import get_logger
 from app.dataset_ingest_root import resolve_ingest_root
 from app.fingerprint import compute_dataset_metadata_fingerprint
+from app.toppic_admission import AdmissionRoute, classify_admission, run_pfmb_adapt
 from app.ingest.universal_toppic_adapter import (
     ProgressEvent,
     assign_toppic_runs_from_prsm_headers,
@@ -53,6 +54,7 @@ log = get_logger(__name__)
 
 _PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
     "resolve_ingest_root_worker_s",
+    "pfmb_adapt_s",
     "fingerprint_job_updates_s",
     "fingerprint_compute_s",
     "duplicate_check_by_fingerprint_s",
@@ -249,15 +251,17 @@ _CUTOFF_ORDER: dict[str, int] = {kind: idx for idx, kind in enumerate(cutoff_kin
 # the longest phase for full imports – occupies ~70% of the bar.
 _PHASE_RANGES: dict[str, tuple[float, float]] = {
     "queued":      (0.0, 1.0),
-    "fingerprint": (1.0, 8.0),
-    "init":        (8.0, 12.0),
-    "proteins":    (12.0, 20.0),
-    "matches":     (20.0, 95.0),
+    "adapt":       (1.0, 50.0),
+    "fingerprint": (50.0, 55.0),
+    "init":        (55.0, 58.0),
+    "proteins":    (58.0, 62.0),
+    "matches":     (62.0, 95.0),
     "finalize":    (95.0, 99.5),
 }
 
 _PHASE_LABELS: dict[str, str] = {
     "queued": "Queued…",
+    "adapt": "Running PFMB adaptation…",
     "fingerprint": "Computing dataset metadata fingerprint…",
     "init": "Creating dataset record…",
     "proteins": "Importing proteins and proteoforms…",
@@ -530,6 +534,36 @@ def run_path_import_job(
         if settings.import_path_must_be_under_data_root:
             ingest_root.resolve().relative_to(settings.resolved_data_root.resolve())
         _slice("resolve_ingest_root_worker_s")
+
+        admission = classify_admission(ingest_root)
+        if admission.route == AdmissionRoute.UNSUPPORTED:
+            raise RuntimeError(admission.reject_reason or "Unsupported dataset layout.")
+        if admission.route == AdmissionRoute.NEED_PFMB:
+            _update_job(
+                job_id,
+                status="running",
+                stage="adapt",
+                stage_label=_PHASE_LABELS["adapt"],
+                stage_detail="Starting PFMB adaptation…",
+                message="Running PFMB adaptation…",
+                progress=_PHASE_RANGES["adapt"][0],
+            )
+
+            def _adapt_progress(stage: str, detail: str | None, pct: float | None) -> None:
+                start, end = _PHASE_RANGES["adapt"]
+                progress = start if pct is None else start + (end - start) * max(0.0, min(100.0, pct)) / 100.0
+                _update_job(
+                    job_id,
+                    stage=stage,
+                    stage_label=_PHASE_LABELS.get(stage, stage),
+                    stage_detail=detail,
+                    message=detail or _PHASE_LABELS["adapt"],
+                    progress=progress,
+                )
+
+            adapt_result = run_pfmb_adapt(admission, job_id=job_id, progress=_adapt_progress)
+            ingest_root = adapt_result.staging_root
+            _slice("pfmb_adapt_s")
 
         _update_job(
             job_id,

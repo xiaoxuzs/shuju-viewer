@@ -1,5 +1,6 @@
 const IMPORT_STAGE_LABELS: Record<string, string> = {
   queued: "Queued",
+  adapt: "Running PFMB adaptation",
   fingerprint: "Computing dataset fingerprint",
   init: "Initializing import",
   proteins: "Importing proteins",

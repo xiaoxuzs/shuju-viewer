@@ -46,6 +46,9 @@ Thumbs.db
 # ---- 其他 ----
 Histone-Viewer-介绍.pptx
 
+# PFMB 桥接可执行文件（本地构建，体积大勿提交）
+**/pfmb_bridge.exe
+
 # 忽略质谱数据和压缩包
 *.zip
 *.mzML

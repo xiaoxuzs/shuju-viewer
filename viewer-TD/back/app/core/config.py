@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     import_native_folder_picker: bool = Field(default=True)
     #: Restrict the folder picker to requests from loopback (recommended when the picker is enabled).
     import_picker_loopback_only: bool = Field(default=True)
+    pfmb_bridge_exe: Path = Field(
+        default=BACKEND_ROOT.parent / "PFMB" / "pfmb_bridge.exe",
+    )
+    #: When False (default), delete ``results.pfmb`` after egress + assemble; viewer uses JSON only.
+    pfmb_keep_binary_after_adapt: bool = Field(default=False)
 
     @property
     def project_root(self) -> Path:

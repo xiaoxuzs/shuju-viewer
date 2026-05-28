@@ -19,7 +19,7 @@ start "proteo-viewer-backend" "%~dp0start-back.bat"
 
 echo Starting frontend in a new window...
 timeout /t 1 /nobreak >nul
-start "proteo-viewer-frontend" cmd /k "cd /d ""%FRONT%"" && npm run dev"
+start "proteo-viewer-frontend" cmd /k ""%ROOT%dev-front.bat""
 
 echo.
 echo Backend:  http://localhost:7000/docs

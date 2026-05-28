@@ -26,3 +26,12 @@ export function formatEValue(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
   return n.toExponential(2);
 }
+
+/** True when a cutoff has at least one protein, proteoform, or PrSM. */
+export function cutoffHasContent(c: {
+  protein_count: number;
+  proteoform_count: number;
+  prsm_count: number;
+}): boolean {
+  return c.protein_count > 0 || c.proteoform_count > 0 || c.prsm_count > 0;
+}

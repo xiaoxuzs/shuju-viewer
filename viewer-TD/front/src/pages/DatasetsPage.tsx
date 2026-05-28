@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { clampImportProgress, formatImportStageLabel } from "@/lib/importStages";
 import { basenamePath, slugifyFolderName } from "@/lib/serverPathFromDirectoryInput";
-import { cn } from "@/lib/utils";
+import { cn, cutoffHasContent } from "@/lib/utils";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -228,9 +228,10 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
       {data && data.length > 0 && (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {data.map((ds) => {
-            const totalProteins = ds.cutoffs.reduce((a, c) => a + c.protein_count, 0);
-            const totalProteoforms = ds.cutoffs.reduce((a, c) => a + c.proteoform_count, 0);
-            const totalPrsms = ds.cutoffs.reduce((a, c) => a + c.prsm_count, 0);
+            const activeCutoffs = ds.cutoffs.filter(cutoffHasContent);
+            const totalProteins = activeCutoffs.reduce((a, c) => a + c.protein_count, 0);
+            const totalProteoforms = activeCutoffs.reduce((a, c) => a + c.proteoform_count, 0);
+            const totalPrsms = activeCutoffs.reduce((a, c) => a + c.prsm_count, 0);
             return (
               <Link
                 key={ds.id}
@@ -279,7 +280,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                       <Metric icon={<ListTree className="h-3.5 w-3.5" />} label="PrSMs" value={totalPrsms} />
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-1">
-                      {ds.cutoffs.map((c) => (
+                      {activeCutoffs.map((c) => (
                         <Badge key={c.id} variant="secondary" className="font-mono text-[10px]">
                           {c.kind}
                         </Badge>
