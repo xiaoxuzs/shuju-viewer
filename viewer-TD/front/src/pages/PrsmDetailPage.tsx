@@ -16,10 +16,12 @@ import { Badge } from "@/components/ui/badge";
 import { formatEValue, formatNumber } from "@/lib/utils";
 
 import {
+  enrichAnnotatedProtein,
   matchedPeakDetailKey,
   parseAnnotatedProtein,
   parseMsPeaks,
   parseRawSpectrum,
+  resolvePrecursorMz,
   type MatchedIon,
   type MsPeakRow,
   type RawSpectrum,
@@ -86,9 +88,11 @@ export function PrsmDetailPage() {
 
   const parsed = useMemo(() => {
     if (!prsm) return null;
+    const peaks = parseMsPeaks(prsm.ms_peaks);
+    const protein = parseAnnotatedProtein(prsm.annotated_protein);
     return {
-      protein: parseAnnotatedProtein(prsm.annotated_protein),
-      peaks: parseMsPeaks(prsm.ms_peaks),
+      protein: protein ? enrichAnnotatedProtein(protein, peaks) : null,
+      peaks,
     };
   }, [prsm]);
 
@@ -190,9 +194,22 @@ export function PrsmDetailPage() {
     setMs2ModalZoom(DEFAULT_ZOOM);
   }, [spectrumIntensityMode]);
 
-  const precursorMarker: Marker = prsm?.precursor_mz
-    ? { x: prsm.precursor_mz, label: `precursor ${formatNumber(prsm.precursor_mz, 4)}` }
-    : null;
+  const displayPrecursorMz = useMemo(
+    () =>
+      resolvePrecursorMz(
+        prsm?.precursor_mz ?? null,
+        prsm?.precursor_mono_mass ?? null,
+        prsm?.precursor_charge ?? null,
+        ms2RawSpectrum?.targetMz ?? null,
+      ),
+    [prsm?.precursor_mz, prsm?.precursor_mono_mass, prsm?.precursor_charge, ms2RawSpectrum?.targetMz],
+  );
+
+  const precursorMarker: Marker = useMemo(() => {
+    return displayPrecursorMz
+      ? { x: displayPrecursorMz, label: `precursor ${formatNumber(displayPrecursorMz, 4)}` }
+      : null;
+  }, [displayPrecursorMz]);
 
   // ----- loading / error states -----
   if (prsmQuery.isLoading) {
@@ -248,7 +265,7 @@ export function PrsmDetailPage() {
         <Stat label="p-value" value={formatEValue(prsm.p_value)} />
         <Stat label="Matched frag" value={prsm.matched_fragment_number ?? "—"} />
         <Stat label="Matched peaks" value={prsm.matched_peak_number ?? "—"} />
-        <Stat label="Precursor m/z" value={formatNumber(prsm.precursor_mz, 4)} />
+        <Stat label="Precursor m/z" value={formatNumber(displayPrecursorMz, 4)} />
         <Stat label="Charge" value={prsm.precursor_charge ?? "—"} />
       </div>
 

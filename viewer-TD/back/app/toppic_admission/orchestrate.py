@@ -70,6 +70,7 @@ def run_pfmb_adapt(
     record_count = 0
     last_xml: Path | None = None
     last_mzml_name = ""
+    last_msalign: Path | None = None
     for triple in decision.run_triples:
         report("adapt", f"PFMB ingest ({triple.run_key})…", 10.0)
         record_count = runner.ingest_xml_msalign(
@@ -80,6 +81,7 @@ def run_pfmb_adapt(
         )
         last_xml = triple.prsm_xml
         last_mzml_name = triple.mzml.name
+        last_msalign = triple.ms2_msalign
 
     report("adapt", "PFMB engine run…", 40.0)
     pfmb_path = runner.run_engine(cache_path=layout.cache_path, output_dir=layout.engine_dir)
@@ -110,6 +112,7 @@ def run_pfmb_adapt(
         prsms_dir=layout.prsms_dir,
         mzml_file_name=last_mzml_name,
         provenance=provenance,
+        ms2_msalign=last_msalign,
     )
 
     validate_adapted_staging(layout.staging_root)

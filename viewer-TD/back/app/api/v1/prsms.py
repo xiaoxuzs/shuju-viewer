@@ -13,6 +13,24 @@ from app.schemas import Page, PrsmDetailOut, PrsmListItemOut
 
 router = APIRouter(tags=["prsms"])
 
+_PROTON_MASS = 1.00727646688
+
+
+def _resolve_precursor_mz(
+    precursor_mz: float | None,
+    precursor_mono_mass: float | None,
+    precursor_charge: int | None,
+) -> float | None:
+    if precursor_mz is not None and precursor_mz > 0:
+        return precursor_mz
+    if (
+        precursor_mono_mass is not None
+        and precursor_charge is not None
+        and precursor_charge > 0
+    ):
+        return (precursor_mono_mass + precursor_charge * _PROTON_MASS) / precursor_charge
+    return None
+
 SORT_MAP = {
     "prsm_id": "prsm_id",
     "e_value": "e_value",
@@ -150,7 +168,11 @@ def get_prsm(
     if ms_header:
         item["precursor_mono_mass"] = item["precursor_mono_mass"] or to_float(ms_header.get("precursor_mono_mass"))
         item["precursor_charge"] = item["precursor_charge"] or to_int(ms_header.get("precursor_charge"))
-        item["precursor_mz"] = item["precursor_mz"] or to_float(ms_header.get("precursor_mz"))
+        item["precursor_mz"] = _resolve_precursor_mz(
+            item["precursor_mz"] or to_float(ms_header.get("precursor_mz")),
+            item["precursor_mono_mass"],
+            item["precursor_charge"],
+        )
         item["ms1_scans"] = item["ms1_scans"] or _as_text(ms_header.get("ms1_scans"))
         item["ms2_scans"] = item["ms2_scans"] or _as_text(ms_header.get("scans"))
     if annotated:

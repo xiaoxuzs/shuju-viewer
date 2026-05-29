@@ -67,8 +67,9 @@ interface Annotation {
 }
 
 export function SequenceView({ protein, className, onCleavageClick }: Props) {
-  const { residues, cleavages, massShifts, firstResiduePosition, lastResiduePosition } = protein;
+  const { residues, cleavages, massShifts, firstResiduePosition } = protein;
   const totalLen = residues.length;
+  const localLast = Math.max(0, totalLen - 1);
 
   const {
     displayFirstPos,
@@ -79,13 +80,12 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
     startSkippedInfo,
     endSkippedInfo,
   } = useMemo(() => {
-    let dFirst = Math.floor((firstResiduePosition - 5) / ROW_LENGTH) * ROW_LENGTH;
-    if (dFirst < 0) dFirst = 0;
-    let dLast = Math.ceil((lastResiduePosition + 6) / ROW_LENGTH) * ROW_LENGTH - 1;
-    if (dLast > totalLen - 1) dLast = totalLen - 1;
+    const dFirst = 0;
+    let dLast = Math.ceil((localLast + 6) / ROW_LENGTH) * ROW_LENGTH - 1;
+    if (dLast > localLast) dLast = localLast;
     const rn = Math.max(1, Math.ceil((dLast - dFirst + 1) / ROW_LENGTH));
-    const ss = dFirst !== 0;
-    const se = dLast !== totalLen - 1;
+    const ss = firstResiduePosition > 1;
+    const se = false;
     return {
       displayFirstPos: dFirst,
       displayLastPos: dLast,
@@ -93,13 +93,13 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
       showStartSkipped: ss,
       showEndSkipped: se,
       startSkippedInfo: ss
-        ? `... ${dFirst} amino acid residues are skipped at the N-terminus ... `
+        ? `... ${firstResiduePosition - 1} amino acid residues are skipped at the N-terminus ... `
         : "",
       endSkippedInfo: se
         ? `... ${totalLen - 1 - dLast} amino acid residues are skipped at the C-terminus ... `
         : "",
     };
-  }, [firstResiduePosition, lastResiduePosition, totalLen]);
+  }, [firstResiduePosition, localLast, totalLen]);
 
   const yShift = showStartSkipped ? MIDDLE_MARGIN : 0;
 
@@ -137,7 +137,6 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
   }, [massShifts]);
 
   const residueColor = (res: Residue): string => {
-    if (res.position < firstResiduePosition || res.position > lastResiduePosition) return "grey";
     if (fixedPtmPositions.has(res.position)) return "red";
     return "black";
   };
@@ -289,18 +288,18 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
         </g>
 
         {/* Start / end boundary symbols for the matched form region */}
-        {firstResiduePosition !== displayFirstPos && firstResiduePosition > 0 && (
+        {firstResiduePosition > 1 && (
           <BoundarySymbol
             kind="start"
-            pos={firstResiduePosition}
+            pos={0}
             startPos={displayFirstPos}
             yShift={yShift}
           />
         )}
-        {lastResiduePosition !== displayLastPos && (
+        {showEndSkipped && (
           <BoundarySymbol
             kind="end"
-            pos={lastResiduePosition}
+            pos={localLast}
             startPos={displayFirstPos}
             yShift={yShift}
           />

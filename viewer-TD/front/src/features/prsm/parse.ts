@@ -23,6 +23,38 @@ export function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Proton mass (Da) — used when inferring m/z from neutral mass + charge. */
+const PROTON_MASS = 1.00727646688;
+
+export function inferMonoMz(monoMass: number | null, charge: number | null, monoMz: number | null): number | null {
+  if (monoMz != null) return monoMz;
+  if (monoMass == null || charge == null || charge <= 0) return null;
+  return (monoMass + charge * PROTON_MASS) / charge;
+}
+
+/** Resolve a precursor m/z for MS1 marker display. */
+export function resolvePrecursorMz(
+  precursorMz: number | null,
+  precursorMonoMass: number | null,
+  precursorCharge: number | null,
+  fallbackTargetMz: number | null,
+): number | null {
+  if (precursorMz != null && precursorMz > 0) return precursorMz;
+  if (fallbackTargetMz != null && fallbackTargetMz > 0) return fallbackTargetMz;
+  return inferMonoMz(precursorMonoMass, precursorCharge, null);
+}
+
+function normalizeResiduePositions(residues: Residue[]): Residue[] {
+  if (residues.length === 0) return residues;
+  const minPos = Math.min(...residues.map((r) => r.position));
+  const maxPos = Math.max(...residues.map((r) => r.position));
+  if (minPos === 0) return residues;
+  if (maxPos - minPos + 1 === residues.length) {
+    return residues.map((r) => ({ ...r, position: r.position - minPos }));
+  }
+  return residues;
+}
+
 // ------------------------------ Sequence / annotation ---------------------
 
 export type IonType = "B" | "C" | "Y" | "Z_DOT" | string;
@@ -79,10 +111,13 @@ export function parseAnnotatedProtein(
 ): AnnotatedProtein | null {
   if (!raw) return null;
   const ann = (raw as any).annotation ?? {};
-  const residues: Residue[] = asList(ann.residue).map((r: any) => ({
+  const rawFirst = num((raw as any).first_residue_position) ?? num(ann.first_residue_position);
+  const rawLast = num((raw as any).last_residue_position) ?? num(ann.last_residue_position);
+  let residues: Residue[] = asList(ann.residue).map((r: any) => ({
     position: Number(r.position),
     acid: String(r.acid ?? ""),
   }));
+  residues = normalizeResiduePositions(residues);
   const cleavages: Cleavage[] = asList(ann.cleavage).map((c: any) => {
     const mp = asList(c.matched_peaks?.matched_peak).map(
       (m: any): MatchedPeakLite => ({
@@ -118,13 +153,71 @@ export function parseAnnotatedProtein(
     proteoformMass: num((raw as any).proteoform_mass),
     nAcetylation: num((raw as any).n_acetylation),
     unexpectedShiftNumber: num((raw as any).unexpected_shift_number),
-    proteinLength: Number(ann.protein_length ?? residues.length),
-    firstResiduePosition: Number(ann.first_residue_position ?? 0),
-    lastResiduePosition: Number(ann.last_residue_position ?? residues.length - 1),
-    annotatedSeq: String(ann.annotated_seq ?? ""),
+    proteinLength: Number(
+      (raw as any).protein_length ?? ann.protein_length ?? residues.length,
+    ),
+    firstResiduePosition: rawFirst ?? 0,
+    lastResiduePosition: rawLast ?? Math.max(0, residues.length - 1),
+    annotatedSeq: String((raw as any).annotated_seq ?? ann.annotated_seq ?? ""),
     residues,
     cleavages,
     massShifts,
+  };
+}
+
+/** Derive cleavage brackets from matched MS2 peaks when JSON omits ``annotation.cleavage``. */
+export function buildCleavagesFromPeaks(peaks: MsPeakRow[], proteinLength: number): Cleavage[] {
+  const bByPos = new Map<number, MatchedPeakLite[]>();
+  const yByPos = new Map<number, MatchedPeakLite[]>();
+
+  for (const peak of peaks) {
+    for (const ion of peak.matchedIons) {
+      const lite: MatchedPeakLite = {
+        ionType: ion.ionType,
+        ionPosition: ion.ionPosition,
+        ionDisplayPosition: ion.ionDisplayPosition,
+        specId: peak.specId,
+        peakId: peak.peakId,
+        peakCharge: peak.charge ?? 0,
+      };
+      const ionType = ion.ionType.toUpperCase();
+      if (ionType === "B") {
+        const bucket = bByPos.get(ion.ionPosition) ?? [];
+        bucket.push(lite);
+        bByPos.set(ion.ionPosition, bucket);
+      } else {
+        const yPos = proteinLength - ion.ionPosition;
+        const bucket = yByPos.get(yPos) ?? [];
+        bucket.push(lite);
+        yByPos.set(yPos, bucket);
+      }
+    }
+  }
+
+  const cleavages: Cleavage[] = [];
+  for (let position = 0; position <= proteinLength; position += 1) {
+    const nHits = bByPos.get(position) ?? [];
+    const cHits = yByPos.get(position) ?? [];
+    cleavages.push({
+      position,
+      existNIon: nHits.length > 0,
+      existCIon: cHits.length > 0,
+      matchedPeaks: [...nHits, ...cHits],
+    });
+  }
+  return cleavages;
+}
+
+export function enrichAnnotatedProtein(
+  protein: AnnotatedProtein,
+  peaks: MsPeakRow[],
+): AnnotatedProtein {
+  const hasCleavageMarks = protein.cleavages.some((c) => c.existNIon || c.existCIon);
+  if (hasCleavageMarks) return protein;
+  const span = protein.residues.length || protein.proteinLength;
+  return {
+    ...protein,
+    cleavages: buildCleavagesFromPeaks(peaks, span),
   };
 }
 
@@ -174,13 +267,15 @@ export function parseMsPeaks(raw: Record<string, unknown> | null | undefined): M
         ppm: num(i.ppm),
       }),
     );
+    const monoMass = num(p.monoisotopic_mass);
+    const charge = num(p.charge);
     return {
       specId: Number(p.spec_id),
       peakId: Number(p.peak_id),
-      monoMass: num(p.monoisotopic_mass),
-      monoMz: num(p.monoisotopic_mz),
+      monoMass,
+      monoMz: inferMonoMz(monoMass, charge, num(p.monoisotopic_mz)),
       intensity: num(p.intensity),
-      charge: num(p.charge),
+      charge,
       matchedIons: ions,
     };
   });
