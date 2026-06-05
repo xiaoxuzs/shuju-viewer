@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BU XIC M+1 / M+2 实现规划</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --surface-soft: #f1f5f9;
+      --text: #18202f;
+      --muted: #647184;
+      --line: #d9e1ec;
+      --blue: #1f77b4;
+      --teal: #0f8f83;
+      --amber: #c57a12;
+      --red: #c43c39;
+      --violet: #7952b3;
+      --ok-bg: #edf9f5;
+      --warn-bg: #fff8e8;
+      --blue-bg: #eef6ff;
+      --shadow: 0 1px 2px rgba(24, 32, 47, 0.06), 0 8px 24px rgba(24, 32, 47, 0.06);
+      --mono: "Cascadia Code", Consolas, "SF Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      line-height: 1.68;
+    }
+
+    .page {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 52px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+      gap: 24px;
+      align-items: stretch;
+      margin-bottom: 22px;
+    }
+
+    .hero,
+    .panel,
+    .chart-panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 28px 30px;
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: clamp(26px, 3.2vw, 40px);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 820px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .summary-card {
+      padding: 22px;
+      background: var(--blue-bg);
+      border-color: #c9ddf3;
+    }
+
+    .summary-card h2 {
+      margin: 0 0 12px;
+      color: var(--blue);
+      font-size: 18px;
+      border: 0;
+      padding: 0;
+    }
+
+    .summary-card p {
+      margin: 8px 0 0;
+      font-size: 14px;
+      color: #354256;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 4px 10px;
+      color: #354256;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .tag.ok { color: #08664f; background: var(--ok-bg); border-color: #b7e7d8; }
+    .tag.warn { color: #875300; background: var(--warn-bg); border-color: #f1d195; }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 0 18px;
+      background: rgba(246, 248, 251, 0.92);
+      backdrop-filter: blur(8px);
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    nav a:hover {
+      color: var(--blue);
+      border-color: #9fc4e8;
+    }
+
+    section {
+      margin-top: 18px;
+    }
+
+    .panel {
+      padding: 22px 24px;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+      font-size: 22px;
+      color: #101827;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 17px;
+      color: #233149;
+    }
+
+    p {
+      margin: 8px 0 12px;
+    }
+
+    ul,
+    ol {
+      margin: 8px 0 12px;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    code {
+      font-family: var(--mono);
+      background: #eef2f7;
+      border: 1px solid #dbe3ec;
+      border-radius: 6px;
+      padding: 1px 5px;
+      font-size: 0.92em;
+    }
+
+    pre {
+      margin: 12px 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      background: #101827;
+      color: #e6edf7;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 18px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--surface-soft);
+      color: #26344b;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .mini {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .mini h3,
+    .mini h4 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .mini p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+      margin: 14px 0;
+    }
+
+    .step {
+      position: relative;
+      min-height: 84px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+      font-size: 13px;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--blue);
+    }
+
+    .note,
+    .warning,
+    .success {
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 14px 0;
+      border: 1px solid;
+    }
+
+    .note {
+      background: var(--blue-bg);
+      border-color: #c9ddf3;
+    }
+
+    .warning {
+      background: var(--warn-bg);
+      border-color: #f1d195;
+    }
+
+    .success {
+      background: var(--ok-bg);
+      border-color: #b7e7d8;
+    }
+
+    .trace-m { color: var(--blue); font-weight: 700; }
+    .trace-m1 { color: var(--amber); font-weight: 700; }
+    .trace-m2 { color: var(--violet); font-weight: 700; }
+
+    .chart-panel {
+      padding: 18px;
+      margin-top: 14px;
+    }
+
+    .chart-title {
+      text-align: center;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .chart-subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      height: 340px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdff;
+      overflow: hidden;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .legend {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #334056;
+    }
+
+    .legend div {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 2px 0;
+    }
+
+    .swatch {
+      width: 20px;
+      height: 3px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tooltip {
+      min-height: 20px;
+      margin-top: 8px;
+      color: #334056;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .file-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .file-list li {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr);
+      gap: 10px;
+      border-bottom: 1px dashed var(--line);
+      padding: 10px 0;
+    }
+
+    .file-list li:last-child {
+      border-bottom: 0;
+    }
+
+    .badge {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      width: fit-content;
+      min-width: 64px;
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid;
+    }
+
+    .badge.back { color: #0a5f55; background: #e8f7f4; border-color: #b9dfd8; }
+    .badge.front { color: #235f9c; background: #eaf4ff; border-color: #b9d7f1; }
+    .badge.test { color: #875300; background: #fff8e8; border-color: #f1d195; }
+    .badge.doc { color: #6d3f9b; background: #f3eefb; border-color: #d4c2ea; }
+
+    @media (max-width: 900px) {
+      header,
+      .grid,
+      .grid.three,
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      nav {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div class="hero">
+        <h1>BU XIC 的 M+1 / M+2 全新实现规划</h1>
+        <p class="lead">
+          本规划基于当前 <code>front</code> 与 <code>back</code> 构成的网站实现：先完整梳理数据集入口、BU 页面、API 与现有单通道 M 曲线，再提出一套低耦合、可回退、可测试的 M+1 / M+2 同位素 XIC 实现方法。
+        </p>
+        <div class="tags">
+          <span class="tag ok">只做规划，不改业务代码</span>
+          <span class="tag">范围：Bottom-Up match detail XIC</span>
+          <span class="tag">文件：docs/M+1-M+2实现规划.html</span>
+          <span class="tag warn">待确认后再实施</span>
+        </div>
+      </div>
+      <aside class="summary-card panel">
+        <h2>一句话方案</h2>
+        <p>
+          以现有 <code>precursor_mz</code> 作为 <span class="trace-m">M</span>，按
+          <code>1.0033548378 / charge</code> 计算 <span class="trace-m1">M+1</span> 与
+          <span class="trace-m2">M+2</span> 的目标 m/z，在 <code>xic_service</code> 的一次 MS1 遍历中同时提取三条 XIC 曲线。
+        </p>
+        <p>
+          API 保留旧字段 <code>intensity</code>，新增结构化 <code>traces[]</code>；前端优先渲染 <code>traces</code>，旧响应仍能显示单条 M 曲线。
+        </p>
+      </aside>
+    </header>
+
+    <nav aria-label="目录">
+      <a href="#understanding">网站理解</a>
+      <a href="#current-m">现有 M</a>
+      <a href="#definition">质谱定义</a>
+      <a href="#method">新方法</a>
+      <a href="#contract">API 契约</a>
+      <a href="#frontend">前端展示</a>
+      <a href="#files">文件清单</a>
+      <a href="#tests">测试验收</a>
+      <a href="#confirm">待确认</a>
+    </nav>
+
+    <section id="understanding" class="panel">
+      <h2>1. 对当前网站内容的理解</h2>
+      <div class="grid">
+        <div class="mini">
+          <h3>全站入口</h3>
+          <p>
+            <code>/datasets</code> 是统一入口，展示 Top-Down 与 Bottom-Up 数据集卡片，支持本地文件夹导入、导入进度轮询、删除数据集。点击数据集后由 <code>DatasetModeGate</code> 按 <code>analysis_mode</code> 分流。
+          </p>
+        </div>
+        <div class="mini">
+          <h3>Top-Down 分支</h3>
+          <p>
+            Top-Down 使用 <code>/datasets/:slug/:cutoff/proteins|proteoforms|prsms</code> 路由，继续走已有 TD 页面与谱图组件。本次规划不改 TD 路由、TD API、PrSM 组件。
+          </p>
+        </div>
+      </div>
+
+      <h3>Bottom-Up 页面内容</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>页面</th>
+            <th>路径</th>
+            <th>当前内容</th>
+            <th>与 M+1/M+2 的关系</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>BU Layout</td>
+            <td><code>/datasets/:slug</code> 下的 BU 分支</td>
+            <td>页面标题、Bottom-Up / software / status 标记、Overview / Proteins / Peptides / Matches 标签页。</td>
+            <td>保留不变；M+1/M+2 不是新主导航。</td>
+          </tr>
+          <tr>
+            <td>Overview</td>
+            <td><code>/datasets/:slug</code></td>
+            <td>摘要卡、QC、Run TIC/BPC 色谱、RT-m/z 鉴定热图、Bruker DIA windows、Run 列表。</td>
+            <td>不在整体页预拉 match 级同位素 XIC，避免大 I/O。</td>
+          </tr>
+          <tr>
+            <td>Proteins</td>
+            <td><code>/proteins</code> 与 <code>/proteins/:id</code></td>
+            <td>蛋白列表、decoy 切换、蛋白详情、Sequence coverage、关联肽段表。</td>
+            <td>不请求谱图 API，不加入 M+1/M+2。</td>
+          </tr>
+          <tr>
+            <td>Peptides</td>
+            <td><code>/peptides</code> 与 <code>/peptides/:id</code></td>
+            <td>肽段列表、q_max 过滤、肽段详情、关联 match 摘要。</td>
+            <td>可从 match 摘要跳详情；不在肽段页批量提 XIC。</td>
+          </tr>
+          <tr>
+            <td>Matches</td>
+            <td><code>/matches</code> 与 <code>/matches/:id</code></td>
+            <td>鉴定列表含 sequence、run、protein group、m/z、z、RT、Q.Value、intensity；详情页含 match 摘要、XIC、MS1、MS2+b/y、Bruker mobility slice。</td>
+            <td>唯一需要改造的页面是 match detail 里的 XIC 卡片和放大弹窗。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>后端模块边界</h3>
+      <div class="grid three">
+        <div class="mini">
+          <h4><code>api/v1/bu/*</code></h4>
+          <p>路由层只做 dataset/match guard、参数接收、调用 service、返回 DTO。</p>
+        </div>
+        <div class="mini">
+          <h4><code>back/app/bu/services/*</code></h4>
+          <p>运行时计算层：overview、lists、chromatogram、scan_resolver、spectrum_facade、theoretical_fragments、xic_service。</p>
+        </div>
+        <div class="mini">
+          <h4><code>spectrum_memory</code></h4>
+          <p>mzML 数据集预载与 run spectra 读取。BU 当前复用它，不在本次规划中修改它。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="current-m" class="panel">
+      <h2>2. 现有“只有 M”的实现位置</h2>
+      <p>
+        当前 BU match detail 页打开后，前端并行请求 <code>fetchBuMatchXic()</code>、<code>fetchBuMatchMs1()</code>、<code>fetchBuMatchMs2()</code>。其中 XIC 走：
+      </p>
+      <div class="flow">
+        <div class="step"><strong>1. 前端</strong><code>BuMatchDetailPage</code> 请求 <code>/matches/{id}/xic?ppm=10</code></div>
+        <div class="step"><strong>2. 路由</strong><code>matches.py</code> 调用 <code>xic_service.get_match_xic</code></div>
+        <div class="step"><strong>3. 数据</strong><code>require_bu_match</code> 提供 <code>precursor_mz</code>、<code>charge</code>、<code>RT</code>、<code>run_id</code></div>
+        <div class="step"><strong>4. 谱图</strong><code>get_run_spectra</code> 从 <code>spectrum_memory</code> 取得 mzML run spectra</div>
+        <div class="step"><strong>5. 计算</strong>遍历 MS1 scan，在 <code>precursor_mz ± ppm</code> 内取最大强度</div>
+        <div class="step"><strong>6. 展示</strong><code>BuXicChart</code> 把 <code>rt[]</code> 与 <code>intensity[]</code> 画成单条曲线</div>
+      </div>
+
+      <div class="note">
+        <strong>结论：</strong>现有 M 不是一个单独命名的“M 模块”，而是 <code>BuXicOut.precursor_mz</code> + <code>BuXicOut.intensity</code> 的单目标提取结果。M+1/M+2 的自然改造点是 <code>xic_service</code> 的目标 m/z 生成与多曲线输出，而不是导入流程、DB 大表或列表页。
+      </div>
+    </section>
+
+    <section id="definition" class="panel">
+      <h2>3. M / M+1 / M+2 的质谱定义</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>标签</th>
+            <th>含义</th>
+            <th>用于 XIC 的目标 m/z</th>
+            <th>展示预期</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="trace-m">M</span></td>
+            <td>单同位素前体峰，即当前 DIA-NN 鉴定给出的 precursor m/z。</td>
+            <td><code>precursor_mz</code></td>
+            <td>保留蓝色主曲线，是旧字段 <code>intensity</code> 对应曲线。</td>
+          </tr>
+          <tr>
+            <td><span class="trace-m1">M+1</span></td>
+            <td>比 M 重约 1 个中子质量差的同位素峰，常见来源是一个 <sup>13</sup>C 替代 <sup>12</sup>C。</td>
+            <td><code>precursor_mz + 1.0033548378 / z</code></td>
+            <td>与 M 在 RT 上应基本共洗脱，强度通常低于 M。</td>
+          </tr>
+          <tr>
+            <td><span class="trace-m2">M+2</span></td>
+            <td>比 M 重约 2 个中子质量差的同位素峰，常见来源是两个 +1 同位素替代或其他天然同位素组合。</td>
+            <td><code>precursor_mz + 2 * 1.0033548378 / z</code></td>
+            <td>与 M/M+1 共用 RT 轴，通常更弱，可帮助判断同位素包络一致性。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="warning">
+        <strong>关键取舍：</strong>本次建议不先做完整同位素丰度建模，也不解析修饰质量。原因是 XIC 提取首先需要准确的目标 m/z；用已鉴定的 <code>precursor_mz</code> 做 M 锚点，再按 charge 计算同位素间隔，能避开 modified sequence 解析复杂度，并与当前数据库字段完全对齐。
+      </div>
+    </section>
+
+    <section id="method" class="panel">
+      <h2>4. 全新的实现方法</h2>
+      <h3>4.1 新增纯计算小模块</h3>
+      <p>
+        新建 <code>back/app/bu/services/precursor_isotopes.py</code>，只负责从 <code>precursor_mz</code> 与 <code>precursor_charge</code> 生成 M/M+1/M+2 目标，不依赖 FastAPI、SQLAlchemy、ingest，也不读谱图。
+      </p>
+      <pre>NEUTRON_MASS_DIFF_DA = 1.0033548378
+
+def build_precursor_isotope_targets(
+    precursor_mz: float,
+    charge: int | None,
+    *,
+    max_isotope: int = 2,
+) -> list[PrecursorIsotopeTarget]:
+    # charge 缺失或非法时，只返回 M，保证旧 XIC 可用
+    # charge 有效时，返回 M, M+1, M+2
+    ...</pre>
+
+      <h3>4.2 XIC 服务一次遍历提取多目标</h3>
+      <p>
+        改造 <code>xic_service.get_match_xic</code>：先生成目标列表，再沿用现有 RT 窗口和 mzML MS1 遍历。每个 MS1 scan 内同时计算三个窗口的最大峰强度，最终返回共享 <code>rt[]</code> 与多条 trace。
+      </p>
+      <pre>targets = build_precursor_isotope_targets(precursor_mz, precursor_charge)
+series = {target.label: [] for target in targets}
+
+for spec in ms1_scans_in_rt_window:
+    spec_rt = rt_seconds / 60
+    rt.append(spec_rt)
+    best_by_target = extract_best_intensities(mz_values, intensity_values, targets, ppm)
+    for target in targets:
+        series[target.label].append(best_by_target[target.label])</pre>
+
+      <h3>4.3 扫描峰列表的性能策略</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>策略</th>
+            <th>说明</th>
+            <th>规划结论</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>简单三目标循环</td>
+            <td>每个 scan 内遍历峰数组，并同时更新 M/M+1/M+2 的 best intensity。</td>
+            <td>实现最直观，RT 窗口仅 apex 附近，足够作为第一版。</td>
+          </tr>
+          <tr>
+            <td>有序 m/z 二分</td>
+            <td>若 <code>mz[]</code> 单调递增，可对每个 target 用二分定位窗口，仅扫描局部峰。</td>
+            <td>可作为同一 helper 的优化，不改变 API。</td>
+          </tr>
+          <tr>
+            <td>调用三次旧 XIC</td>
+            <td>对 M/M+1/M+2 分别遍历一次 run spectra。</td>
+            <td>不采用；I/O 与循环成本被放大，且 RT 点排序更难统一。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="success">
+        <strong>模块边界：</strong>M+1/M+2 只增加 BU runtime service、BU DTO、BU 前端图表能力和测试；不改变导入链路、不新增 DB 列、不修改 Top-Down、不把算法塞进路由函数。
+      </div>
+    </section>
+
+    <section id="contract" class="panel">
+      <h2>5. API 契约设计</h2>
+      <p>
+        endpoint 保持不变：<code>GET /api/v1/datasets/{slug}/matches/{match_id}/xic?ppm=10</code>。为了兼容旧前端，原字段保留；为了避免以后再加 M+3、M+4 时继续平铺字段，新增结构化 <code>traces</code>。
+      </p>
+      <pre>{
+  "rt": [87.2, 92.2, 92.8, 98.0],
+  "intensity": [0.0, 1200000.0, 900000.0, 0.0],
+  "precursor_mz": 477.305145,
+  "precursor_charge": 2,
+  "ppm": 10.0,
+  "rt_apex": 92.46,
+  "rt_start": 92.15,
+  "rt_stop": 93.08,
+  "unit_rt": "min",
+  "traces": [
+    {
+      "label": "M",
+      "isotope_index": 0,
+      "target_mz": 477.305145,
+      "intensity": [0.0, 1200000.0, 900000.0, 0.0]
+    },
+    {
+      "label": "M+1",
+      "isotope_index": 1,
+      "target_mz": 477.806822,
+      "intensity": [0.0, 380000.0, 300000.0, 0.0]
+    },
+    {
+      "label": "M+2",
+      "isotope_index": 2,
+      "target_mz": 478.308500,
+      "intensity": [0.0, 90000.0, 76000.0, 0.0]
+    }
+  ]
+}</pre>
+
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>状态</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>rt</code></td>
+            <td>保留</td>
+            <td>三条曲线共享同一 RT 数组。</td>
+          </tr>
+          <tr>
+            <td><code>intensity</code></td>
+            <td>保留</td>
+            <td>永远等于 <code>traces[0].intensity</code>，即 M 曲线。</td>
+          </tr>
+          <tr>
+            <td><code>precursor_mz</code></td>
+            <td>保留</td>
+            <td>永远等于 M 的 target m/z。</td>
+          </tr>
+          <tr>
+            <td><code>precursor_charge</code></td>
+            <td>新增</td>
+            <td>前端标题和异常判断需要；来自 <code>identification_matches.precursor_charge</code>。</td>
+          </tr>
+          <tr>
+            <td><code>traces</code></td>
+            <td>新增</td>
+            <td>结构化承载 M/M+1/M+2，未来扩展不需要再改字段名。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="frontend" class="panel">
+      <h2>6. 前端展示规划</h2>
+      <h3>6.1 组件改造</h3>
+      <ul>
+        <li><code>front/src/features/bu/types.ts</code>：给 <code>BuXicOut</code> 增加 <code>precursor_charge</code> 与 <code>traces</code>。</li>
+        <li><code>chartTheme.ts</code>：增加同位素颜色，M 继续用当前 XIC 蓝色，M+1 用琥珀色，M+2 用紫色。</li>
+        <li><code>BuInteractivePlot.tsx</code>：增加可选 <code>series</code> 模式；未传 <code>series</code> 时保持当前单曲线行为，Run TIC/BPC 不受影响。</li>
+        <li><code>BuXicChart.tsx</code>：优先从 <code>xic.traces</code> 组装多曲线；旧响应无 <code>traces</code> 时回退为单条 M 曲线。</li>
+        <li><code>BuMatchDetailPage.tsx</code>：原则上不需要改请求路径，只继续传入 <code>xic.data</code>。</li>
+      </ul>
+
+      <h3>6.2 视觉效果模拟</h3>
+      <div class="chart-panel">
+        <div class="chart-title">XIC of precursor isotopes: M / M+1 / M+2</div>
+        <div class="chart-subtitle">示意：三条曲线共用 RT 轴、RT window 阴影、apex 竖线；真实数据来自 mzML MS1 提取</div>
+        <div class="canvas-wrap">
+          <canvas id="xicCanvas"></canvas>
+          <div class="legend">
+            <div><span class="swatch" style="background:#1f77b4"></span>M</div>
+            <div><span class="swatch" style="background:#c57a12"></span>M+1</div>
+            <div><span class="swatch" style="background:#7952b3"></span>M+2</div>
+            <div><span class="swatch" style="background:#0f8f83; height:8px; opacity:.35"></span>RT window</div>
+            <div><span class="swatch" style="background:#c43c39"></span>apex</div>
+          </div>
+        </div>
+        <div class="controls">
+          <label><input id="showM" type="checkbox" checked />显示 M</label>
+          <label><input id="showM1" type="checkbox" checked />显示 M+1</label>
+          <label><input id="showM2" type="checkbox" checked />显示 M+2</label>
+          <label><input id="fillM" type="checkbox" checked />填充 M</label>
+        </div>
+        <div id="chartTip" class="tooltip"></div>
+      </div>
+
+      <div class="note">
+        <strong>交互保持：</strong>现有 X 轴 brush、滚轮缩放、Shift+滚轮 Y 轴缩放、放大弹窗和 reset 行为应继续保留；多曲线只是数据层和 path 渲染层的扩展。
+      </div>
+    </section>
+
+    <section id="files" class="panel">
+      <h2>7. 计划改动文件清单</h2>
+      <ul class="file-list">
+        <li>
+          <span class="badge back">新增</span>
+          <div><code>back/app/bu/services/precursor_isotopes.py</code><br />纯函数模块，生成 M/M+1/M+2 target m/z。</div>
+        </li>
+        <li>
+          <span class="badge back">修改</span>
+          <div><code>back/app/bu/services/xic_service.py</code><br />由单目标提取改为多目标提取，保留旧 <code>intensity</code> 输出。</div>
+        </li>
+        <li>
+          <span class="badge back">修改</span>
+          <div><code>back/app/schemas/bu.py</code><br />新增 <code>BuXicTrace</code>，扩展 <code>BuXicOut</code>。</div>
+        </li>
+        <li>
+          <span class="badge test">新增</span>
+          <div><code>back/tests/test_bu_xic_isotopes.py</code><br />覆盖 target m/z、三曲线提取、charge 缺失回退、旧字段兼容。</div>
+        </li>
+        <li>
+          <span class="badge front">修改</span>
+          <div><code>front/src/features/bu/types.ts</code><br />同步 XIC trace 类型。</div>
+        </li>
+        <li>
+          <span class="badge front">修改</span>
+          <div><code>front/src/features/bu/components/spectrum/chartTheme.ts</code><br />增加 M+1/M+2 颜色。</div>
+        </li>
+        <li>
+          <span class="badge front">修改</span>
+          <div><code>front/src/features/bu/components/spectrum/BuInteractivePlot.tsx</code><br />支持可选多 series 绘制和 tooltip。</div>
+        </li>
+        <li>
+          <span class="badge front">修改</span>
+          <div><code>front/src/features/bu/components/spectrum/BuXicChart.tsx</code><br />渲染 M/M+1/M+2，旧响应回退为 M。</div>
+        </li>
+        <li>
+          <span class="badge doc">可选</span>
+          <div><code>budocs/谱图查看说明.md</code><br />更新 G6 XIC 响应契约与同位素定义。</div>
+        </li>
+      </ul>
+
+      <div class="warning">
+        <strong>明确不改：</strong><code>import_jobs.py</code>、<code>ingest/bu/*</code>、数据库结构、Top-Down 页面、Top-Down API、<code>spectrum_memory</code> 源码。
+      </div>
+    </section>
+
+    <section id="tests" class="panel">
+      <h2>8. 测试与验收标准</h2>
+      <h3>后端测试</h3>
+      <ol>
+        <li><code>build_precursor_isotope_targets(477.305145, 2)</code> 返回 477.305145、477.806822、478.308500 附近的三个 target。</li>
+        <li>mock MS1 spectra 同时包含 M/M+1/M+2 峰时，<code>get_match_xic</code> 返回三条等长 trace。</li>
+        <li><code>out.intensity == out.traces[0].intensity</code>，保证旧字段兼容。</li>
+        <li>charge 缺失或非法时不报错，只返回 M trace。</li>
+        <li>Bruker <code>.d</code> match 仍按当前行为返回 <code>unsupported_raw_format</code>，不偷偷伪造 XIC。</li>
+      </ol>
+
+      <h3>前端验收</h3>
+      <ol>
+        <li>match detail 的 XIC 卡片和放大 modal 都显示 M/M+1/M+2 三条曲线。</li>
+        <li>旧式响应缺少 <code>traces</code> 时，页面仍显示单条 M 曲线。</li>
+        <li>TIC/BPC、RT-mz、MS1、MS2+b/y、protein coverage 页面不发生布局和请求回归。</li>
+        <li>tooltip 能在同一个 RT 点显示多条曲线的强度。</li>
+      </ol>
+
+      <h3>建议执行命令</h3>
+      <pre>cd back
+uv run pytest tests/test_bu_spectrum_api.py tests/test_bu_xic_isotopes.py
+
+cd ../front
+pnpm exec tsc --noEmit
+pnpm exec vite build</pre>
+    </section>
+
+    <section id="confirm" class="panel">
+      <h2>9. 需要你确认的默认假设</h2>
+      <ol>
+        <li>本次只做 mzML 的 BU match detail XIC；Bruker <code>.d</code> 的 match-level XIC 仍保持当前不支持状态。</li>
+        <li>M+1/M+2 的 m/z 使用 <code>precursor_mz + n * 1.0033548378 / charge</code>，不做完整 isotope abundance 模型。</li>
+        <li>API 路径不变，默认总是返回 M/M+1/M+2；旧字段 <code>intensity</code> 继续代表 M。</li>
+        <li>前端第一版直接叠加三线，暂不新增图例点击开关到正式组件；若你需要，也可以把上方模拟图里的显示开关纳入实现。</li>
+      </ol>
+
+      <div class="success">
+        <strong>确认后实施顺序：</strong>先做后端 target 模块与 XIC DTO/服务测试，再做前端类型与多曲线渲染，最后跑后端 pytest 与前端 TypeScript/build 检查。
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById("xicCanvas");
+      const tip = document.getElementById("chartTip");
+      const checks = {
+        M: document.getElementById("showM"),
+        M1: document.getElementById("showM1"),
+        M2: document.getElementById("showM2"),
+        fill: document.getElementById("fillM"),
+      };
+      const colors = { M: "#1f77b4", M1: "#c57a12", M2: "#7952b3" };
+      const rtMin = 88.0;
+      const rtMax = 97.0;
+      const apex = 92.46;
+      const rtStart = 92.15;
+      const rtStop = 93.08;
+      const n = 260;
+      const data = [];
+
+      function gaussian(x, center, sigma, amp) {
+        return amp * Math.exp(-0.5 * Math.pow((x - center) / sigma, 2));
+      }
+
+      for (let i = 0; i < n; i += 1) {
+        const rt = rtMin + (rtMax - rtMin) * i / (n - 1);
+        const shoulder = gaussian(rt, apex + 0.7, 0.23, 110000);
+        const base = 9000 + 2800 * Math.sin(i / 8);
+        const m = gaussian(rt, apex, 0.38, 1200000) + shoulder + base;
+        data.push({
+          rt,
+          M: m,
+          M1: m * 0.31 + base * 0.6,
+          M2: m * 0.085 + base * 0.35,
+        });
+      }
+
+      function fmt(v) {
+        if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+        if (v >= 1e3) return (v / 1e3).toFixed(0) + "K";
+        return v.toFixed(0);
+      }
+
+      function draw(hoverIndex = null) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const width = Math.max(320, rect.width);
+        const height = Math.max(260, rect.height);
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, width, height);
+
+        const pad = { left: 66, right: 22, top: 20, bottom: 48 };
+        const innerW = width - pad.left - pad.right;
+        const innerH = height - pad.top - pad.bottom;
+
+        const visibleKeys = [];
+        if (checks.M.checked) visibleKeys.push("M");
+        if (checks.M1.checked) visibleKeys.push("M1");
+        if (checks.M2.checked) visibleKeys.push("M2");
+
+        let maxY = 1;
+        for (const point of data) {
+          for (const key of visibleKeys) {
+            maxY = Math.max(maxY, point[key]);
+          }
+        }
+        maxY *= 1.08;
+
+        const x = (rt) => pad.left + (rt - rtMin) / (rtMax - rtMin) * innerW;
+        const y = (value) => pad.top + innerH - value / maxY * innerH;
+
+        ctx.strokeStyle = "#d9e1ec";
+        ctx.lineWidth = 1;
+        ctx.font = "12px Segoe UI, Microsoft YaHei, sans-serif";
+        ctx.fillStyle = "#647184";
+        ctx.textAlign = "right";
+        for (let i = 0; i <= 4; i += 1) {
+          const yy = pad.top + innerH * i / 4;
+          ctx.beginPath();
+          ctx.moveTo(pad.left, yy);
+          ctx.lineTo(pad.left + innerW, yy);
+          ctx.stroke();
+          ctx.fillText(fmt(maxY * (1 - i / 4)), pad.left - 8, yy + 4);
+        }
+
+        ctx.fillStyle = "rgba(15, 143, 131, 0.16)";
+        ctx.fillRect(x(rtStart), pad.top, x(rtStop) - x(rtStart), innerH);
+
+        ctx.strokeStyle = "#c43c39";
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x(apex), pad.top);
+        ctx.lineTo(x(apex), pad.top + innerH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (checks.M.checked && checks.fill.checked) {
+          ctx.beginPath();
+          ctx.moveTo(x(data[0].rt), pad.top + innerH);
+          data.forEach((point) => ctx.lineTo(x(point.rt), y(point.M)));
+          ctx.lineTo(x(data[data.length - 1].rt), pad.top + innerH);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(31, 119, 180, 0.18)";
+          ctx.fill();
+        }
+
+        function line(key, color, widthLine) {
+          if (!visibleKeys.includes(key)) return;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = widthLine;
+          ctx.beginPath();
+          data.forEach((point, index) => {
+            const px = x(point.rt);
+            const py = y(point[key]);
+            if (index === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          });
+          ctx.stroke();
+        }
+
+        line("M", colors.M, 1.8);
+        line("M1", colors.M1, 1.5);
+        line("M2", colors.M2, 1.5);
+
+        if (hoverIndex !== null) {
+          const point = data[hoverIndex];
+          ctx.strokeStyle = "rgba(100, 113, 132, 0.56)";
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(x(point.rt), pad.top);
+          ctx.lineTo(x(point.rt), pad.top + innerH);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        ctx.fillStyle = "#647184";
+        ctx.textAlign = "center";
+        ctx.fillText("Retention Time (min)", pad.left + innerW / 2, height - 12);
+        ctx.save();
+        ctx.translate(18, pad.top + innerH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText("MS1 intensity", 0, 0);
+        ctx.restore();
+
+        for (let i = 0; i <= 5; i += 1) {
+          const rt = rtMin + (rtMax - rtMin) * i / 5;
+          ctx.fillText(rt.toFixed(1), x(rt), pad.top + innerH + 20);
+        }
+      }
+
+      function hover(event) {
+        const rect = canvas.getBoundingClientRect();
+        const padLeft = 66;
+        const padRight = 22;
+        const innerW = rect.width - padLeft - padRight;
+        const cx = event.clientX - rect.left - padLeft;
+        if (cx < 0 || cx > innerW) {
+          tip.textContent = "";
+          draw(null);
+          return;
+        }
+        const idx = Math.max(0, Math.min(data.length - 1, Math.round(cx / innerW * (data.length - 1))));
+        const point = data[idx];
+        const values = [`RT=${point.rt.toFixed(3)} min`];
+        if (checks.M.checked) values.push(`M=${fmt(point.M)}`);
+        if (checks.M1.checked) values.push(`M+1=${fmt(point.M1)}`);
+        if (checks.M2.checked) values.push(`M+2=${fmt(point.M2)}`);
+        tip.textContent = values.join("  |  ");
+        draw(idx);
+      }
+
+      canvas.addEventListener("mousemove", hover);
+      canvas.addEventListener("mouseleave", () => {
+        tip.textContent = "";
+        draw(null);
+      });
+      Object.values(checks).forEach((input) => input.addEventListener("change", () => draw(null)));
+      window.addEventListener("resize", () => draw(null));
+      draw(null);
+    })();
+  </script>
+</body>
+</html>

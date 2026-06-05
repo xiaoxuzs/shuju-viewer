@@ -247,14 +247,23 @@ class BuSpectrumV1(BaseModel):
     markers: list[BuSpectrumMarker] = Field(default_factory=list)
 
 
+class BuXicTrace(BaseModel):
+    label: str
+    isotope_index: int
+    target_mz: float
+    intensity: list[float] = Field(default_factory=list)
+
+
 class BuXicOut(BaseModel):
     rt: list[float] = Field(default_factory=list)
     intensity: list[float] = Field(default_factory=list)
     precursor_mz: float
+    precursor_charge: int | None = None
     ppm: float
     rt_apex: float | None = None
     rt_start: float | None = None
     rt_stop: float | None = None
+    traces: list[BuXicTrace] = Field(default_factory=list)
     unit_rt: Literal["min"] = "min"
 
 

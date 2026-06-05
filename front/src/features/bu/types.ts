@@ -237,14 +237,23 @@ export interface BuSpectrumV1 {
   markers: BuSpectrumMarker[];
 }
 
+export interface BuXicTrace {
+  label: string;
+  isotope_index: number;
+  target_mz: number;
+  intensity: number[];
+}
+
 export interface BuXicOut {
   rt: number[];
   intensity: number[];
   precursor_mz: number;
+  precursor_charge: number | null;
   ppm: number;
   rt_apex: number | null;
   rt_start: number | null;
   rt_stop: number | null;
+  traces: BuXicTrace[];
   unit_rt: "min";
 }
 

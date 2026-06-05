@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XIC 色谱曲线 — M+1 / M+2 叠加规划</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6370;
+      --border: #e2e6ef;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --teal: #0d9488;
+      --teal-soft: #ecfdf5;
+      --warn: #b45309;
+      --warn-bg: #fffbeb;
+      --ok: #047857;
+      --ok-bg: #ecfdf5;
+      --m: #1f77b4;
+      --m1: #ff7f0e;
+      --m2: #9467bd;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 10px 40px -12px rgba(15, 23, 42, 0.12);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --mono: "Cascadia Code", "Consolas", "SF Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      line-height: 1.65;
+      color: var(--text);
+      background: linear-gradient(180deg, #eef2ff 0%, var(--bg) 28%, var(--bg) 100%);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 0 1.25rem 3.5rem; }
+
+    .hero {
+      padding: 2.5rem 0 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero h1 {
+      font-size: clamp(1.45rem, 3.5vw, 1.85rem);
+      font-weight: 700;
+      line-height: 1.25;
+      margin: 0 0 0.75rem;
+      letter-spacing: -0.02em;
+    }
+    .hero-lead { color: var(--muted); font-size: 1.02rem; margin: 0 0 1.25rem; max-width: 720px; }
+    .hero-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.35rem 0.75rem; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 600;
+      background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);
+    }
+    .badge.warn { background: var(--warn-bg); border-color: #fcd34d; color: var(--warn); }
+    .badge.ok { background: var(--ok-bg); border-color: #6ee7b7; color: var(--ok); }
+
+    h2 {
+      font-size: 1.28rem; margin: 2.75rem 0 1rem; padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--accent-soft); color: var(--accent);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    h2 .sec-num {
+      display: inline-flex; width: 1.85rem; height: 1.85rem; border-radius: 8px;
+      background: var(--accent); color: #fff; font-size: 0.95rem;
+      align-items: center; justify-content: center; font-weight: 700;
+    }
+    h3 { font-size: 1.05rem; margin: 1.35rem 0 0.65rem; }
+    p { margin: 0.5rem 0 1rem; }
+    ul, ol { margin: 0.5rem 0 1rem; padding-left: 1.35rem; }
+    li { margin: 0.35rem 0; }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem 1.35rem;
+      margin: 1rem 0; box-shadow: var(--shadow);
+    }
+    .card.teal { border-color: #99f6e4; background: linear-gradient(135deg, var(--teal-soft), var(--surface)); }
+    .card.warn { border-color: #fcd34d; background: var(--warn-bg); }
+    .card.ok { border-color: #6ee7b7; background: var(--ok-bg); }
+
+    table {
+      width: 100%; border-collapse: collapse; font-size: 0.92rem; margin: 0.75rem 0 1rem;
+    }
+    th, td { border: 1px solid var(--border); padding: 0.55rem 0.75rem; text-align: left; vertical-align: top; }
+    th { background: var(--accent-soft); font-weight: 600; }
+    code, pre {
+      font-family: var(--mono); font-size: 0.86rem;
+      background: #f1f5f9; border-radius: 6px;
+    }
+    code { padding: 0.12rem 0.4rem; }
+    pre {
+      padding: 0.85rem 1rem; overflow-x: auto;
+      border: 1px solid var(--border); margin: 0.75rem 0 1rem;
+    }
+
+    .file-list { list-style: none; padding: 0; margin: 0.75rem 0; }
+    .file-list li {
+      display: flex; gap: 0.65rem; align-items: flex-start;
+      padding: 0.55rem 0; border-bottom: 1px dashed var(--border);
+    }
+    .file-list li:last-child { border-bottom: none; }
+    .tag {
+      flex-shrink: 0; font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      padding: 0.15rem 0.45rem; border-radius: 4px; margin-top: 0.15rem;
+    }
+    .tag.backend { background: #dbeafe; color: #1d4ed8; }
+    .tag.frontend { background: #fce7f3; color: #be185d; }
+    .tag.docs { background: #e0e7ff; color: #4338ca; }
+    .tag.test { background: #d1fae5; color: #065f46; }
+
+    /* Mock chart */
+    .mock-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem 1.25rem 1.25rem;
+      box-shadow: var(--shadow-lg); margin: 1.25rem 0;
+    }
+    .mock-title { text-align: center; font-weight: 600; font-size: 0.95rem; margin-bottom: 0.25rem; }
+    .mock-subtitle { text-align: center; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.75rem; }
+    .mock-canvas-wrap { position: relative; width: 100%; }
+    canvas#mock-xic { width: 100%; height: 300px; display: block; border-radius: var(--radius-sm); background: #fafbfc; border: 1px solid var(--border); }
+    .mock-legend {
+      position: absolute; right: 12px; top: 12px;
+      background: rgba(255,255,255,0.92); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.45rem 0.65rem; font-size: 0.78rem;
+    }
+    .mock-legend div { display: flex; align-items: center; gap: 0.4rem; margin: 0.15rem 0; }
+    .swatch { width: 18px; height: 3px; border-radius: 2px; }
+    .mock-controls {
+      display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;
+      margin-top: 0.85rem; font-size: 0.85rem;
+    }
+    .mock-controls label { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+    .mock-note { font-size: 0.8rem; color: var(--muted); margin-top: 0.65rem; }
+
+    .flow {
+      display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+      font-size: 0.88rem; margin: 1rem 0;
+    }
+    .flow span {
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 0.4rem 0.65rem; border-radius: 8px;
+    }
+    .flow .arrow { color: var(--muted); border: none; background: none; padding: 0; }
+
+    .compare-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0;
+    }
+    @media (max-width: 720px) { .compare-grid { grid-template-columns: 1fr; } }
+    .compare-box {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 0.85rem; background: #fafbfc; font-size: 0.88rem;
+    }
+    .compare-box h4 { margin: 0 0 0.5rem; font-size: 0.92rem; }
+    .compare-box.before { border-left: 4px solid var(--muted); }
+    .compare-box.after { border-left: 4px solid var(--accent); }
+
+    .confirm-box {
+      background: linear-gradient(135deg, #eff6ff, #ecfdf5);
+      border: 1px solid #93c5fd; border-radius: var(--radius);
+      padding: 1.25rem 1.35rem; margin-top: 2rem;
+    }
+    .confirm-box h3 { margin-top: 0; color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1>XIC 色谱曲线 — M / M+1 / M+2 叠加规划</h1>
+      <p class="hero-lead">
+        在 Bottom-Up 鉴定详情页的 <strong>Extracted Ion Chromatogram（XIC）</strong> 上，
+        除现有单条 M（单同位素前体）曲线外，叠加 <strong>M+1</strong> 与 <strong>M+2</strong> 同位素提取曲线。
+        本文档为<strong>实施前规划</strong>，含定义、方法、改动清单与浏览器内效果模拟；确认后再编码。
+      </p>
+      <div class="hero-badges">
+        <span class="badge">范围：BU 鉴定详情 · XIC</span>
+        <span class="badge warn">待确认：m/z 计算精度</span>
+        <span class="badge ok">向后兼容 API 扩展</span>
+        <span class="badge">生成日期：2026-06-02</span>
+      </div>
+    </header>
+
+    <h2><span class="sec-num">1</span>背景与目标</h2>
+    <div class="card">
+      <p><strong>现状</strong>：鉴定详情页 XIC 仅在鉴定给出的 <code>precursor_mz</code> ± ppm 窗口内，沿 RT 提取 MS1 最强峰强度，绘制<strong>单条蓝色</strong>曲线（见 <code>BuXicChart.tsx</code> + <code>xic_service.py</code>）。</p>
+      <p><strong>目标</strong>：同一 RT 轴上叠加三条曲线 — <span style="color:var(--m)">M</span>、<span style="color:var(--m1)">M+1</span>、<span style="color:var(--m2)">M+2</span> — 帮助判断前体同位素包络是否与肽段序列/电荷一致，并识别共洗脱干扰。</p>
+      <p><strong>不在本次范围</strong>（除非您另行指定）：整体页 TIC/BPC、Top-Down PrSM 局部 envelope、LC-MS 3D 热图、Bruker <code>.d</code> run（当前 D10 仍返回 <code>unsupported_raw_format</code>）。</p>
+    </div>
+
+    <h2><span class="sec-num">2</span>M / M+1 / M+2 定义</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>标签</th>
+          <th>含义</th>
+          <th>m/z 目标（电荷 z）</th>
+          <th>典型相对强度*</th>
+          <th>色谱形状</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong style="color:var(--m)">M</strong></td>
+          <td>单同位素前体峰（全轻同位素组成，如全 <sup>12</sup>C）</td>
+          <td>鉴定结果中的 <code>precursor_mz</code>（已有）</td>
+          <td>100%（基准）</td>
+          <td>与肽段洗脱一致，RT apex 对齐</td>
+        </tr>
+        <tr>
+          <td><strong style="color:var(--m1)">M+1</strong></td>
+          <td>质量比 M 大 <strong>1 Da</strong> 的同位素峰（主要来自 <sup>13</sup>C、<sup>15</sup>N 等 +1 中子）</td>
+          <td>由肽段序列 + 电荷 <strong>理论计算</strong>；一阶近似：<code>M + 1.003355 / z</code></td>
+          <td>约 5%–40%（随肽段碳原子数增加）</td>
+          <td>与 M <strong>同 RT 轮廓</strong>，峰值按比例降低</td>
+        </tr>
+        <tr>
+          <td><strong style="color:var(--m2)">M+2</strong></td>
+          <td>质量比 M 大 <strong>2 Da</strong> 的同位素峰（两个 <sup>13</sup>C，或 <sup>34</sup>S、<sup>18</sup>O 等组合）</td>
+          <td>理论计算；一阶近似：<code>M + 2.006710 / z</code>（双 <sup>13</sup>C 主导时）</td>
+          <td>约 1%–15%</td>
+          <td>与 M 同 RT；长肽更明显</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="mock-note">* 相对强度为天然丰度下的典型量级，实际随序列元素组成变化；图中模拟采用示意比例 M : M+1 : M+2 ≈ 1 : 0.32 : 0.09。</p>
+
+    <div class="card teal">
+      <h3 style="margin-top:0">与 MS1 谱图的关系</h3>
+      <p>MS1 某一 RT 帧上，前体在 m/z 轴呈<strong>间隔约 1/z Th 的同位素簇</strong>；XIC 则是对每个同位素 m/z 分别在<strong>全 RT 范围</strong>做 extracted ion，得到三条<strong>时间-强度色谱</strong>。三条曲线应共用 RT 轴、apex 与 DIA-NN RT 窗口阴影。</p>
+    </div>
+
+    <h2><span class="sec-num">3</span>实现方法</h2>
+
+    <h3>3.1 总体数据流</h3>
+    <div class="flow">
+      <span>match（sequence, charge, precursor_mz）</span>
+      <span class="arrow">→</span>
+      <span>theoretical_precursor_isotopes</span>
+      <span class="arrow">→</span>
+      <span>xic_service 三次提取 / 一次遍历</span>
+      <span class="arrow">→</span>
+      <span>BuXicOut 扩展</span>
+      <span class="arrow">→</span>
+      <span>BuXicChart 三线叠加</span>
+    </div>
+
+    <h3>3.2 后端：理论 m/z（推荐独立小模块）</h3>
+    <div class="card">
+      <p>新建 <code>back/app/bu/services/theoretical_precursor_isotopes.py</code>（与 <code>theoretical_fragments.py</code> 并列，仅用 pyteomics，不依赖 FastAPI）：</p>
+      <pre>def precursor_isotope_targets(
+    sequence: str,
+    charge: int,
+    monoisotopic_mz: float,
+) -> list[tuple[str, float]]:
+    """
+    返回 [("M", mz0), ("M+1", mz1), ("M+2", mz2)]。
+    优先：pyteomics.mass 按序列算同位素质量再 / charge；
+    回退：monoisotopic_mz + k * 1.003355 / charge（k=0,1,2）。
+    """</pre>
+      <p><strong>推荐精度</strong>：用序列 composition 计算 M+1、M+2 的<strong>准确质量</strong>再除以 z，与 b/y 模块一致依赖 pyteomics；鉴定 <code>precursor_mz</code> 仍作为 M 的锚点（可校验 |Δ| &lt; 若干 ppm，超差仍用鉴定值并记日志）。</p>
+    </div>
+
+    <h3>3.3 后端：XIC 提取（扩展 <code>xic_service.py</code>）</h3>
+    <div class="card">
+      <p>在现有 MS1 遍历逻辑上，对每个 scan 分别对三个 target m/z 做 ±ppm 窗口 <code>argmax(intensity)</code>：</p>
+      <pre>for spec in ms1_scans_in_rt_window:
+    rt.append(spec_rt)
+    for label, target_mz in targets:
+        mz_tol = target_mz * ppm * 1e-6
+        best = max peak in window
+        series[label].append(best)</pre>
+      <p><strong>性能</strong>：与现逻辑同阶（每 scan 多 2 次窗口扫描）；RT 窗口已限制在 apex ±5 min，可接受。可选：单次 zip 遍历 mz/intensity 同时更新三个 best。</p>
+    </div>
+
+    <h3>3.4 API 契约扩展（向后兼容）</h3>
+    <div class="card">
+      <p>扩展 <code>BuXicOut</code>，保留原字段 <code>intensity</code> = M 曲线：</p>
+      <pre>{
+  "rt": [ ... ],
+  "intensity": [ ... ],           // M，与现网一致
+  "intensity_m1": [ ... ],        // 新增，可为 null（旧客户端忽略）
+  "intensity_m2": [ ... ],
+  "isotope_targets": [
+    { "label": "M",   "target_mz": 477.3051 },
+    { "label": "M+1", "target_mz": 477.8068 },
+    { "label": "M+2", "target_mz": 478.3085 }
+  ],
+  "precursor_mz": 477.3051,
+  "ppm": 10,
+  "rt_apex": ..., "rt_start": ..., "rt_stop": ...,
+  "unit_rt": "min"
+}</pre>
+      <p>端点不变：<code>GET /api/v1/datasets/{slug}/matches/{match_id}/xic?ppm=10</code>。</p>
+    </div>
+
+    <h3>3.5 前端：多曲线绘制</h3>
+    <div class="card">
+      <p><strong>方案 A（推荐，改动集中）</strong>：为 <code>BuInteractivePlot</code> 增加可选 <code>series?: BuPlotSeries[]</code>；若提供则忽略单条 <code>points/lineColor</code>，每条 series 独立 path + 可选 fill（M 保留浅填充，M+1/M+2 仅线）。</p>
+      <p><strong>方案 B</strong>：新建 <code>BuMultiLinePlot.tsx</code>，XIC 专用 — 隔离变更，但重复 zoom/brush 逻辑。</p>
+      <p>颜色约定（与 matplotlib / 常见质谱软件接近）：</p>
+      <ul>
+        <li><span style="color:var(--m)">M</span> — <code>#1f77b4</code>（沿用 <code>BU_CHART.tic</code>）</li>
+        <li><span style="color:var(--m1)">M+1</span> — <code>#ff7f0e</code></li>
+        <li><span style="color:var(--m2)">M+2</span> — <code>#9467bd</code></li>
+      </ul>
+      <p>标题改为：<em>XIC of precursor isotopes (M, M+1, M+2) ±10 ppm</em>；副标题仍显示 peptide + charge；图例增加三条 isotope 线 + 现有 RT window / apex。</p>
+      <p>Tooltip：悬停显示当前 RT 下<strong>三条强度</strong>（若命中同一 RT 索引）。</p>
+    </div>
+
+    <h3>3.6 文档与测试</h3>
+    <ul>
+      <li>更新 <code>budocs/谱图查看说明.md</code> §G6：响应字段与 isotope 定义。</li>
+      <li>新增 <code>back/tests/test_bu_xic_isotopes.py</code>：mock MS1 spectra，断言三曲线 peak 位置与相对强度关系。</li>
+      <li>可选：在 <code>cs/</code> 增加中文脚本「XIC同位素验收.py」对基准 match 拉 API 比对。</li>
+    </ul>
+
+    <h2><span class="sec-num">4</span>修改文件清单</h2>
+    <ul class="file-list">
+      <li>
+        <span class="tag backend">新建</span>
+        <div><code>back/app/bu/services/theoretical_precursor_isotopes.py</code><br/>肽段 M/M+1/M+2 目标 m/z 计算（pyteomics）</div>
+      </li>
+      <li>
+        <span class="tag backend">修改</span>
+        <div><code>back/app/bu/services/xic_service.py</code><br/>调用 isotope targets；单次 MS1 遍历输出三条 intensity 序列</div>
+      </li>
+      <li>
+        <span class="tag backend">修改</span>
+        <div><code>back/app/schemas/bu.py</code><br/><code>BuXicOut</code> 增加 <code>intensity_m1</code>、<code>intensity_m2</code>、<code>isotope_targets</code></div>
+      </li>
+      <li>
+        <span class="tag test">新建</span>
+        <div><code>back/tests/test_bu_xic_isotopes.py</code><br/>单元测试</div>
+      </li>
+      <li>
+        <span class="tag frontend">修改</span>
+        <div><code>front/src/features/bu/types.ts</code><br/>同步 TypeScript 类型</div>
+      </li>
+      <li>
+        <span class="tag frontend">修改</span>
+        <div><code>front/src/features/bu/components/spectrum/chartTheme.ts</code><br/>增加 <code>isotopeM1</code>、<code>isotopeM2</code> 色值</div>
+      </li>
+      <li>
+        <span class="tag frontend">修改</span>
+        <div><code>front/src/features/bu/components/spectrum/BuInteractivePlot.tsx</code><br/>支持多 series 渲染与 tooltip</div>
+      </li>
+      <li>
+        <span class="tag frontend">修改</span>
+        <div><code>front/src/features/bu/components/spectrum/BuXicChart.tsx</code><br/>组装三线数据、图例、标题</div>
+      </li>
+      <li>
+        <span class="tag docs">修改</span>
+        <div><code>budocs/谱图查看说明.md</code> §G6<br/>API 响应说明</div>
+      </li>
+    </ul>
+    <p><strong>无需改动</strong>：<code>buClient.ts</code>（GET 路径不变）、<code>BuMatchDetailPage.tsx</code>（仍传 <code>xic.data</code>）、路由与 OpenAPI 注册。</p>
+
+    <h2><span class="sec-num">5</span>实施前后对比</h2>
+    <div class="compare-grid">
+      <div class="compare-box before">
+        <h4>实施前</h4>
+        <ul>
+          <li>单条蓝色 XIC（仅 M）</li>
+          <li>无法从色谱判断 M+1/M+2 是否共洗脱</li>
+          <li>与 MS1 同位素包络信息脱节</li>
+        </ul>
+      </div>
+      <div class="compare-box after">
+        <h4>实施后（预期）</h4>
+        <ul>
+          <li>蓝 / 橙 / 紫 三线同图，RT 完全对齐</li>
+          <li>M+1、M+2 峰值随序列长度呈合理比例</li>
+          <li>RT 窗口阴影、apex 竖线保持不变</li>
+          <li>放大 modal 同样显示三线</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2><span class="sec-num">6</span>最终效果模拟（可交互）</h2>
+    <div class="mock-panel">
+      <div class="mock-title">XIC of precursor isotopes (M, M+1, M+2) ±10 ppm</div>
+      <div class="mock-subtitle">peptide: PEPTIDER charge +2 · 合成数据 · RT apex ≈ 62.3 min</div>
+      <div class="mock-canvas-wrap">
+        <canvas id="mock-xic" width="920" height="300"></canvas>
+        <div class="mock-legend">
+          <div><span class="swatch" style="background:var(--m)"></span> M</div>
+          <div><span class="swatch" style="background:var(--m1)"></span> M+1</div>
+          <div><span class="swatch" style="background:var(--m2)"></span> M+2</div>
+          <div style="margin-top:0.35rem;padding-top:0.35rem;border-top:1px solid var(--border)">
+            <span class="swatch" style="background:#2ca02c;opacity:0.5;height:8px"></span> RT window
+          </div>
+          <div><span class="swatch" style="background:#ff0000;border-top:1px dashed #ff0000"></span> apex</div>
+        </div>
+      </div>
+      <div class="mock-controls">
+        <label><input type="checkbox" id="toggle-m" checked /> 显示 M</label>
+        <label><input type="checkbox" id="toggle-m1" checked /> 显示 M+1</label>
+        <label><input type="checkbox" id="toggle-m2" checked /> 显示 M+2</label>
+        <label><input type="checkbox" id="toggle-fill" checked /> M 区域填充</label>
+        <span style="color:var(--muted)">鼠标移入图表查看 RT / 强度</span>
+      </div>
+      <div id="mock-tooltip" class="mock-note" style="font-family:var(--mono);min-height:1.2em"></div>
+      <p class="mock-note">此模拟基于高斯色谱峰 + 固定同位素比例；真实数据来自 mzML MS1 提取，M+1/M+2 高度由仪器与序列共同决定。</p>
+    </div>
+
+    <h2><span class="sec-num">7</span>待您确认的事项</h2>
+    <div class="confirm-box">
+      <h3>确认后再实施</h3>
+      <ol>
+        <li><strong>范围</strong>：是否仅 BU 鉴定详情 XIC？（默认：是）</li>
+        <li><strong>m/z 算法</strong>：序列精确计算（推荐）还是简单 <code>+1.003355/z</code> 近似？</li>
+        <li><strong>空数据</strong>：若 M+1/M+2 窗口无信号，是否仍画零线还是隐藏该 series？（推荐：仍返回数组，前端淡色零线）</li>
+        <li><strong>图例交互</strong>：v1 是否需要点击图例开关曲线？（模拟已支持；产品可选）</li>
+      </ol>
+    </div>
+
+    <h2><span class="sec-num">8</span>验收标准</h2>
+    <div class="card ok">
+      <ul>
+        <li>对已知 mzML match，API 返回 <code>intensity_m1</code> / <code>intensity_m2</code> 与 <code>isotope_targets</code> 三项。</li>
+        <li>三曲线 RT 数组长度一致；apex 处 M ≥ M+1 ≥ M+2（多数肽段）。</li>
+        <li>前端详情页与放大 modal 均显示三线；旧字段 <code>intensity</code> 仍等于 M。</li>
+        <li>pytest 新增用例通过；现有 BU spectrum 测试无回归。</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const canvas = document.getElementById("mock-xic");
+      const tooltip = document.getElementById("mock-tooltip");
+      const colors = { M: "#1f77b4", "M+1": "#ff7f0e", "M+2": "#9467bd" };
+      const ratios = { M: 1, "M+1": 0.32, "M+2": 0.09 };
+      const rtStart = 57.5, rtEnd = 67.5, apex = 62.3, rtWinStart = 61.2, rtWinStop = 63.4;
+      const peakHeight = 1.8e6;
+
+      function gaussian(rt, center, sigma, amp) {
+        return amp * Math.exp(-0.5 * Math.pow((rt - center) / sigma, 2));
+      }
+
+      function buildSeries(n) {
+        const rt = [], M = [], M1 = [], M2 = [];
+        for (let i = 0; i < n; i++) {
+          const t = rtStart + (i / (n - 1)) * (rtEnd - rtStart);
+          const base = 12000 + Math.random() * 8000;
+          const m = gaussian(t, apex, 0.35, peakHeight) + base;
+          rt.push(t);
+          M.push(m);
+          M1.push(m * ratios["M+1"] + base * 0.4);
+          M2.push(m * ratios["M+2"] + base * 0.15);
+        }
+        return { rt, series: { M, "M+1": M1, "M+2": M2 } };
+      }
+
+      const data = buildSeries(420);
+      const state = { show: { M: true, "M+1": true, "M+2": true }, fillM: true };
+
+      function formatI(v) {
+        if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+        if (v >= 1e3) return (v / 1e3).toFixed(0) + "K";
+        return v.toFixed(0);
+      }
+
+      function draw(hoverIdx) {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(dpr, dpr);
+        const W = rect.width, H = rect.height;
+        const pad = { l: 58, r: 18, t: 18, b: 42 };
+        const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+
+        ctx.clearRect(0, 0, W, H);
+
+        let yMax = 0;
+        ["M", "M+1", "M+2"].forEach(k => {
+          if (!state.show[k]) return;
+          data.series[k].forEach(v => { if (v > yMax) yMax = v; });
+        });
+        yMax *= 1.08;
+
+        const x = rt => pad.l + ((rt - rtStart) / (rtEnd - rtStart)) * pw;
+        const y = v => pad.t + ph - (v / yMax) * ph;
+
+        // grid
+        ctx.strokeStyle = "#e2e6ef";
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+          const yy = pad.t + (ph * i) / 4;
+          ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(pad.l + pw, yy); ctx.stroke();
+        }
+
+        // RT window band
+        ctx.fillStyle = "rgba(44,160,44,0.12)";
+        ctx.fillRect(x(rtWinStart), pad.t, x(rtWinStop) - x(rtWinStart), ph);
+
+        // apex line
+        ctx.strokeStyle = "#ff0000";
+        ctx.setLineDash([5, 3]);
+        ctx.beginPath(); ctx.moveTo(x(apex), pad.t); ctx.lineTo(x(apex), pad.t + ph); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // fill M
+        if (state.show.M && state.fillM) {
+          ctx.beginPath();
+          ctx.moveTo(x(data.rt[0]), pad.t + ph);
+          data.rt.forEach((rt, i) => ctx.lineTo(x(rt), y(data.series.M[i])));
+          ctx.lineTo(x(data.rt[data.rt.length - 1]), pad.t + ph);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(31,119,180,0.22)";
+          ctx.fill();
+        }
+
+        // lines
+        ["M", "M+1", "M+2"].forEach(label => {
+          if (!state.show[label]) return;
+          ctx.strokeStyle = colors[label];
+          ctx.lineWidth = label === "M" ? 1.6 : 1.3;
+          ctx.beginPath();
+          data.rt.forEach((rt, i) => {
+            const px = x(rt), py = y(data.series[label][i]);
+            i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          });
+          ctx.stroke();
+        });
+
+        // hover crosshair
+        if (hoverIdx != null) {
+          const rt = data.rt[hoverIdx];
+          ctx.strokeStyle = "rgba(100,116,139,0.5)";
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath(); ctx.moveTo(x(rt), pad.t); ctx.lineTo(x(rt), pad.t + ph); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // axes labels
+        ctx.fillStyle = "#65758f";
+        ctx.font = "11px Segoe UI, Microsoft YaHei, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Retention Time (min)", pad.l + pw / 2, H - 8);
+        ctx.save();
+        ctx.translate(14, pad.t + ph / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText("MS1 intensity", 0, 0);
+        ctx.restore();
+
+        ctx.textAlign = "right";
+        for (let i = 0; i <= 4; i++) {
+          const v = yMax * (1 - i / 4);
+          ctx.fillText(formatI(v), pad.l - 6, pad.t + (ph * i) / 4 + 4);
+        }
+        ctx.textAlign = "center";
+        for (let i = 0; i <= 5; i++) {
+          const rt = rtStart + (i / 5) * (rtEnd - rtStart);
+          ctx.fillText(rt.toFixed(1), x(rt), pad.t + ph + 16);
+        }
+      }
+
+      canvas.addEventListener("mousemove", e => {
+        const rect = canvas.getBoundingClientRect();
+        const pad = { l: 58, r: 18 };
+        const pw = rect.width - pad.l - pad.r;
+        const cx = e.clientX - rect.left - pad.l;
+        if (cx < 0 || cx > pw) { tooltip.textContent = ""; draw(null); return; }
+        const rt = rtStart + (cx / pw) * (rtEnd - rtStart);
+        let idx = Math.round(((rt - rtStart) / (rtEnd - rtStart)) * (data.rt.length - 1));
+        idx = Math.max(0, Math.min(data.rt.length - 1, idx));
+        draw(idx);
+        const parts = ["RT=" + data.rt[idx].toFixed(3) + " min"];
+        ["M", "M+1", "M+2"].forEach(k => {
+          if (state.show[k]) parts.push(k + "=" + formatI(data.series[k][idx]));
+        });
+        tooltip.textContent = parts.join("  ·  ");
+      });
+      canvas.addEventListener("mouseleave", () => { tooltip.textContent = ""; draw(null); });
+
+      ["toggle-m", "toggle-m1", "toggle-m2"].forEach((id, i) => {
+        const key = ["M", "M+1", "M+2"][i];
+        document.getElementById(id).addEventListener("change", e => {
+          state.show[key] = e.target.checked;
+          draw(null);
+        });
+      });
+      document.getElementById("toggle-fill").addEventListener("change", e => {
+        state.fillM = e.target.checked;
+        draw(null);
+      });
+
+      window.addEventListener("resize", () => draw(null));
+      draw(null);
+    })();
+  </script>
+</body>
+</html>

@@ -25,8 +25,31 @@ export interface BuPlotGuide {
   dashed?: boolean;
 }
 
+export interface BuPlotSeries {
+  label: string;
+  points: BuPlotPoint[];
+  color: string;
+  fill?: boolean;
+  fillColor?: string;
+  fillOpacity?: number;
+}
+
+function sortedPoints(points: BuPlotPoint[]): BuPlotPoint[] {
+  return [...points].filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y)).sort((a, b) => a.x - b.x);
+}
+
+function nearestPoint(points: BuPlotPoint[], value: number): BuPlotPoint | null {
+  if (points.length === 0) return null;
+  const bisect = d3.bisector<BuPlotPoint, number>((p) => p.x).left;
+  const idx = bisect(points, value);
+  const a = points[Math.max(0, idx - 1)];
+  const b = points[Math.min(points.length - 1, idx)];
+  return !a ? b : !b ? a : Math.abs(a.x - value) < Math.abs(b.x - value) ? a : b;
+}
+
 export function BuInteractivePlot({
   points,
+  series,
   xLabel,
   yLabel,
   lineColor,
@@ -43,6 +66,7 @@ export function BuInteractivePlot({
   className,
 }: {
   points: BuPlotPoint[];
+  series?: BuPlotSeries[];
   xLabel: string;
   yLabel: string;
   lineColor: string;
@@ -61,7 +85,12 @@ export function BuInteractivePlot({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [width, setWidth] = useState(720);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; point: BuPlotPoint } | null>(null);
+  const [tooltip, setTooltip] = useState<{
+    x: number;
+    y: number;
+    point: BuPlotPoint;
+    values: { label: string; color: string; y: number }[];
+  } | null>(null);
   const [internalZoom, setInternalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const zoom = zoomProp ?? internalZoom;
   const controlled = zoomProp !== undefined;
@@ -74,16 +103,33 @@ export function BuInteractivePlot({
     if (!controlled) setInternalZoom(next);
   };
 
-  const sorted = useMemo(
-    () => [...points].filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y)).sort((a, b) => a.x - b.x),
-    [points],
+  const normalizedSeries = useMemo(() => {
+    if (series?.length) {
+      return series
+        .map((item) => ({
+          ...item,
+          fill: item.fill ?? false,
+          fillColor: item.fillColor ?? item.color,
+          fillOpacity: item.fillOpacity ?? 0.25,
+          points: sortedPoints(item.points),
+        }))
+        .filter((item) => item.points.length > 0);
+    }
+    const single = sortedPoints(points);
+    return single.length > 0
+      ? [{ label: "", points: single, color: lineColor, fill: true, fillColor, fillOpacity }]
+      : [];
+  }, [fillColor, fillOpacity, lineColor, points, series]);
+  const allPoints = useMemo(
+    () => normalizedSeries.flatMap((item) => item.points).sort((a, b) => a.x - b.x),
+    [normalizedSeries],
   );
   const fullX = useMemo<[number, number]>(() => {
-    if (sorted.length === 0) return [0, 1];
-    const first = sorted[0].x;
-    const last = sorted[sorted.length - 1].x;
+    if (allPoints.length === 0) return [0, 1];
+    const first = allPoints[0].x;
+    const last = allPoints[allPoints.length - 1].x;
     return first === last ? [first, first + 1] : [first, last];
-  }, [sorted]);
+  }, [allPoints]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -98,7 +144,7 @@ export function BuInteractivePlot({
 
   useEffect(() => {
     if (!controlled) setInternalZoom(DEFAULT_ZOOM);
-  }, [sorted, controlled]);
+  }, [normalizedSeries, controlled]);
 
   const applyZoomRef = useRef<((zoom: Zoom) => void) | null>(null);
 
@@ -107,7 +153,7 @@ export function BuInteractivePlot({
     if (!svgEl) return;
     const svg = d3.select(svgEl);
     svg.selectAll("*").remove();
-    if (sorted.length === 0) {
+    if (normalizedSeries.length === 0) {
       applyZoomRef.current = null;
       return;
     }
@@ -126,8 +172,8 @@ export function BuInteractivePlot({
     const yAxisG = g.append("g");
     const plotG = g.append("g").attr("clip-path", `url(#${clipId})`);
     const bandG = plotG.append("g");
-    const areaPath = plotG.append("path").attr("fill", fillColor).attr("opacity", fillOpacity);
-    const linePath = plotG.append("path").attr("fill", "none").attr("stroke", lineColor).attr("stroke-width", 1.4);
+    const areaG = plotG.append("g");
+    const lineG = plotG.append("g");
     const guideG = plotG.append("g");
     const brushG = g.append("g");
 
@@ -147,14 +193,14 @@ export function BuInteractivePlot({
 
     let xScale = d3.scaleLinear().domain(fullX).range([0, innerW]);
     let yScale = d3.scaleLinear().domain([0, 1]).range([innerH, 0]);
-    let visible = sorted;
-    const bisect = d3.bisector<BuPlotPoint, number>((p) => p.x).left;
+    let visible = normalizedSeries[0]?.points ?? [];
 
     const applyZoom = (nextZoom: Zoom) => {
       const [x0, x1] = nextZoom.x ?? fullX;
       xScale = d3.scaleLinear().domain([x0, x1]).range([0, innerW]);
-      visible = sorted.filter((p) => p.x >= x0 && p.x <= x1);
-      const autoMax = Math.max(...visible.map((p) => p.y), 1);
+      visible = (normalizedSeries[0]?.points ?? []).filter((p) => p.x >= x0 && p.x <= x1);
+      const visibleValues = normalizedSeries.flatMap((item) => item.points.filter((p) => p.x >= x0 && p.x <= x1));
+      const autoMax = Math.max(...visibleValues.map((p) => p.y), 1);
       yScale = d3.scaleLinear().domain(nextZoom.y ?? [0, autoMax]).range([innerH, 0]);
 
       xAxisG
@@ -178,8 +224,21 @@ export function BuInteractivePlot({
 
       const line = d3.line<BuPlotPoint>().x((d) => xScale(d.x)).y((d) => yScale(d.y));
       const area = d3.area<BuPlotPoint>().x((d) => xScale(d.x)).y0(innerH).y1((d) => yScale(d.y));
-      linePath.datum(sorted).attr("d", line as any);
-      areaPath.datum(sorted).attr("d", area as any);
+      areaG
+        .selectAll<SVGPathElement, (typeof normalizedSeries)[number]>("path")
+        .data(normalizedSeries.filter((item) => item.fill))
+        .join("path")
+        .attr("fill", (d) => d.fillColor)
+        .attr("opacity", (d) => d.fillOpacity)
+        .attr("d", (d) => area(d.points));
+      lineG
+        .selectAll<SVGPathElement, (typeof normalizedSeries)[number]>("path")
+        .data(normalizedSeries)
+        .join("path")
+        .attr("fill", "none")
+        .attr("stroke", (d) => d.color)
+        .attr("stroke-width", (d) => (d.fill ? 1.5 : 1.35))
+        .attr("d", (d) => line(d.points));
 
       bandG
         .selectAll<SVGRectElement, BuPlotBand>("rect")
@@ -233,11 +292,18 @@ export function BuInteractivePlot({
         return;
       }
       const value = xScale.invert(cx);
-      const idx = bisect(visible, value);
-      const a = visible[Math.max(0, idx - 1)];
-      const b = visible[Math.min(visible.length - 1, idx)];
-      const point = !a ? b : !b ? a : Math.abs(a.x - value) < Math.abs(b.x - value) ? a : b;
-      if (point) setTooltip({ x: cx + margin.left, y: cy + margin.top, point });
+      const point = nearestPoint(visible, value);
+      if (point) {
+        setTooltip({
+          x: cx + margin.left,
+          y: cy + margin.top,
+          point,
+          values: normalizedSeries.map((item) => {
+            const seriesPoint = nearestPoint(item.points, point.x);
+            return { label: item.label, color: item.color, y: seriesPoint?.y ?? 0 };
+          }),
+        });
+      }
     };
     const onLeave = () => setTooltip(null);
     const onWheel = (event: WheelEvent) => {
@@ -285,7 +351,7 @@ export function BuInteractivePlot({
       svgEl.removeEventListener("wheel", onWheel);
       applyZoomRef.current = null;
     };
-  }, [bands, fillColor, fillOpacity, fullX, guides, height, lineColor, sorted, width, xLabel, yLabel]);
+  }, [bands, fullX, guides, height, normalizedSeries, width, xLabel, yLabel]);
 
   useEffect(() => {
     applyZoomRef.current?.(zoom);
@@ -293,7 +359,7 @@ export function BuInteractivePlot({
 
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
-      {sorted.length === 0 ? (
+      {normalizedSeries.length === 0 ? (
         <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ height }}>
           {emptyHint}
         </div>
@@ -342,7 +408,15 @@ export function BuInteractivePlot({
               style={{ left: tooltip.x + 8, top: Math.max(0, tooltip.y - 8) }}
             >
               <div className="font-mono">{xLabel}: {tooltip.point.x.toFixed(4)}</div>
-              <div className="font-mono text-muted-foreground">{yLabel}: {formatIntensity(tooltip.point.y)}</div>
+              {tooltip.values.length > 1 ? (
+                tooltip.values.map((item) => (
+                  <div key={item.label} className="font-mono" style={{ color: item.color }}>
+                    {item.label}: {formatIntensity(item.y)}
+                  </div>
+                ))
+              ) : (
+                <div className="font-mono text-muted-foreground">{yLabel}: {formatIntensity(tooltip.point.y)}</div>
+              )}
             </div>
           )}
         </>

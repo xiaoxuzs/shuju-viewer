@@ -30,6 +30,7 @@ from app.schemas.bu import (
     BuSpectrumMarker,
     BuSpectrumV1,
     BuXicOut,
+    BuXicTrace,
 )
 from app.schemas.dataset import CutoffOut, DatasetDeletedOut, DatasetOut
 from app.schemas.protein import (
@@ -65,6 +66,7 @@ __all__ = [
     "BuSpectrumMarker",
     "BuSpectrumV1",
     "BuXicOut",
+    "BuXicTrace",
     "BuChromatogramOut",
     "BuDiaWindowItem",
     "BuDiaWindowsOut",

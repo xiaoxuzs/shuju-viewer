@@ -15,6 +15,8 @@ export const BU_CHART = {
   y: "#d62728",
   tic: "#1f77b4",
   bpc: "#d62728",
+  isotopeM1: "#c57a12",
+  isotopeM2: "#7952b3",
   rtWindow: "#2ca02c",
   apex: "#ff0000",
   grid: "hsl(var(--border))",
