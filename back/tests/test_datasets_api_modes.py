@@ -14,6 +14,25 @@ class _NoExecuteSession:
         raise AssertionError("BU cutoffs must not execute TD cutoff SQL")
 
 
+class _RowsResult:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+
+    def mappings(self) -> "_RowsResult":
+        return self
+
+    def all(self) -> list[dict[str, Any]]:
+        return self._rows
+
+
+class _RowsSession:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+
+    def execute(self, *_args: Any, **_kwargs: Any) -> _RowsResult:
+        return _RowsResult(self._rows)
+
+
 def _row(**overrides: Any) -> dict[str, Any]:
     row: dict[str, Any] = {
         "dataset_id": 1,
@@ -86,3 +105,17 @@ def test_td_dataset_json_contract_keeps_cutoffs_and_omits_bu_runs() -> None:
     assert data["cutoffs"][1]["kind"] == "proteoform"
     assert data["bu_runs"] is None
 
+
+def test_td_cutoffs_payload_omits_empty_cutoff() -> None:
+    cutoffs = _cutoffs_payload(
+        _RowsSession(
+            [
+                {"cutoff": "prsm", "protein_count": 1, "proteoform_count": 30, "prsm_count": 30},
+                {"cutoff": "proteoform", "protein_count": 0, "proteoform_count": 0, "prsm_count": 0},
+            ]
+        ),
+        1,
+        analysis_mode="TOP_DOWN",
+    )
+
+    assert [c.kind for c in cutoffs] == ["prsm"]

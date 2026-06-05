@@ -1,29 +1,51 @@
 import type React from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BuProteinDetailOut } from "@/features/bu/types";
 
-const LINE_LENGTH = 70;
+import { CoverageBar } from "./CoverageBar";
+import { PeptideLegend } from "./PeptideLegend";
+import {
+  buildPeptideColorMap,
+  buildPeptideLegend,
+  formatSegmentTooltip,
+  getMappedSegments,
+  resolveResidueColor,
+  splitSequenceRows,
+  type MappedCoverageSegment,
+} from "./coverageLayout";
+
+const CHUNK = 50;
+const UNCOVERED_COLOR = "#111111";
 
 export function SequenceCoverage({ protein }: { protein: BuProteinDetailOut }) {
   const sequence = protein.base_sequence ?? "";
-  const mappedSegments = protein.coverage_segments.filter((segment) => segment.start !== null && segment.end !== null);
+  const mappedSegments = getMappedSegments(protein.coverage_segments, sequence.length);
+  const colorMap = buildPeptideColorMap(mappedSegments);
+  const legendItems = buildPeptideLegend(mappedSegments, colorMap);
+  const mappedPeptideIds = new Set(legendItems.map((item) => item.peptideId));
   const unmappedCount = protein.peptides.filter(
-    (peptide) => !mappedSegments.some((segment) => segment.peptide_id === peptide.peptide_id),
+    (peptide) => !mappedPeptideIds.has(peptide.peptide_id),
   ).length;
+  const showCoverage =
+    Boolean(sequence) && protein.coverage_mode !== "decoy" && protein.coverage_mode !== "list_only";
+  const proteinName = resolveProteinName(protein);
+  const title = `Sequence coverage — ${protein.accession}${proteinName ? ` (${proteinName})` : ""}`;
+  const coverageLabel =
+    protein.coverage_percent === null ? "-" : `${Math.round(protein.coverage_percent * 100)}%`;
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="text-base">Sequence coverage</CardTitle>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CoverageBadge protein={protein} />
-            {protein.coverage_percent !== null && (
-              <span>{(protein.coverage_percent * 100).toFixed(1)}% covered</span>
-            )}
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-base">{title}</CardTitle>
+            <CardDescription className="mt-1">
+              Coverage: {coverageLabel} · {legendItems.length} peptides
+            </CardDescription>
           </div>
+          <CoverageBadge protein={protein} />
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -36,8 +58,19 @@ export function SequenceCoverage({ protein }: { protein: BuProteinDetailOut }) {
         {protein.coverage_mode === "partial" && unmappedCount > 0 && (
           <Notice tone="warning">{unmappedCount.toLocaleString()} 条肽段未能映射到序列。</Notice>
         )}
-        {sequence && protein.coverage_mode !== "decoy" && protein.coverage_mode !== "list_only" && (
-          <SequenceRows sequence={sequence} segments={mappedSegments} />
+        {showCoverage && (
+          <>
+            <SequenceRows sequence={sequence} segments={mappedSegments} colorMap={colorMap} />
+            <div className="pl-14">
+              <CoverageBar
+                sequenceLength={sequence.length}
+                segments={mappedSegments}
+                colorMap={colorMap}
+                chunkSize={CHUNK}
+              />
+            </div>
+            <PeptideLegend items={legendItems} />
+          </>
         )}
       </CardContent>
     </Card>
@@ -57,37 +90,33 @@ function CoverageBadge({ protein }: { protein: BuProteinDetailOut }) {
 function SequenceRows({
   sequence,
   segments,
+  colorMap,
 }: {
   sequence: string;
-  segments: BuProteinDetailOut["coverage_segments"];
+  segments: MappedCoverageSegment[];
+  colorMap: Map<number, string>;
 }) {
-  const residueStates = buildResidueStates(sequence.length, segments);
-  const rows = [];
-  for (let start = 0; start < sequence.length; start += LINE_LENGTH) {
-    rows.push({ start, text: sequence.slice(start, start + LINE_LENGTH) });
-  }
+  const rows = splitSequenceRows(sequence, CHUNK);
 
   return (
-    <div className="overflow-x-auto rounded-md border border-border bg-muted/20 p-3">
-      <div className="min-w-max space-y-2 font-mono text-sm leading-7">
+    <div className="overflow-x-auto py-1">
+      <div className="min-w-max space-y-4 font-mono text-[10.5px] leading-6">
         {rows.map((row) => (
-          <div key={row.start} className="flex items-start gap-3">
+          <div key={row.start} className="flex items-baseline gap-4">
             <span className="w-10 shrink-0 select-none text-right text-xs text-muted-foreground">{row.start + 1}</span>
-            <div className="tracking-wide">
+            <div className="whitespace-nowrap">
               {Array.from(row.text).map((aa, offset) => {
                 const index = row.start + offset;
-                const state = residueStates[index];
+                const residue = resolveResidueColor(index, segments, colorMap);
+
                 return (
                   <span
                     key={index}
-                    title={state?.label}
-                    className={
-                      state?.ambiguous
-                        ? "rounded-sm bg-amber-300/50 text-foreground"
-                        : state
-                          ? "rounded-sm bg-primary/25 text-foreground"
-                          : "text-muted-foreground"
-                    }
+                    title={residue ? formatSegmentTooltip(residue.segment) : undefined}
+                    className={`inline-block w-[1.15rem] text-center ${
+                      residue ? "font-bold" : "font-normal"
+                    }`}
+                    style={{ color: residue?.color ?? UNCOVERED_COLOR }}
                   >
                     {aa}
                   </span>
@@ -97,34 +126,8 @@ function SequenceRows({
           </div>
         ))}
       </div>
-      <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <Legend color="bg-primary/25" label="mapped peptide" />
-        <Legend color="bg-amber-300/50" label="ambiguous peptide" />
-      </div>
     </div>
   );
-}
-
-function buildResidueStates(
-  length: number,
-  segments: BuProteinDetailOut["coverage_segments"],
-): Array<{ ambiguous: boolean; label: string } | null> {
-  const states: Array<{ ambiguous: boolean; label: string } | null> = Array.from({ length }, () => null);
-  for (const segment of segments) {
-    if (segment.start === null || segment.end === null) continue;
-    const start = Math.max(0, segment.start);
-    const end = Math.min(length, segment.end);
-    for (let index = start; index < end; index += 1) {
-      const previous = states[index];
-      states[index] = {
-        ambiguous: Boolean(previous?.ambiguous || segment.is_ambiguous),
-        label: previous?.label
-          ? `${previous.label}; ${segment.sequence}`
-          : `${segment.sequence} [${segment.start}, ${segment.end})`,
-      };
-    }
-  }
-  return states;
 }
 
 function Notice({ tone, children }: { tone: "muted" | "warning"; children: React.ReactNode }) {
@@ -141,11 +144,10 @@ function Notice({ tone, children }: { tone: "muted" | "warning"; children: React
   );
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`h-3 w-5 rounded-sm ${color}`} />
-      {label}
-    </span>
-  );
+function resolveProteinName(protein: BuProteinDetailOut): string | null {
+  const geneName = protein.gene_name?.trim();
+  if (geneName) return geneName;
+
+  const description = protein.description?.trim();
+  return description ? description.slice(0, 40) : null;
 }

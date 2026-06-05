@@ -74,7 +74,7 @@ def _cutoffs_payload(session: Session, dataset_id: int, *, analysis_mode: str | 
     ).mappings().all()
 
     by_cutoff = {row["cutoff"]: row for row in rows}
-    return [
+    cutoffs = [
         CutoffOut(
             id=cutoff_id(kind),
             kind=kind,
@@ -85,6 +85,7 @@ def _cutoffs_payload(session: Session, dataset_id: int, *, analysis_mode: str | 
         )
         for kind in ("prsm", "proteoform")
     ]
+    return [c for c in cutoffs if c.protein_count > 0 or c.proteoform_count > 0 or c.prsm_count > 0]
 
 
 def _run_metadata(raw: Any) -> dict[str, Any]:
