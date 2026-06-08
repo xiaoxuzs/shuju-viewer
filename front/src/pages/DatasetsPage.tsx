@@ -4,7 +4,6 @@
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
 import {
   ArrowRight,
   Activity,
@@ -19,12 +18,13 @@ import {
 
 import { deleteDataset, enqueueImport, fetchDatasets, fetchImportJob, pickImportFolder } from "@/api/client";
 import type { DatasetOut, ImportJobOut } from "@/api/types";
+import { DataLoadError } from "@/components/common/data-state";
+import { PageLoading } from "@/components/common/page-loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { clampImportProgress, formatImportStageLabel } from "@/lib/importStages";
 import { basenamePath, slugifyFolderName } from "@/lib/serverPathFromDirectoryInput";
 import { cn } from "@/lib/utils";
@@ -91,13 +91,8 @@ export function DatasetsPage() {
       await deleteDataset(deleteTarget.slug);
       await queryClient.invalidateQueries({ queryKey: ["datasets"] });
       setDeleteTarget(null);
-    } catch (e) {
-      let msg = (e as Error).message || "Delete failed.";
-      if (axios.isAxiosError(e)) {
-        const detail = (e.response?.data as { detail?: string } | undefined)?.detail;
-        if (detail) msg = detail;
-      }
-      setDeleteError(msg);
+    } catch {
+      setDeleteError("Failed to delete dataset.");
     } finally {
       setDeleteBusy(false);
     }
@@ -122,13 +117,8 @@ export function DatasetsPage() {
       const leaf = basenamePath(res.path);
       setSlug((s) => (s.trim() ? s : slugifyFolderName(leaf)));
       setDsName((n) => (n.trim() ? n : leaf));
-    } catch (e) {
-      let msg = (e as Error).message || "Could not open folder picker.";
-      if (axios.isAxiosError(e)) {
-        const detail = (e.response?.data as { detail?: string } | undefined)?.detail;
-        if (detail) msg = detail;
-      }
-      setImportError(msg);
+    } catch {
+      setImportError("Failed to open folder picker.");
     } finally {
       setFolderPickBusy(false);
     }
@@ -162,28 +152,14 @@ export function DatasetsPage() {
           return;
         }
         if (job.status === "failed") {
-          setImportError(job.error || job.message || "Import failed.");
+          setImportError("Failed to import dataset.");
           setImportBusy(false);
           return;
         }
         await sleep(900);
       }
-    } catch (e) {
-      let msg = (e as Error).message || "Request failed.";
-      if (axios.isAxiosError(e)) {
-        const data = e.response?.data as
-          | { detail?: string | { message?: string; slug?: string; dataset_name?: string } }
-          | undefined;
-        const detail = data?.detail;
-        if (typeof detail === "object" && detail !== null && typeof detail.message === "string") {
-          msg = detail.message;
-          if (detail.dataset_name) msg += ` — ${detail.dataset_name}`;
-          else if (detail.slug) msg += ` (${detail.slug})`;
-        } else if (typeof detail === "string") {
-          msg = detail;
-        }
-      }
-      setImportError(msg);
+    } catch {
+      setImportError("Failed to import dataset.");
       setImportBusy(false);
     }
   }, [description, dsName, queryClient, resetImportForm, slug, sourcePath]);
@@ -201,21 +177,9 @@ export function DatasetsPage() {
         }
       />
 
-      {isLoading && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-40" />
-          ))}
-        </div>
-      )}
+      {isLoading && <PageLoading />}
 
-      {error && (
-        <Card className="border-destructive/40 bg-destructive/5">
-          <CardContent className="p-6 text-sm text-destructive">
-            Failed to load datasets: {(error as Error).message}
-          </CardContent>
-        </Card>
-      )}
+      {error && !data && <DataLoadError message="Failed to load datasets." />}
 
       {data && data.length === 0 && (
         <Card>
@@ -232,7 +196,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
     --mode full --replace`}
             </pre>
             <div className="mt-4 rounded-md border border-border/60 bg-muted/30 p-3 text-left">
-              <div className="font-medium text-foreground">尚无 Bottom-Up 数据集</div>
+              <div className="font-medium text-foreground">No Bottom-Up datasets available</div>
               <div className="mt-1">
                 For DIA-NN data, choose an ingest root containing <strong>all_report.parquet</strong> plus mzML
                 files or a Bruker <strong>.d</strong> directory. The parquet and spectra must live under the same

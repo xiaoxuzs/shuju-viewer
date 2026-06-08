@@ -112,11 +112,16 @@ async function fulfillJson(route: Route, body: unknown) {
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-async function mockMzmlMatch(page: Page) {
+async function mockMzmlMatch(page: Page, matchDelayMs = 0) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
-    if (url.pathname === "/api/v1/datasets/demo/matches/1") return fulfillJson(route, matchDetail("mzml"));
+    if (url.pathname === "/api/v1/datasets/demo/matches/1") {
+      if (matchDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, matchDelayMs));
+      }
+      return fulfillJson(route, matchDetail("mzml"));
+    }
     if (url.pathname.endsWith("/matches/1/xic")) return fulfillJson(route, xic);
     if (url.pathname.endsWith("/matches/1/spectrum/ms1")) return fulfillJson(route, spectrum(500, 92.45, 1));
     if (url.pathname.endsWith("/matches/1/spectrum/ms2")) {
@@ -141,6 +146,36 @@ async function mockMzmlMatch(page: Page) {
     await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
   });
 }
+
+test("shows page loading while match details are pending", async ({ page }) => {
+  await mockMzmlMatch(page, 500);
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByRole("status", { name: "Loading" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "PEPTIDE" })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Loading" })).toHaveCount(0);
+});
+
+test("shows a generic English error without exposing backend details", async ({ page }) => {
+  const backendError = "\u540e\u7aef\u5185\u90e8\u9519\u8bef";
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
+    if (url.pathname === "/api/v1/datasets/demo/matches/1") {
+      return route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: backendError }),
+      });
+    }
+    await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+  });
+
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByText("Failed to load data.")).toBeVisible();
+  await expect(page.getByText(backendError)).toHaveCount(0);
+});
 
 test("precursor XIC selects MS2 and matched ion opens product XIC", async ({ page }) => {
   await mockMzmlMatch(page);

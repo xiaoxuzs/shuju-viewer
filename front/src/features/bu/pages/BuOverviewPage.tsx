@@ -3,6 +3,8 @@ import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
+import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { PageLoading } from "@/components/common/page-loading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -72,9 +74,9 @@ export function BuOverviewPage() {
     setSelectedRunId((current) => (data.runs.some((run) => run.run_id === current) ? current : fallback.run_id));
   }, [data]);
 
-  if (isLoading) return <Skeleton className="h-64" />;
-  if (error) return <p className="text-destructive">{(error as Error).message}</p>;
-  if (!data) return null;
+  if (isLoading) return <PageLoading />;
+  if (error && !data) return <DataLoadError />;
+  if (!data) return <DataEmptyState />;
 
   return (
     <div className="space-y-5">
@@ -107,7 +109,7 @@ export function BuOverviewPage() {
         </CardHeader>
         <CardContent>
           {chromatogram.isLoading && <Skeleton className="h-60" />}
-          {chromatogram.error && <p className="text-destructive">{(chromatogram.error as Error).message}</p>}
+          {chromatogram.error && <DataLoadError compact />}
           {chromatogram.data && (
             <BuChromatogramChart chromatogram={chromatogram.data} onOpenFull={() => setChromFullOpen(true)} />
           )}
@@ -120,7 +122,7 @@ export function BuOverviewPage() {
         </CardHeader>
         <CardContent>
           {rtMz.isLoading && <Skeleton className="h-72" />}
-          {rtMz.error && <p className="text-destructive">{(rtMz.error as Error).message}</p>}
+          {rtMz.error && <DataLoadError compact />}
           {rtMz.data && <RtMzMiniHeatmap heatmap={rtMz.data} />}
         </CardContent>
       </Card>
@@ -132,7 +134,7 @@ export function BuOverviewPage() {
           </CardHeader>
           <CardContent>
             {diaWindows.isLoading && <Skeleton className="h-72" />}
-            {diaWindows.error && <p className="text-destructive">{(diaWindows.error as Error).message}</p>}
+            {diaWindows.error && <DataLoadError compact />}
             {diaWindows.data && <DiaWindowMap diaWindows={diaWindows.data} />}
           </CardContent>
         </Card>

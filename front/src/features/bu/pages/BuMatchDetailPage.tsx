@@ -3,6 +3,8 @@ import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
+import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { PageLoading } from "@/components/common/page-loading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -104,9 +106,9 @@ export function BuMatchDetailPage() {
     setSelectedProductIon(null);
   };
 
-  if (isLoading) return <Skeleton className="h-64" />;
-  if (error) return <p className="text-destructive">{(error as Error).message}</p>;
-  if (!data) return null;
+  if (isLoading) return <PageLoading />;
+  if (error && !data) return <DataLoadError />;
+  if (!data) return <DataEmptyState />;
 
   return (
     <div className="space-y-4">
@@ -129,7 +131,7 @@ export function BuMatchDetailPage() {
       {isMzml ? (
         <>
           {xic.isLoading && <Skeleton className="h-56" />}
-          {xic.error && <p className="text-destructive">{(xic.error as Error).message}</p>}
+          {xic.error && <DataLoadError compact />}
           {xic.data && (
             <Card>
               <CardHeader className="pb-2">
@@ -160,7 +162,7 @@ export function BuMatchDetailPage() {
             </Card>
           )}
           {ms1.isLoading && <Skeleton className="h-64" />}
-          {ms1.error && <p className="text-destructive">{(ms1.error as Error).message}</p>}
+          {ms1.error && <DataLoadError compact />}
           {ms1.data && (
             <Card>
               <CardHeader className="pb-2">
@@ -179,16 +181,13 @@ export function BuMatchDetailPage() {
             </Card>
           )}
           {ms2.isLoading && <Skeleton className="h-64" />}
-          {ms2.error && <p className="text-destructive">{(ms2.error as Error).message}</p>}
+          {ms2.error && <DataLoadError compact />}
           {ms2.data && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">MS2 Spectrum</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Fragment spectrum near the selected retention time. Click a matched fragment ion to extract its product ion chromatogram.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  点击 MS2 谱图中匹配的 b/y 碎片峰，可查看该碎片离子的 Product ion XIC（二级色谱曲线）。
+                  Fragment spectrum near the selected retention time. Click a matched b/y fragment peak to view its product ion XIC (MS2 chromatogram).
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Current scan #{ms2.data.scan}, RT {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
@@ -206,8 +205,8 @@ export function BuMatchDetailPage() {
                 />
                 {selectedProductIon && productXic.isLoading && <Skeleton className="mt-4 h-56" />}
                 {selectedProductIon && productXic.error && (
-                  <div className="mt-4 rounded-md border border-destructive/40 p-3 text-sm">
-                    <p className="text-destructive">{(productXic.error as Error).message}</p>
+                  <div className="mt-4 text-sm">
+                    <DataLoadError compact />
                     <button
                       type="button"
                       onClick={() => setSelectedProductIon(null)}
@@ -246,7 +245,7 @@ export function BuMatchDetailPage() {
               </CardHeader>
               <CardContent>
                 {mobility.isLoading && <Skeleton className="h-72" />}
-                {mobility.error && <p className="text-destructive">{(mobility.error as Error).message}</p>}
+                {mobility.error && <DataLoadError compact />}
                 {mobility.data && <MzMobilityScatter slice={mobility.data} />}
               </CardContent>
             </Card>

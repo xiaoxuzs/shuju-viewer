@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import type { ReactNode } from "react";
 
+import { PageLoading } from "@/components/common/page-loading";
 import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BuEmptyState } from "@/features/bu/components/BuEmptyState";
 
@@ -31,10 +31,8 @@ export function BuDataTable<T extends { id: number }>({
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="space-y-2 p-6">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Skeleton key={i} className="h-8" />
-          ))}
+        <CardContent className="p-0">
+          <PageLoading className="min-h-48" />
         </CardContent>
       </Card>
     );

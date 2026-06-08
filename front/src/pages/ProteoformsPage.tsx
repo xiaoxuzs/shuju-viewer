@@ -6,11 +6,12 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchProteoforms } from "@/api/client";
+import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { PageLoading } from "@/components/common/page-loading";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { Pagination } from "@/components/common/pagination";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatEValue, formatNumber } from "@/lib/utils";
 
@@ -19,7 +20,7 @@ export function ProteoformsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["proteoforms", slug, cutoff, page],
     queryFn: () =>
       fetchProteoforms(slug, cutoff, {
@@ -29,6 +30,8 @@ export function ProteoformsPage() {
         order: "desc",
       }),
   });
+
+  if (error && !data) return <DataLoadError />;
 
   return (
     <>
@@ -45,12 +48,8 @@ export function ProteoformsPage() {
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="space-y-2 p-6">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <Skeleton key={i} className="h-8" />
-              ))}
-            </div>
-          ) : (
+            <PageLoading className="min-h-48" />
+          ) : data?.items.length ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -90,6 +89,8 @@ export function ProteoformsPage() {
                 ))}
               </TableBody>
             </Table>
+          ) : (
+            <DataEmptyState compact />
           )}
         </CardContent>
       </Card>

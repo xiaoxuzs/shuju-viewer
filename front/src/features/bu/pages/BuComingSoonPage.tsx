@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 
-export function BuComingSoonPage({ title = "即将支持" }: { title?: string }) {
+export function BuComingSoonPage({ title = "Coming soon" }: { title?: string }) {
   return (
     <Card>
       <CardContent className="p-8 text-center">

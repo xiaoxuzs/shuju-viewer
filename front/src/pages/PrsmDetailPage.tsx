@@ -8,6 +8,8 @@ import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
 import { fetchDataset, fetchMs1Spectrum, fetchMs2Spectrum, fetchMzmlSpectrum, fetchPrsm } from "@/api/client";
+import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { PageLoading } from "@/components/common/page-loading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -196,29 +198,14 @@ export function PrsmDetailPage() {
 
   // ----- loading / error states -----
   if (prsmQuery.isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-80" />
-        <Skeleton className="h-32" />
-        <Skeleton className="h-64" />
-      </div>
-    );
+    return <PageLoading />;
   }
 
-  if (prsmQuery.isError) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Failed to load PrSM</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-destructive">
-          {(prsmQuery.error as Error).message}
-        </CardContent>
-      </Card>
-    );
+  if (prsmQuery.isError && !prsm) {
+    return <DataLoadError />;
   }
 
-  if (!prsm) return null;
+  if (!prsm) return <DataEmptyState />;
 
   return (
     <>
@@ -335,9 +322,7 @@ export function PrsmDetailPage() {
             {ms1Query.isLoading ? (
               <Skeleton className="h-[240px]" />
             ) : ms1Query.isError ? (
-              <div className="text-sm text-destructive">
-                {(ms1Query.error as Error).message}
-              </div>
+              <DataLoadError compact />
             ) : (
               <SpectrumChart
                 key={`ms1-inline-${spectraSource}-${ms1Scan ?? ms1Id ?? "none"}-${spectrumIntensityMode}`}
@@ -365,9 +350,7 @@ export function PrsmDetailPage() {
             {ms2Query.isLoading ? (
               <Skeleton className="h-[260px]" />
             ) : ms2Query.isError ? (
-              <div className="text-sm text-destructive">
-                {(ms2Query.error as Error).message}
-              </div>
+              <DataLoadError compact />
             ) : (
               <SpectrumChart
                 key={`ms2-inline-${spectraSource}-${ms2Scan ?? ms2Id ?? "none"}-${spectrumIntensityMode}`}

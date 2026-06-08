@@ -8,8 +8,9 @@ import { ArrowRight, Filter } from "lucide-react";
 import { fetchDataset } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageHeader } from "@/components/common/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoading } from "@/components/common/page-loading";
 import { Stat } from "@/components/common/stat";
 
 export function DatasetPage() {
@@ -20,9 +21,9 @@ export function DatasetPage() {
     enabled: !!slug,
   });
 
-  if (isLoading) return <Skeleton className="h-64" />;
-  if (error) return <p className="text-destructive">{(error as Error).message}</p>;
-  if (!data) return null;
+  if (isLoading) return <PageLoading />;
+  if (error && !data) return <DataLoadError />;
+  if (!data) return <DataEmptyState />;
 
   const totalProteins = data.cutoffs.reduce((a, c) => a + c.protein_count, 0);
   const totalProteoforms = data.cutoffs.reduce((a, c) => a + c.proteoform_count, 0);

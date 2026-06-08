@@ -50,13 +50,13 @@ export function SequenceCoverage({ protein }: { protein: BuProteinDetailOut }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {protein.coverage_mode === "decoy" && (
-          <Notice tone="muted">Decoy 蛋白不提供 coverage；下方仍展示关联肽段。</Notice>
+          <Notice tone="muted">Sequence coverage is unavailable for decoy proteins. Related peptides are listed below.</Notice>
         )}
         {protein.coverage_mode === "list_only" && (
-          <Notice tone="muted">蛋白序列不可用，仅展示肽段列表。</Notice>
+          <Notice tone="muted">The protein sequence is unavailable. Only the peptide list is shown.</Notice>
         )}
         {protein.coverage_mode === "partial" && unmappedCount > 0 && (
-          <Notice tone="warning">{unmappedCount.toLocaleString()} 条肽段未能映射到序列。</Notice>
+          <Notice tone="warning">{unmappedCount.toLocaleString()} peptides could not be mapped to the sequence.</Notice>
         )}
         {showCoverage && (
           <>

@@ -1,6 +1,7 @@
 import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
+import { DataLoadError } from "@/components/common/data-state";
 import { Pagination } from "@/components/common/pagination";
 import { Badge } from "@/components/ui/badge";
 import { fetchBuProteins } from "@/features/bu/api/buClient";
@@ -84,7 +85,7 @@ export function BuProteinsPage() {
     },
   ];
 
-  if (error) return <p className="text-destructive">{(error as Error).message}</p>;
+  if (error && !data) return <DataLoadError />;
 
   return (
     <div className="space-y-4">

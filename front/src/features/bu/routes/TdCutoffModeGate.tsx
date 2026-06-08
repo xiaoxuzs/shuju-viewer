@@ -2,7 +2,8 @@ import { Navigate, Outlet, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchDataset } from "@/api/client";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { PageLoading } from "@/components/common/page-loading";
 
 export function TdCutoffModeGate() {
   const { slug = "" } = useParams();
@@ -12,8 +13,9 @@ export function TdCutoffModeGate() {
     enabled: !!slug,
   });
 
-  if (isLoading) return <Skeleton className="h-64" />;
-  if (error) return <p className="text-destructive">{(error as Error).message}</p>;
+  if (isLoading) return <PageLoading />;
+  if (error && !data) return <DataLoadError />;
+  if (!data) return <DataEmptyState />;
   if (data?.analysis_mode === "BOTTOM_UP") {
     return <Navigate to={`/datasets/${slug}`} replace />;
   }

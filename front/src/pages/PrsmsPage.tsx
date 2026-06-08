@@ -6,10 +6,11 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchPrsms } from "@/api/client";
+import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { PageLoading } from "@/components/common/page-loading";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { Pagination } from "@/components/common/pagination";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatEValue, formatNumber } from "@/lib/utils";
 
@@ -18,11 +19,13 @@ export function PrsmsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["prsms", slug, cutoff, page],
     queryFn: () =>
       fetchPrsms(slug, cutoff, { page, page_size: pageSize, sort: "e_value", order: "asc" }),
   });
+
+  if (error && !data) return <DataLoadError />;
 
   return (
     <>
@@ -39,12 +42,8 @@ export function PrsmsPage() {
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="space-y-2 p-6">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <Skeleton key={i} className="h-8" />
-              ))}
-            </div>
-          ) : (
+            <PageLoading className="min-h-48" />
+          ) : data?.items.length ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -90,6 +89,8 @@ export function PrsmsPage() {
                 ))}
               </TableBody>
             </Table>
+          ) : (
+            <DataEmptyState compact />
           )}
         </CardContent>
       </Card>

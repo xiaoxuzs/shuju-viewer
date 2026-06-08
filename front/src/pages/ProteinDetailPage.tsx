@@ -7,8 +7,9 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchProtein } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageHeader } from "@/components/common/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoading } from "@/components/common/page-loading";
 import { Stat } from "@/components/common/stat";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatEValue, formatNumber } from "@/lib/utils";
@@ -20,9 +21,9 @@ export function ProteinDetailPage() {
     queryFn: () => fetchProtein(slug, cutoff, Number(proteinId)),
   });
 
-  if (isLoading) return <Skeleton className="h-96" />;
-  if (error) return <p className="text-destructive">{(error as Error).message}</p>;
-  if (!data) return null;
+  if (isLoading) return <PageLoading />;
+  if (error && !data) return <DataLoadError />;
+  if (!data) return <DataEmptyState />;
 
   return (
     <>

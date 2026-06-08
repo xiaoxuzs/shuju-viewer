@@ -2,29 +2,31 @@
  * 蛋白质列表：按 cutoff 分页，支持名称/描述搜索，默认按最佳 e-value 升序。
  */
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 
 import { fetchProteins } from "@/api/client";
+import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { PageLoading } from "@/components/common/page-loading";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/common/page-header";
 import { Pagination } from "@/components/common/pagination";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatEValue } from "@/lib/utils";
 
 export function ProteinsPage() {
   const { slug = "", cutoff = "" } = useParams();
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const pageSize = 50;
   const listSort = "best_prsm_e_value" as const;
   const listOrder = "asc" as const;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["proteins", slug, cutoff, page, search, listSort, listOrder],
     queryFn: () =>
       fetchProteins(slug, cutoff, {
@@ -35,6 +37,8 @@ export function ProteinsPage() {
         order: listOrder,
       }),
   });
+
+  if (error && !data) return <DataLoadError />;
 
   return (
     <>
@@ -66,12 +70,8 @@ export function ProteinsPage() {
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="space-y-2 p-6">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <Skeleton key={i} className="h-8" />
-              ))}
-            </div>
-          ) : (
+            <PageLoading className="min-h-48" />
+          ) : data?.items.length ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -89,7 +89,7 @@ export function ProteinsPage() {
                     key={p.id}
                     className="cursor-pointer"
                     onClick={() => {
-                      window.location.href = `/datasets/${slug}/${cutoff}/proteins/${p.id}`;
+                      navigate(`/datasets/${slug}/${cutoff}/proteins/${p.id}`);
                     }}
                   >
                     <TableCell className="font-mono text-xs text-muted-foreground">
@@ -120,6 +120,8 @@ export function ProteinsPage() {
                 ))}
               </TableBody>
             </Table>
+          ) : (
+            <DataEmptyState compact />
           )}
         </CardContent>
       </Card>
