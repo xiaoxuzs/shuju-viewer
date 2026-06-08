@@ -267,6 +267,24 @@ class BuXicOut(BaseModel):
     unit_rt: Literal["min"] = "min"
 
 
+class BuProductXicPoint(BaseModel):
+    rt: float
+    intensity: float
+    scan: int
+
+
+class BuProductXicOut(BaseModel):
+    curve_type: Literal["PRODUCT_ION_XIC"] = "PRODUCT_ION_XIC"
+    x_axis: Literal["rt"] = "rt"
+    y_axis: Literal["intensity"] = "intensity"
+    unit_rt: Literal["min"] = "min"
+    product_mz: float
+    ppm: float
+    precursor_mz: float
+    isolation_filter: bool = True
+    points: list[BuProductXicPoint] = Field(default_factory=list)
+
+
 class BuChromatogramOut(BaseModel):
     type: Literal["tic", "bpc"]
     unit_rt: Literal["min"] = "min"

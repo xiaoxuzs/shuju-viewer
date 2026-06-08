@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.bu.deps import require_bu_dataset, require_bu_match
-from app.bu.services import lists_service, mobility_service, spectrum_facade, xic_service
-from app.schemas import BuMatchDetailOut, BuMobilitySliceOut, BuSpectrumV1, BuXicOut
+from app.bu.services import lists_service, mobility_service, product_xic_service, spectrum_facade, xic_service
+from app.schemas import BuMatchDetailOut, BuMobilitySliceOut, BuProductXicOut, BuSpectrumV1, BuXicOut
 
 router = APIRouter()
 
@@ -28,10 +28,30 @@ def match_xic(slug: str, match_id: int, ppm: float = 10.0, session: Session = De
 
 
 @router.get("/datasets/{slug}/matches/{match_id}/spectrum/ms2", response_model=BuSpectrumV1)
-def match_ms2(slug: str, match_id: int, ppm: float = 20.0, session: Session = Depends(get_db)) -> BuSpectrumV1:
+def match_ms2(
+    slug: str,
+    match_id: int,
+    ppm: float = Query(20.0, gt=0),
+    scan: int | None = Query(None, gt=0),
+    rt: float | None = Query(None, ge=0),
+    session: Session = Depends(get_db),
+) -> BuSpectrumV1:
     dataset = require_bu_dataset(session, slug)
     match = require_bu_match(session, int(dataset["dataset_id"]), match_id)
-    return spectrum_facade.get_match_ms2(session, dataset, match, ppm=ppm)
+    return spectrum_facade.get_match_ms2(session, dataset, match, ppm=ppm, scan=scan, rt=rt)
+
+
+@router.get("/datasets/{slug}/matches/{match_id}/product-xic", response_model=BuProductXicOut)
+def match_product_xic(
+    slug: str,
+    match_id: int,
+    mz: float = Query(..., gt=0),
+    ppm: float = Query(20.0, gt=0),
+    session: Session = Depends(get_db),
+) -> BuProductXicOut:
+    dataset = require_bu_dataset(session, slug)
+    match = require_bu_match(session, int(dataset["dataset_id"]), match_id)
+    return product_xic_service.get_match_product_xic(session, dataset, match, product_mz=mz, ppm=ppm)
 
 
 @router.get("/datasets/{slug}/matches/{match_id}/spectrum/ms1", response_model=BuSpectrumV1)

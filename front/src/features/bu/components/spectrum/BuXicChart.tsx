@@ -1,6 +1,15 @@
 import type { BuXicOut } from "@/features/bu/types";
-import { BuInteractivePlot } from "@/features/bu/components/spectrum/BuInteractivePlot";
+import {
+  BuInteractivePlot,
+  type BuPlotPointClick,
+} from "@/features/bu/components/spectrum/BuInteractivePlot";
 import { BU_CHART, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
+
+export interface BuXicPointSelection {
+  rt: number;
+  intensity: number;
+  traceLabel: string;
+}
 
 export function BuXicChart({
   xic,
@@ -10,6 +19,7 @@ export function BuXicChart({
   height = BU_CHART.xicHeight,
   zoom,
   onZoomChange,
+  onPointClick,
   onOpenFull,
 }: {
   xic: BuXicOut;
@@ -19,6 +29,7 @@ export function BuXicChart({
   height?: number;
   zoom?: Zoom;
   onZoomChange?: (zoom: Zoom) => void;
+  onPointClick?: (selection: BuXicPointSelection) => void;
   onOpenFull?: () => void;
 }) {
   const traces = xic.traces?.length
@@ -47,15 +58,18 @@ export function BuXicChart({
       : [];
   const guides = xic.rt_apex !== null ? [{ x: xic.rt_apex, color: BU_CHART.apex, dashed: true }] : [];
   const charge = xic.precursor_charge ?? precursorCharge;
+  const handlePointClick = ({ point, seriesLabel }: BuPlotPointClick) => {
+    onPointClick?.({ rt: point.x, intensity: point.y, traceLabel: seriesLabel });
+  };
 
   return (
     <div>
       <div className="mb-2">
         <div className="text-center text-base font-medium">
-          XIC of precursor isotopes ({traces.map((trace) => trace.label).join(", ")}) (&plusmn;{ppm} ppm)
+          Precursor isotope XIC ({traces.map((trace) => trace.label).join(", ")}) (&plusmn;{ppm} ppm)
         </div>
         <div className="text-center text-sm text-muted-foreground">
-          peptide: {sequence} charge +{charge ?? "?"} - M m/z {xic.precursor_mz.toFixed(4)}
+          MS1 extraction for {sequence}, charge +{charge ?? "?"}, M m/z {xic.precursor_mz.toFixed(4)}
         </div>
       </div>
       <BuInteractivePlot
@@ -76,6 +90,7 @@ export function BuXicChart({
         ]}
         zoom={zoom}
         onZoomChange={onZoomChange}
+        onPointClick={onPointClick ? handlePointClick : undefined}
         onOpenFull={onOpenFull}
       />
     </div>

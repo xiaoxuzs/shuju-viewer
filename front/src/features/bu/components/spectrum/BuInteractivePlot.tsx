@@ -34,6 +34,11 @@ export interface BuPlotSeries {
   fillOpacity?: number;
 }
 
+export interface BuPlotPointClick {
+  point: BuPlotPoint;
+  seriesLabel: string;
+}
+
 function sortedPoints(points: BuPlotPoint[]): BuPlotPoint[] {
   return [...points].filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y)).sort((a, b) => a.x - b.x);
 }
@@ -62,6 +67,7 @@ export function BuInteractivePlot({
   emptyHint = "No points",
   zoom: zoomProp,
   onZoomChange,
+  onPointClick,
   onOpenFull,
   className,
 }: {
@@ -79,6 +85,7 @@ export function BuInteractivePlot({
   emptyHint?: string;
   zoom?: Zoom;
   onZoomChange?: (zoom: Zoom) => void;
+  onPointClick?: (selection: BuPlotPointClick) => void;
   onOpenFull?: () => void;
   className?: string;
 }) {
@@ -96,6 +103,8 @@ export function BuInteractivePlot({
   const controlled = zoomProp !== undefined;
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
+  const onPointClickRef = useRef(onPointClick);
+  onPointClickRef.current = onPointClick;
 
   const commitZoomRef = useRef<(zoom: Zoom) => void>(() => {});
   commitZoomRef.current = (next) => {
@@ -265,6 +274,8 @@ export function BuInteractivePlot({
     };
     applyZoomRef.current = applyZoom;
 
+    let suppressClickUntil = 0;
+    let clickTimer: ReturnType<typeof setTimeout> | null = null;
     const brush = d3
       .brushX()
       .extent([[0, 0], [innerW, innerH]])
@@ -273,15 +284,42 @@ export function BuInteractivePlot({
         const [a, b] = event.selection as [number, number];
         brushG.call(brush.move as any, null);
         if (Math.abs(b - a) < 4) return;
+        suppressClickUntil = Date.now() + 250;
         commitZoomRef.current({ x: [xScale.invert(a), xScale.invert(b)], y: zoomRef.current.y });
       });
     brushG.call(brush as any);
 
     const onDblClick = (event: MouseEvent) => {
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+        clickTimer = null;
+      }
       const rect = svgEl.getBoundingClientRect();
       const cx = event.clientX - rect.left - margin.left;
       const cy = event.clientY - rect.top - margin.top;
       if (cx >= 0 && cx <= innerW && cy >= 0 && cy <= innerH) commitZoomRef.current(DEFAULT_ZOOM);
+    };
+    const onClick = (event: MouseEvent) => {
+      if (!onPointClickRef.current || Date.now() < suppressClickUntil || event.detail > 1) return;
+      const rect = svgEl.getBoundingClientRect();
+      const cx = event.clientX - rect.left - margin.left;
+      const cy = event.clientY - rect.top - margin.top;
+      if (cx < 0 || cx > innerW || cy < 0 || cy > innerH || visible.length === 0) return;
+      const anchor = nearestPoint(visible, xScale.invert(cx));
+      if (!anchor) return;
+      const candidates = normalizedSeries
+        .map((item) => ({ item, point: nearestPoint(item.points, anchor.x) }))
+        .filter((candidate): candidate is { item: (typeof normalizedSeries)[number]; point: BuPlotPoint } => {
+          return candidate.point !== null && candidate.point.x >= xScale.domain()[0] && candidate.point.x <= xScale.domain()[1];
+        });
+      const selected = candidates.sort(
+        (a, b) => Math.abs(yScale(a.point.y) - cy) - Math.abs(yScale(b.point.y) - cy),
+      )[0];
+      if (!selected) return;
+      clickTimer = setTimeout(() => {
+        onPointClickRef.current?.({ point: selected.point, seriesLabel: selected.item.label });
+        clickTimer = null;
+      }, 180);
     };
     const onMove = (event: MouseEvent) => {
       const rect = svgEl.getBoundingClientRect();
@@ -338,6 +376,7 @@ export function BuInteractivePlot({
       }
     };
     svgEl.addEventListener("dblclick", onDblClick);
+    svgEl.addEventListener("click", onClick);
     svgEl.addEventListener("mousemove", onMove);
     svgEl.addEventListener("mouseleave", onLeave);
     svgEl.addEventListener("wheel", onWheel, { passive: false });
@@ -346,9 +385,11 @@ export function BuInteractivePlot({
 
     return () => {
       svgEl.removeEventListener("dblclick", onDblClick);
+      svgEl.removeEventListener("click", onClick);
       svgEl.removeEventListener("mousemove", onMove);
       svgEl.removeEventListener("mouseleave", onLeave);
       svgEl.removeEventListener("wheel", onWheel);
+      if (clickTimer) clearTimeout(clickTimer);
       applyZoomRef.current = null;
     };
   }, [bands, fullX, guides, height, normalizedSeries, width, xLabel, yLabel]);
@@ -365,7 +406,7 @@ export function BuInteractivePlot({
         </div>
       ) : (
         <>
-          <svg ref={svgRef} />
+          <svg ref={svgRef} aria-label={`${xLabel} versus ${yLabel}`} />
           <div className="absolute right-2 top-2 flex items-center gap-1">
             <button
               type="button"

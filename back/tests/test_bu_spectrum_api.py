@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from pyteomics import mass
 
-from app.bu.services import chromatogram_service, mobility_service, spectrum_facade, xic_service
+from app.bu.services import chromatogram_service, mobility_service, product_xic_service, spectrum_facade, xic_service
 from app.schemas import BuChromatogramOut, BuMobilitySliceOut
 
 
@@ -59,6 +59,53 @@ def test_match_ms2_resolves_scan_and_matches_by_ions(monkeypatch: pytest.MonkeyP
     assert out.scan == 67726
     assert out.ms_level == 2
     assert len(out.matched_ions) >= 10
+
+
+def test_match_ms2_resolves_nearest_rt_with_matching_isolation_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    spectra = {
+        67720: {**_ms2_spec(67720), "rt_seconds": 92.30 * 60.0},
+        67721: {
+            **_ms2_spec(67721),
+            "rt_seconds": 92.45 * 60.0,
+            "precursor": {"target_mz": 600.0, "lower_offset": 5.0, "upper_offset": 5.0},
+        },
+        67726: {**_ms2_spec(67726), "rt_seconds": 92.48 * 60.0},
+    }
+    monkeypatch.setattr(spectrum_facade, "get_run_spectra", lambda *_args: spectra)
+
+    out = spectrum_facade.get_match_ms2(None, {"dataset_id": 39}, _match(), rt=92.46)  # type: ignore[arg-type]
+
+    assert out.scan == 67726
+    assert out.rt_minutes == pytest.approx(92.48)
+
+
+def test_match_ms2_rt_does_not_fall_back_to_another_isolation_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    spectra = {
+        67721: {
+            **_ms2_spec(67721),
+            "rt_seconds": 92.46 * 60.0,
+            "precursor": {"target_mz": 600.0, "lower_offset": 5.0, "upper_offset": 5.0},
+        }
+    }
+    monkeypatch.setattr(spectrum_facade, "get_run_spectra", lambda *_args: spectra)
+
+    with pytest.raises(HTTPException) as exc:
+        spectrum_facade.get_match_ms2(None, {"dataset_id": 39}, _match(), rt=92.46)  # type: ignore[arg-type]
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail["error"] == "ms2_scan_not_found_for_rt"
+
+
+def test_match_ms2_returns_explicit_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    spectra = {
+        67720: {**_ms2_spec(67720), "rt_seconds": 92.30 * 60.0},
+        67726: _ms2_spec(67726),
+    }
+    monkeypatch.setattr(spectrum_facade, "get_run_spectra", lambda *_args: spectra)
+
+    out = spectrum_facade.get_match_ms2(None, {"dataset_id": 39}, _match(), scan=67720)  # type: ignore[arg-type]
+
+    assert out.scan == 67720
 
 
 def test_bruker_match_ms2_is_unsupported() -> None:
@@ -132,6 +179,73 @@ def test_xic_uses_ms1_points_in_expanded_rt_window(monkeypatch: pytest.MonkeyPat
 def test_bruker_match_xic_is_unsupported() -> None:
     with pytest.raises(HTTPException) as exc:
         xic_service.get_match_xic(None, {"dataset_id": 39}, _match(raw_format="bruker_d"))  # type: ignore[arg-type]
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "unsupported_raw_format"
+
+
+def test_product_xic_uses_matching_ms2_window_and_returns_zero_for_missing_peak(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    product_mz = 175.119
+    spectra = {
+        1: {
+            **_ms2_spec(1),
+            "rt_seconds": 92.15 * 60.0,
+            "mz": [product_mz + product_mz * 19e-6, product_mz - product_mz * 10e-6],
+            "intensity": [5200.0, 6100.0],
+        },
+        2: {
+            **_ms2_spec(2),
+            "rt_seconds": 92.46 * 60.0,
+            "mz": [product_mz + product_mz * 21e-6],
+            "intensity": [9999.0],
+        },
+        3: {
+            **_ms2_spec(3),
+            "rt_seconds": 92.50 * 60.0,
+            "precursor": {"target_mz": 600.0, "lower_offset": 5.0, "upper_offset": 5.0},
+            "mz": [product_mz],
+            "intensity": [12000.0],
+        },
+    }
+    monkeypatch.setattr(product_xic_service, "get_run_spectra", lambda *_args: spectra)
+
+    out = product_xic_service.get_match_product_xic(
+        None, {"dataset_id": 39}, _match(), product_mz=product_mz, ppm=20  # type: ignore[arg-type]
+    )
+
+    assert out.curve_type == "PRODUCT_ION_XIC"
+    assert out.isolation_filter is True
+    assert [point.scan for point in out.points] == [1, 2]
+    assert [point.intensity for point in out.points] == [6100.0, 0.0]
+
+
+def test_product_xic_ppm_tolerance_is_inclusive(monkeypatch: pytest.MonkeyPatch) -> None:
+    product_mz = 500.0
+    tolerance = product_mz * 20e-6
+    spectra = {
+        1: {
+            **_ms2_spec(1),
+            "rt_seconds": 92.46 * 60.0,
+            "mz": [product_mz - tolerance, product_mz + tolerance + 1e-6],
+            "intensity": [7000.0, 9000.0],
+        }
+    }
+    monkeypatch.setattr(product_xic_service, "get_run_spectra", lambda *_args: spectra)
+
+    out = product_xic_service.get_match_product_xic(
+        None, {"dataset_id": 39}, _match(), product_mz=product_mz, ppm=20  # type: ignore[arg-type]
+    )
+
+    assert out.points[0].intensity == 7000.0
+
+
+def test_bruker_product_xic_is_unsupported() -> None:
+    with pytest.raises(HTTPException) as exc:
+        product_xic_service.get_match_product_xic(
+            None, {"dataset_id": 39}, _match(raw_format="bruker_d"), product_mz=175.119  # type: ignore[arg-type]
+        )
 
     assert exc.value.status_code == 404
     assert exc.value.detail == "unsupported_raw_format"

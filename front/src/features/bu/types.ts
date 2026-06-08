@@ -257,6 +257,24 @@ export interface BuXicOut {
   unit_rt: "min";
 }
 
+export interface BuProductXicPoint {
+  rt: number;
+  intensity: number;
+  scan: number;
+}
+
+export interface BuProductXicOut {
+  curve_type: "PRODUCT_ION_XIC";
+  x_axis: "rt";
+  y_axis: "intensity";
+  unit_rt: "min";
+  product_mz: number;
+  ppm: number;
+  precursor_mz: number;
+  isolation_filter: boolean;
+  points: BuProductXicPoint[];
+}
+
 export interface BuChromatogramOut {
   type: "tic" | "bpc";
   unit_rt: "min";

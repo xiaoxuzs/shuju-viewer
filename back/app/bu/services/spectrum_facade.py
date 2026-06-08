@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.bu.services.scan_resolver import resolve_ms1_scan, resolve_ms2_scan
+from app.bu.services.scan_resolver import resolve_ms1_scan, resolve_ms2_scan, resolve_ms2_scan_at_rt
 from app.bu.services.theoretical_fragments import match_by_ions
 from app.schemas import BuSpectrumMarker, BuSpectrumPrecursor, BuSpectrumV1
 from app.services import spectrum_memory_wiring
@@ -86,14 +86,20 @@ def get_match_ms2(
     match: dict[str, Any],
     *,
     ppm: float = 20.0,
+    scan: int | None = None,
+    rt: float | None = None,
 ) -> BuSpectrumV1:
     """Return SpectrumV1 for the match's mzML MS2 scan."""
     ensure_mzml_match(match)
+    if scan is not None and rt is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="scan_and_rt_are_mutually_exclusive")
     dataset_id = int(dataset["dataset_id"])
     run_id = int(match["run_id"])
     spectra = get_run_spectra(session, dataset_id, run_id)
-    scan = resolve_ms2_scan(match, spectra)
-    spec = spectra.get(scan)
+    selected_scan = scan
+    if selected_scan is None:
+        selected_scan = resolve_ms2_scan_at_rt(match, spectra, rt) if rt is not None else resolve_ms2_scan(match, spectra)
+    spec = spectra.get(selected_scan)
     if spec is None or int(spec.get("ms_level") or 1) != 2:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="ms2_scan_not_found")
     mz = [float(v) for v in (spec.get("mz") or [])]

@@ -48,6 +48,7 @@ export function BuSpectrumChart({
   height = BU_CHART.ms2Height,
   zoom: zoomProp,
   onZoomChange,
+  onMatchedIonClick,
   onOpenFull,
   className,
 }: {
@@ -59,6 +60,7 @@ export function BuSpectrumChart({
   height?: number;
   zoom?: Zoom;
   onZoomChange?: (zoom: Zoom) => void;
+  onMatchedIonClick?: (ion: BuMatchedIon) => void;
   onOpenFull?: () => void;
   className?: string;
 }) {
@@ -92,6 +94,8 @@ export function BuSpectrumChart({
   const controlled = zoomProp !== undefined;
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
+  const onMatchedIonClickRef = useRef(onMatchedIonClick);
+  onMatchedIonClickRef.current = onMatchedIonClick;
   const commitZoomRef = useRef<(zoom: Zoom) => void>(() => {});
   commitZoomRef.current = (next) => {
     onZoomChange?.(next);
@@ -295,6 +299,8 @@ export function BuSpectrumChart({
     };
     applyZoomRef.current = applyZoom;
 
+    let suppressClickUntil = 0;
+    let clickTimer: ReturnType<typeof setTimeout> | null = null;
     const brush = d3
       .brushX()
       .extent([[0, 0], [innerW, innerH]])
@@ -303,15 +309,38 @@ export function BuSpectrumChart({
         const [a, b] = event.selection as [number, number];
         brushG.call(brush.move as any, null);
         if (Math.abs(b - a) < 4) return;
+        suppressClickUntil = Date.now() + 250;
         commitZoomRef.current({ x: [xScale.invert(a), xScale.invert(b)], y: zoomRef.current.y });
       });
     brushG.call(brush as any);
 
     const onDblClick = (event: MouseEvent) => {
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+        clickTimer = null;
+      }
       const rect = svgEl.getBoundingClientRect();
       const cx = event.clientX - rect.left - margin.left;
       const cy = event.clientY - rect.top - margin.top;
       if (cx >= 0 && cx <= innerW && cy >= 0 && cy <= innerH) commitZoomRef.current(DEFAULT_ZOOM);
+    };
+    const onClick = (event: MouseEvent) => {
+      if (!onMatchedIonClickRef.current || Date.now() < suppressClickUntil || event.detail > 1) return;
+      const rect = svgEl.getBoundingClientRect();
+      const cx = event.clientX - rect.left - margin.left;
+      const cy = event.clientY - rect.top - margin.top;
+      if (cx < 0 || cx > innerW || cy < 0 || cy > innerH) return;
+      const matched = visible.filter((peak) => peak.ion);
+      const selected = matched.sort(
+        (a, b) => Math.abs(xScale(a.mz) - cx) - Math.abs(xScale(b.mz) - cx),
+      )[0];
+      if (!selected?.ion || Math.abs(xScale(selected.mz) - cx) > 8) return;
+      const peakY = yScale(selected.intensity);
+      if (cy < peakY - 8 || cy > yScale(0) + 8) return;
+      clickTimer = setTimeout(() => {
+        onMatchedIonClickRef.current?.(selected.ion!);
+        clickTimer = null;
+      }, 180);
     };
     const onMove = (event: MouseEvent) => {
       const rect = svgEl.getBoundingClientRect();
@@ -358,15 +387,18 @@ export function BuSpectrumChart({
       }
     };
     svgEl.addEventListener("dblclick", onDblClick);
+    svgEl.addEventListener("click", onClick);
     svgEl.addEventListener("mousemove", onMove);
     svgEl.addEventListener("mouseleave", onLeave);
     svgEl.addEventListener("wheel", onWheel, { passive: false });
     applyZoom(zoomRef.current);
     return () => {
       svgEl.removeEventListener("dblclick", onDblClick);
+      svgEl.removeEventListener("click", onClick);
       svgEl.removeEventListener("mousemove", onMove);
       svgEl.removeEventListener("mouseleave", onLeave);
       svgEl.removeEventListener("wheel", onWheel);
+      if (clickTimer) clearTimeout(clickTimer);
       applyZoomRef.current = null;
     };
   }, [fullX, height, peaks, spectrum.markers, width]);
@@ -381,7 +413,7 @@ export function BuSpectrumChart({
         <div className="text-center text-base font-medium">{title}</div>
         <div className="text-center text-sm text-muted-foreground">{subtitle}</div>
       </div>
-      <svg ref={svgRef} />
+      <svg ref={svgRef} aria-label={title} />
       <div className="absolute right-2 top-12 flex items-center gap-1">
         <button
           type="button"
