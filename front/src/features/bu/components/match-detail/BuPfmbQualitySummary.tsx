@@ -247,9 +247,9 @@ function SlotTrend({
   return (
     <div data-testid="pfmb-quality-trend">
       <div className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-        Matched peaks per RT slot
+        PFMB matched peaks per RT slot
       </div>
-      <svg width={W} height={H} role="img" aria-label="Matched peaks per RT slot">
+      <svg width={W} height={H} role="img" aria-label="PFMB matched peaks per RT slot">
         <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth={1.5} opacity={0.7} />
         {trend.map((s, i) => {
           const isApex = s.slot_index === apexSlot;
@@ -270,7 +270,7 @@ function SlotTrend({
               className={cn("cursor-pointer")}
               onClick={() => onSelectRt(s.rt_minutes)}
             >
-              <title>{`Slot ${s.slot_index} (RT ${s.rt_minutes.toFixed(2)} min): ${formatCount(s.matched_peak_count)} matched peaks${isApex ? " [apex]" : ""}`}</title>
+              <title>{`Slot ${s.slot_index} (PFMB slot RT ${s.rt_minutes.toFixed(2)} min): ${formatCount(s.matched_peak_count)} PFMB matched peaks${isApex ? " [PFMB apex]" : ""}`}</title>
             </circle>
           );
         })}

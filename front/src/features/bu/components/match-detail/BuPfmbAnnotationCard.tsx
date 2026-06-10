@@ -17,17 +17,30 @@ import { BuSequenceCoverage } from "@/features/bu/components/match-detail/BuSequ
 import { BuPfmbSpectrumChart, type PfmbMassMode } from "@/features/bu/components/spectrum/BuPfmbSpectrumChart";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import type { BuMs2AnnotationOut, BuMs2SlotItem } from "@/features/bu/types";
-import { RT_LINK_TOLERANCE_MIN, formatCount } from "@/features/bu/utils";
+import {
+  RT_LINK_TOLERANCE_MIN,
+  formatCount,
+  inspectedRtSourceLabel,
+  type InspectedRtSource,
+} from "@/features/bu/utils";
 
 interface Props {
   slug: string;
   matchId: number;
   hasPfmb: boolean;
   selectedRt: number | null;
+  selectedRtSource: InspectedRtSource | null;
   onSelectRt: (rt: number) => void;
 }
 
-export function BuPfmbAnnotationCard({ slug, matchId, hasPfmb, selectedRt, onSelectRt }: Props) {
+export function BuPfmbAnnotationCard({
+  slug,
+  matchId,
+  hasPfmb,
+  selectedRt,
+  selectedRtSource,
+  onSelectRt,
+}: Props) {
   const slots = useQuery({
     queryKey: ["bu", slug, "matches", matchId, "ms2-slots"],
     queryFn: () => fetchBuMatchMs2Slots(slug, matchId),
@@ -101,20 +114,21 @@ export function BuPfmbAnnotationCard({ slug, matchId, hasPfmb, selectedRt, onSel
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Pre-computed PFMB annotation</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Pre-computed, deconvoluted peak-to-fragment matches (b / y / c / z.) for each
-          retention-time slot of this precursor. These are not the same peaks as the live
-          mzML MS2 matching shown above, so peak totals are not directly comparable.
+          PFMB uses pre-computed, deconvoluted peak-to-fragment matches per retention-time
+          slot. These peaks are not the same as the live mzML MS2 matched peaks, so counts
+          and intensity sums are not directly comparable.
         </p>
 
-        {selectedRt != null && (
+        {selectedRt != null && selectedRtSource != null && (
           <p className="pt-1 text-xs font-medium text-foreground" data-testid="pfmb-selected-rt">
-            Selected RT: {selectedRt.toFixed(4)} min
+            Current inspected RT: {selectedRt.toFixed(4)} min from{" "}
+            {inspectedRtSourceLabel(selectedRtSource)}
           </p>
         )}
         {outOfTolerance && (
           <p className="text-xs font-medium text-amber-600" data-testid="pfmb-rt-out-of-tolerance">
-            Nearest PFMB slot is {nearestDistance!.toFixed(2)} min from the selected RT (over
-            {" "}{RT_LINK_TOLERANCE_MIN.toFixed(1)} min); showing the apex slot instead.
+            Nearest PFMB slot is {nearestDistance!.toFixed(2)} min from the current inspected RT (over
+            {" "}{RT_LINK_TOLERANCE_MIN.toFixed(1)} min); showing the PFMB apex slot instead.
           </p>
         )}
 
@@ -192,7 +206,7 @@ export function BuPfmbAnnotationCard({ slug, matchId, hasPfmb, selectedRt, onSel
               />
               <div className="mb-1 flex items-center justify-between">
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                  PFMB annotation spectrum
+                  Pre-computed PFMB annotation spectrum
                 </div>
                 <MassModeToggle massMode={massMode} onChange={setMassMode} />
               </div>
@@ -217,8 +231,8 @@ export function BuPfmbAnnotationCard({ slug, matchId, hasPfmb, selectedRt, onSel
 
       {fullscreen && annotation.data && (
         <BuChartModal
-          title={`PFMB annotation spectrum: ${annotation.data.peptide}`}
-          subtitle={`${activeSlot ? `Slot ${activeSlot.slot_index} (RT ${activeSlot.rt_minutes.toFixed(2)} min) | ` : ""}${massMode === "mz" ? "m/z" : "neutral mass"}`}
+          title={`Pre-computed PFMB annotation spectrum: ${annotation.data.peptide}`}
+          subtitle={`${activeSlot ? `Slot ${activeSlot.slot_index} (PFMB slot RT ${activeSlot.rt_minutes.toFixed(2)} min) | ` : ""}${massMode === "mz" ? "m/z" : "neutral mass"}`}
           onClose={() => setFullscreen(false)}
           actions={<MassModeToggle massMode={massMode} onChange={setMassMode} />}
         >
@@ -277,11 +291,11 @@ function SlotSummary({
       data-testid="pfmb-slot-summary"
     >
       {slot && <SummaryItem label="Slot" value={String(slot.slot_index)} />}
-      {slot && <SummaryItem label="RT" value={`${slot.rt_minutes.toFixed(2)} min`} />}
+      {slot && <SummaryItem label="PFMB slot RT" value={`${slot.rt_minutes.toFixed(2)} min`} />}
       <SummaryItem label="PRSM index" value={String(annotation.prsm_index)} />
-      <SummaryItem label="Matched peaks (by peak_id)" value={formatCount(annotation.matched_peak_count)} />
-      <SummaryItem label="Matched ion rows" value={formatCount(annotation.matched_ions.length)} />
-      <SummaryItem label="Zero-intensity rows" value={formatCount(zeroRows)} />
+      <SummaryItem label="PFMB matched peak rows" value={formatCount(annotation.matched_peak_count)} />
+      <SummaryItem label="Pre-computed matched rows" value={formatCount(annotation.matched_ions.length)} />
+      <SummaryItem label="PFMB zero-intensity rows" value={formatCount(zeroRows)} />
     </dl>
   );
 }
@@ -319,7 +333,7 @@ function SlotButton({
           : "border-border text-muted-foreground hover:text-foreground",
       )}
     >
-      {`Slot ${slot.slot_index} | ${slot.rt_minutes.toFixed(2)} min${isApex ? " | Apex" : ""}`}
+      {`Slot ${slot.slot_index} | PFMB slot RT ${slot.rt_minutes.toFixed(2)} min${isApex ? " | PFMB apex" : ""}`}
     </button>
   );
 }

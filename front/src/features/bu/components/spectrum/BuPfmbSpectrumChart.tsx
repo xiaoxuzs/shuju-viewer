@@ -335,7 +335,7 @@ export function BuPfmbSpectrumChart({
 
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
-      <svg ref={svgRef} aria-label={`PFMB annotation spectrum (${xLabel})`} />
+      <svg ref={svgRef} aria-label={`Pre-computed PFMB annotation spectrum (${xLabel})`} />
       <div className="absolute right-2 top-1 flex items-center gap-1">
         <button
           type="button"

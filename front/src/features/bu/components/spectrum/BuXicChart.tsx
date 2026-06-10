@@ -86,7 +86,7 @@ export function BuXicChart({
         legend={[
           ...traces.map((trace) => ({ label: trace.label, color: colorForTrace(trace.isotope_index), kind: "line" as const })),
           { label: "RT window", color: BU_CHART.rtWindow, kind: "band" },
-          { label: "apex", color: BU_CHART.apex, kind: "line" },
+          { label: "Identification RT apex", color: BU_CHART.apex, kind: "line" },
         ]}
         zoom={zoom}
         onZoomChange={onZoomChange}

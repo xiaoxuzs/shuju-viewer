@@ -9,7 +9,9 @@ export function BuFragmentTable({ ions }: { ions: BuMatchedIon[] }) {
   return (
     <Card className="mt-4 border-border/70">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Matched b/y fragments ({formatCount(ions.length)})</CardTitle>
+        <CardTitle className="text-sm">
+          Live mzML matched b/y fragments ({formatCount(ions.length)})
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">

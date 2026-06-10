@@ -67,12 +67,12 @@ export function BuSpectrumChart({
   const markerMz = spectrum.markers?.find((marker) => marker.label === "precursor")?.mz ?? precursorMz;
   const title =
     spectrum.ms_level === 1
-      ? `MS1 scan #${spectrum.scan} (RT=${spectrum.rt_minutes.toFixed(2)} min) precursor m/z ${markerMz?.toFixed(4) ?? "-"}`
-      : `MS2 scan #${spectrum.scan} (RT=${spectrum.rt_minutes.toFixed(2)} min) peptide: ${sequence} +${precursorCharge ?? "?"} m/z ${precursorMz?.toFixed(3) ?? "-"}`;
+      ? `MS1 scan #${spectrum.scan} (MS1 scan RT=${spectrum.rt_minutes.toFixed(2)} min) precursor m/z ${markerMz?.toFixed(4) ?? "-"}`
+      : `MS2 scan #${spectrum.scan} (MS2 scan RT=${spectrum.rt_minutes.toFixed(2)} min) peptide: ${sequence} +${precursorCharge ?? "?"} m/z ${precursorMz?.toFixed(3) ?? "-"}`;
   const subtitle =
     spectrum.ms_level === 1
       ? `precursor marker ${markerMz?.toFixed(4) ?? "-"}${precursorCharge ? ` · charge +${precursorCharge}` : ""}`
-      : `matched ${spectrum.matched_ions.length}/${theoreticalCount(sequence)} theoretical b/y ions (±${ppm} ppm)`;
+      : `live matched ${spectrum.matched_ions.length}/${theoreticalCount(sequence)} theoretical b/y ions (±${ppm} ppm)`;
   const peaks = useMemo(() => {
     const mapped: ChartPeak[] = spectrum.mz.map((mz, index) => ({
       mz,

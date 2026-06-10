@@ -188,7 +188,11 @@ export interface BuProteinMini {
   description: string | null;
 }
 
-export interface BuMatchDetailOut extends BuMatchListItemOut {
+export interface BuMatchDetailOut extends Omit<BuMatchListItemOut, "scan_number"> {
+  scan_number?: number | null;
+  identification_rt_apex?: number | null;
+  scan_available?: boolean;
+  scan_unavailable_reason?: string | null;
   spectrum_native_id: string | null;
   ms_level: number;
   entity_type: "PEPTIDE";

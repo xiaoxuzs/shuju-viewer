@@ -91,7 +91,7 @@ export function BuPfmbHeatmap({
         )}
       </div>
       <div className="relative overflow-x-auto">
-        <svg width={width} height={height} role="img" aria-label="RT by fragment intensity heatmap">
+        <svg width={width} height={height} role="img" aria-label="PFMB slot RT by fragment intensity heatmap">
           {/* apex column marker */}
           {apexCol >= 0 && (
             <text
@@ -102,7 +102,7 @@ export function BuPfmbHeatmap({
               fill="currentColor"
               data-testid="pfmb-heatmap-apex"
             >
-              apex
+              PFMB apex
             </text>
           )}
           {/* column headers (slot index), clickable to switch RT */}

@@ -77,7 +77,7 @@ export function BuPfmbFragmentTable({
     <Card className="mt-4 border-border/70">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm">
-          Pre-computed matched fragments ({formatCount(ions.length)})
+          Pre-computed PFMB matched fragments ({formatCount(ions.length)})
         </CardTitle>
       </CardHeader>
       <CardContent>

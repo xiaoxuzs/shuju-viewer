@@ -132,7 +132,18 @@ function spectrumStub(msLevel: 1 | 2, rt: number) {
       msLevel === 2
         ? { selected_mz: 477.3051, charge: 2, isolation_target_mz: 478, isolation_lower: 6.5, isolation_upper: 6.5 }
         : null,
-    matched_ions: [],
+    matched_ions:
+      msLevel === 2
+        ? [{
+            ion_type: "y",
+            position: 5,
+            charge: 1,
+            theo_mz: 200,
+            exp_mz: 200,
+            ppm: 0,
+            intensity: 100,
+          }]
+        : [],
     markers: [],
   };
 }
@@ -179,20 +190,41 @@ test("clicking a PFMB slot drives the live MS2 scan and shows the RT everywhere"
   await expect(card.getByTestId("pfmb-slot-summary")).toContainText("101");
 
   const ms2Request = page.waitForRequest(ms2HasRt("93.99"));
-  await card.getByRole("button", { name: "Slot 4 | 93.99 min", exact: true }).click();
+  await card.getByRole("button", { name: "Slot 4 | PFMB slot RT 93.99 min", exact: true }).click();
   await ms2Request;
 
   // Live MS2 header reflects the requested RT.
-  await expect(page.getByTestId("ms2-current-rt")).toContainText("93.9900");
+  await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan RT: 93.9900 min");
   // XIC card shows the same RT, marked as coming from the PFMB slot.
   await expect(page.getByTestId("xic-selected-rt")).toContainText("93.9900");
+  await expect(page.getByTestId("xic-selected-rt")).toContainText("Current inspected RT");
   await expect(page.getByTestId("xic-selected-rt")).toContainText("from PFMB slot");
   // PFMB selection moved to slot 4 / prsm 100.
   await expect(card.getByTestId("pfmb-slot-summary")).toContainText("100");
-  await expect(card.getByRole("button", { name: "Slot 4 | 93.99 min", exact: true })).toHaveAttribute(
+  await expect(card.getByRole("button", { name: "Slot 4 | PFMB slot RT 93.99 min", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
+  await expect(card.getByTestId("pfmb-slot-summary")).toContainText("PFMB slot RT");
+  await expect(card.getByRole("button", { name: /PFMB slot RT 94.99 min \| PFMB apex/ })).toBeVisible();
+});
+
+test("live mzML and pre-computed PFMB evidence stay visibly distinct", async ({ page }) => {
+  await mockRt(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+  await expect(page.getByText("Matched fragments are calculated from the selected mzML MS2 scan.", {
+    exact: false,
+  })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live mzML matched b/y fragments (1)" })).toBeVisible();
+
+  const card = page.getByTestId("pfmb-card");
+  await expect(card.getByRole("heading", { name: "Pre-computed PFMB annotation" })).toBeVisible();
+  await expect(card).toContainText("counts and intensity sums are not directly comparable");
+  await expect(card.getByRole("heading", {
+    name: "Pre-computed PFMB matched fragments (1)",
+  })).toBeVisible();
 });
 
 test("clicking an XIC point selects the nearest PFMB slot", async ({ page }) => {
@@ -218,9 +250,12 @@ test("clicking an XIC point selects the nearest PFMB slot", async ({ page }) => 
 
   // 94.0 is within tolerance of slot 4 (93.99) => PFMB jumps to prsm 100, no hint.
   await expect(card.getByTestId("pfmb-selected-rt")).toBeVisible();
+  await expect(card.getByTestId("pfmb-selected-rt")).toContainText(
+    "Current inspected RT: 94.0000 min from XIC selection",
+  );
   await expect(card.getByTestId("pfmb-rt-out-of-tolerance")).toHaveCount(0);
   await expect(card.getByTestId("pfmb-slot-summary")).toContainText("100");
-  await expect(card.getByRole("button", { name: "Slot 4 | 93.99 min", exact: true })).toHaveAttribute(
+  await expect(card.getByRole("button", { name: "Slot 4 | PFMB slot RT 93.99 min", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );

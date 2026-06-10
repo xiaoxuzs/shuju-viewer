@@ -17,7 +17,7 @@ const dataset = {
   cutoffs: [],
 };
 
-function matchDetail(rawFormat: string) {
+function matchDetail(rawFormat: string, scanNumber: number | null | undefined = -1) {
   return {
     id: 1,
     run_id: 10,
@@ -33,7 +33,7 @@ function matchDetail(rawFormat: string) {
     score: 10,
     intensity: 1000,
     is_decoy_match: false,
-    scan_number: -1,
+    ...(scanNumber !== undefined ? { scan_number: scanNumber } : {}),
     protein_group: null,
     protein_accessions: [],
     genes: null,
@@ -112,7 +112,7 @@ async function fulfillJson(route: Route, body: unknown) {
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-async function mockMzmlMatch(page: Page, matchDelayMs = 0) {
+async function mockMzmlMatch(page: Page, matchDelayMs = 0, scanNumber: number | null | undefined = -1) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
@@ -120,7 +120,7 @@ async function mockMzmlMatch(page: Page, matchDelayMs = 0) {
       if (matchDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, matchDelayMs));
       }
-      return fulfillJson(route, matchDetail("mzml"));
+      return fulfillJson(route, matchDetail("mzml", scanNumber));
     }
     if (url.pathname.endsWith("/matches/1/xic")) return fulfillJson(route, xic);
     if (url.pathname.endsWith("/matches/1/spectrum/ms1")) return fulfillJson(route, spectrum(500, 92.45, 1));
@@ -183,7 +183,8 @@ test("precursor XIC selects MS2 and matched ion opens product XIC", async ({ pag
 
   await expect(page.getByRole("heading", { name: "Precursor XIC" })).toBeVisible();
   await expect(page.getByText(/MS1 extracted ion chromatogram for the precursor/)).toBeVisible();
-  await expect(page.getByText(/Current scan #67726, RT 92.4600 min/)).toBeVisible();
+  await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan #67726");
+  await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan RT: 92.4600 min");
 
   const xicSvg = page.locator('svg[aria-label="Retention Time (min) versus MS1 intensity at isotope m/z"]').first();
   const xicBox = await xicSvg.boundingBox();
@@ -199,8 +200,9 @@ test("precursor XIC selects MS2 and matched ion opens product XIC", async ({ pag
     },
   });
   await selectedMs2Request;
-  await expect(page.getByText(/Selected RT: 93.0000 min/)).toBeVisible();
-  await expect(page.getByText(/Current scan #67727, RT 93.0100 min/)).toBeVisible();
+  await expect(page.getByText(/Current inspected RT: 93.0000 min from XIC selection/)).toBeVisible();
+  await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan #67727");
+  await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan RT: 93.0100 min");
 
   const ms2Svg = page.locator('svg[aria-label^="MS2 scan #67727"]');
   const ms2Box = await ms2Svg.boundingBox();
@@ -220,6 +222,35 @@ test("precursor XIC selects MS2 and matched ion opens product XIC", async ({ pag
 
   await page.getByRole("button", { name: "clear" }).click();
   await expect(page.getByText("Product ion XIC: y5 / m/z 175.1190")).toBeHidden();
+});
+
+for (const scanNumber of [-1, null, undefined]) {
+  test(`metadata scan ${String(scanNumber)} is displayed as unavailable`, async ({ page }) => {
+    await mockMzmlMatch(page, 0, scanNumber);
+    await page.goto("/datasets/demo/matches/1");
+
+    const metadata = page.getByTestId("match-metadata");
+    await expect(metadata.getByText("N/A", { exact: true })).toBeVisible();
+    await expect(metadata).toContainText("Not available from imported match metadata");
+    await expect(page.getByText(/^MS1 scan #500\./)).toBeVisible();
+    await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan #67726");
+  });
+}
+
+test("available metadata scan keeps its imported value", async ({ page }) => {
+  await mockMzmlMatch(page, 0, 70714);
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByTestId("match-metadata")).toContainText("70714");
+});
+
+test("labels identification, MS1, and MS2 retention times independently", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByTestId("match-metadata")).toContainText("Identification RT apex");
+  await expect(page.getByText(/MS1 scan RT: 92.4500 min/)).toBeVisible();
+  await expect(page.getByText(/MS2 scan RT: 92.4600 min/)).toBeVisible();
 });
 
 test("unsupported raw format shows a downgrade message without match-level spectrum calls", async ({ page }) => {

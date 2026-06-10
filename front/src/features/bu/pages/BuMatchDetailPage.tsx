@@ -25,7 +25,14 @@ import { BuXicChart, type BuXicPointSelection } from "@/features/bu/components/s
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import type { BuMatchedIon } from "@/features/bu/types";
-import { RT_LINK_TOLERANCE_MIN, formatDecimal } from "@/features/bu/utils";
+import {
+  RT_LINK_TOLERANCE_MIN,
+  SCAN_UNAVAILABLE_REASON,
+  formatDecimal,
+  formatScanValue,
+  inspectedRtSourceLabel,
+  type InspectedRtSource,
+} from "@/features/bu/utils";
 
 const MS2_PPM = 20;
 const XIC_PPM = 10;
@@ -43,8 +50,9 @@ export function BuMatchDetailPage() {
   const [ms2ModalZoom, setMs2ModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [selectedXicPoint, setSelectedXicPoint] = useState<BuXicPointSelection | null>(null);
   const [selectedProductIon, setSelectedProductIon] = useState<BuMatchedIon | null>(null);
-  // Single source of truth (minutes) linking the XIC, live MS2 and PFMB cards.
-  const [selectedRt, setSelectedRt] = useState<number | null>(null);
+  // Single source of truth linking the XIC, live MS2 and PFMB cards.
+  const [inspectedRt, setInspectedRt] = useState<{ rt: number; source: InspectedRtSource } | null>(null);
+  const selectedRt = inspectedRt?.rt ?? null;
   const { data, isLoading, error } = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId],
     queryFn: () => fetchBuMatch(dataset.slug, parsedMatchId),
@@ -102,18 +110,18 @@ export function BuMatchDetailPage() {
     setMs2ModalZoom(DEFAULT_ZOOM);
     setSelectedXicPoint(null);
     setSelectedProductIon(null);
-    setSelectedRt(null);
+    setInspectedRt(null);
   }, [parsedMatchId]);
 
   const selectXicPoint = (selection: BuXicPointSelection) => {
     setSelectedXicPoint(selection);
-    setSelectedRt(selection.rt);
+    setInspectedRt({ rt: selection.rt, source: "xic" });
     setSelectedProductIon(null);
   };
 
   // Driven by a PFMB slot click: RT becomes canonical, the XIC marker is cleared.
   const selectRtFromPfmb = (rt: number) => {
-    setSelectedRt(rt);
+    setInspectedRt({ rt, source: "pfmb" });
     setSelectedXicPoint(null);
     setSelectedProductIon(null);
   };
@@ -128,13 +136,27 @@ export function BuMatchDetailPage() {
         <CardHeader>
           <CardTitle>{data.modified_sequence ?? data.sequence}</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+        <CardContent
+          className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4"
+          data-testid="match-metadata"
+        >
           <Field label="Run" value={data.run.file_name} />
           <Field label="Charge" value={data.precursor_charge ? `${data.precursor_charge}+` : "-"} />
           <Field label="m/z" value={formatDecimal(data.precursor_mz)} />
           <Field label="Q.Value" value={formatDecimal(data.q_value)} />
-          <Field label="RT apex" value={formatDecimal(data.rt_window.rt_apex)} />
-          <Field label="Scan" value={String(data.scan_number)} />
+          <Field
+            label="Identification RT apex"
+            value={formatDecimal(data.identification_rt_apex ?? data.rt_window.rt_apex)}
+          />
+          <Field
+            label="Scan"
+            value={formatScanValue(data.scan_number)}
+            hint={
+              formatScanValue(data.scan_number) === "N/A"
+                ? data.scan_unavailable_reason ?? SCAN_UNAVAILABLE_REASON
+                : undefined
+            }
+          />
           <Field label="Proteins" value={data.proteins.map((p) => p.accession).join(", ") || "-"} />
           <Field label="Spectrum" value={isMzml ? "mzML precursor XIC + MS1/MS2" : "match-level spectra unsupported"} />
         </CardContent>
@@ -154,12 +176,13 @@ export function BuMatchDetailPage() {
                 <p className="text-xs text-muted-foreground">
                   Click a point on the XIC to inspect the corresponding MS2 scan. {ZOOM_HINT}
                 </p>
-                {selectedRt !== null && (
+                {inspectedRt !== null && (
                   <p className="text-xs font-medium text-foreground" data-testid="xic-selected-rt">
-                    Selected RT: {selectedRt.toFixed(4)} min
+                    Current inspected RT: {inspectedRt.rt.toFixed(4)} min from{" "}
+                    {inspectedRtSourceLabel(inspectedRt.source)}
                     {selectedXicPoint
                       ? `, ${selectedXicPoint.traceLabel} intensity ${formatDecimal(selectedXicPoint.intensity, 0)}`
-                      : " (from PFMB slot)"}
+                      : ""}
                   </p>
                 )}
               </CardHeader>
@@ -180,8 +203,10 @@ export function BuMatchDetailPage() {
           {ms1.data && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">MS1 Spectrum</CardTitle>
-                <p className="text-xs text-muted-foreground">{ZOOM_HINT}</p>
+                <CardTitle className="text-base">MS1 spectrum from mzML</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  MS1 scan #{ms1.data.scan}. MS1 scan RT: {ms1.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
+                </p>
               </CardHeader>
               <CardContent>
                 <BuSpectrumChart
@@ -199,18 +224,18 @@ export function BuMatchDetailPage() {
           {ms2.data && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">MS2 Spectrum</CardTitle>
+                <CardTitle className="text-base">Live mzML MS2 matching</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Fragment spectrum near the selected retention time. Click a matched b/y fragment peak to view its product ion XIC (MS2 chromatogram).
+                  Matched fragments are calculated from the selected mzML MS2 scan. Click a matched b/y fragment peak to view its product ion XIC (MS2 chromatogram).
                 </p>
                 <p className="text-xs text-muted-foreground" data-testid="ms2-current-rt">
-                  Current scan #{ms2.data.scan}, RT {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
+                  MS2 scan #{ms2.data.scan}. MS2 scan RT: {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
                 </p>
                 {selectedRt !== null &&
                   Math.abs(ms2.data.rt_minutes - selectedRt) > RT_LINK_TOLERANCE_MIN && (
                     <p className="text-xs font-medium text-amber-600" data-testid="ms2-rt-out-of-tolerance">
                       Nearest MS2 scan is {Math.abs(ms2.data.rt_minutes - selectedRt).toFixed(2)} min from the
-                      selected RT.
+                      current inspected RT.
                     </p>
                   )}
               </CardHeader>
@@ -262,7 +287,9 @@ export function BuMatchDetailPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">m/z × 1/K0 slice</CardTitle>
-                <p className="text-xs text-muted-foreground">Bruker .d MS1 frame nearest to the match RT apex</p>
+                <p className="text-xs text-muted-foreground">
+                  Bruker .d MS1 frame nearest to the Identification RT apex
+                </p>
               </CardHeader>
               <CardContent>
                 {mobility.isLoading && <Skeleton className="h-72" />}
@@ -279,6 +306,7 @@ export function BuMatchDetailPage() {
         matchId={parsedMatchId}
         hasPfmb={Boolean(dataset.capabilities?.has_ms2_pfmb)}
         selectedRt={selectedRt}
+        selectedRtSource={inspectedRt?.source ?? null}
         onSelectRt={selectRtFromPfmb}
       />
 
@@ -304,7 +332,7 @@ export function BuMatchDetailPage() {
 
       {ms1FullOpen && ms1.data && (
         <BuChartModal
-          title="MS1 Spectrum"
+          title="MS1 spectrum from mzML"
           subtitle={`${data.sequence} · ${ZOOM_HINT}`}
           onClose={() => setMs1FullOpen(false)}
           actions={<ResetZoomButton zoom={ms1ModalZoom} onReset={() => setMs1ModalZoom(DEFAULT_ZOOM)} />}
@@ -323,7 +351,7 @@ export function BuMatchDetailPage() {
 
       {ms2FullOpen && ms2.data && (
         <BuChartModal
-          title="MS2 Spectrum"
+          title="Live mzML MS2 matching"
           subtitle={`${data.sequence} · ${ZOOM_HINT}`}
           onClose={() => setMs2FullOpen(false)}
           actions={<ResetZoomButton zoom={ms2ModalZoom} onReset={() => setMs2ModalZoom(DEFAULT_ZOOM)} />}
@@ -345,11 +373,12 @@ export function BuMatchDetailPage() {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-md border border-border/60 bg-muted/30 p-3">
       <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="mt-1 break-words font-medium">{value}</div>
+      {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}
     </div>
   );
 }

@@ -323,6 +323,8 @@ def get_match_detail(
 ) -> BuMatchDetailOut:
     meta = _json_object(match.get("extra_metadata"))
     run_meta = _json_object(match.get("run_metadata"))
+    scan_number = int(match["scan_number"])
+    scan_available = scan_number >= 0
     proteins = session.execute(
         text(
             """
@@ -356,7 +358,7 @@ def get_match_detail(
         score=match.get("score"),
         intensity=match.get("intensity"),
         is_decoy_match=bool(match.get("is_decoy_match")),
-        scan_number=int(match["scan_number"]),
+        scan_number=scan_number,
         protein_group=protein_group,
         protein_accessions=_protein_accessions(protein_group),
         genes=meta.get("genes"),
@@ -364,6 +366,9 @@ def get_match_detail(
     )
     return BuMatchDetailOut(
         **list_item.model_dump(),
+        identification_rt_apex=match.get("retention_time"),
+        scan_available=scan_available,
+        scan_unavailable_reason=None if scan_available else "Not available from imported match metadata",
         spectrum_native_id=match.get("spectrum_native_id"),
         ms_level=int(match.get("ms_level") or 2),
         run=BuRunDetail(

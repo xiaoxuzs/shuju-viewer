@@ -216,7 +216,7 @@ test("clicking a spectrum peak highlights the matching table row", async ({ page
   await page.goto("/datasets/demo/matches/1");
 
   const card = page.getByTestId("pfmb-card");
-  const svg = card.locator('svg[aria-label^="PFMB annotation spectrum"]');
+  const svg = card.locator('svg[aria-label^="Pre-computed PFMB annotation spectrum"]');
   const box = await svg.boundingBox();
   if (!box) throw new Error("PFMB spectrum SVG has no bounding box");
   // Neutral-mass domain [190.056, 608.344]; z_dot3 (360.2) sits at ~0.407 of the
@@ -231,7 +231,7 @@ test("mass-mode toggle switches the spectrum axis label", async ({ page }) => {
   await page.goto("/datasets/demo/matches/1");
 
   const card = page.getByTestId("pfmb-card");
-  const svg = card.locator('svg[aria-label^="PFMB annotation spectrum"]');
+  const svg = card.locator('svg[aria-label^="Pre-computed PFMB annotation spectrum"]');
   await expect(svg).toContainText("neutral mass (Da)");
 
   await card.getByTestId("pfmb-mass-mode").getByRole("button", { name: "m/z" }).click();

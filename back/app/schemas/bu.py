@@ -169,6 +169,9 @@ class BuProteinMini(BaseModel):
 
 
 class BuMatchDetailOut(BuMatchListItemOut):
+    identification_rt_apex: float | None = None
+    scan_available: bool = True
+    scan_unavailable_reason: str | None = None
     spectrum_native_id: str | None = None
     ms_level: int = 2
     entity_type: Literal["PEPTIDE"] = "PEPTIDE"
