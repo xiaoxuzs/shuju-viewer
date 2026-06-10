@@ -116,6 +116,7 @@ async function mockMzmlMatch(
   matchDelayMs = 0,
   scanNumber: number | null | undefined = -1,
   productFailureMz?: number,
+  productBatchStatus = 200,
 ) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -131,23 +132,34 @@ async function mockMzmlMatch(
     if (url.pathname.endsWith("/matches/1/spectrum/ms2")) {
       return fulfillJson(route, url.searchParams.has("rt") ? spectrum(67727, 93.01, 2) : spectrum(67726, 92.46, 2));
     }
-    if (url.pathname.endsWith("/matches/1/product-xic")) {
-      if (Number(url.searchParams.get("mz")) === productFailureMz) {
-        return route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    if (url.pathname.endsWith("/matches/1/product-xics")) {
+      if (productBatchStatus >= 400) {
+        return route.fulfill({ status: productBatchStatus, contentType: "application/json", body: "{}" });
       }
+      const request = route.request().postDataJSON() as {
+        tolerance_ppm: number;
+        ions: Array<{
+          id: string;
+          ion: string;
+          series: "b" | "y";
+          position: number;
+          charge: number;
+          mz: number;
+        }>;
+      };
       return fulfillJson(route, {
-        curve_type: "PRODUCT_ION_XIC",
-        x_axis: "rt",
-        y_axis: "intensity",
-        unit_rt: "min",
-        product_mz: Number(url.searchParams.get("mz")),
-        ppm: Number(url.searchParams.get("ppm")),
-        precursor_mz: 477.3051,
-        isolation_filter: true,
-        points: [
-          { rt: 92.15, intensity: 20, scan: 67720 },
-          { rt: 92.46, intensity: 100, scan: 67726 },
-        ],
+        traces: request.ions.map((ion) => ({
+          ...ion,
+          tolerance_ppm: request.tolerance_ppm,
+          status: ion.mz === productFailureMz ? "error" : "ok",
+          error: ion.mz === productFailureMz ? "failed" : null,
+          points: ion.mz === productFailureMz
+            ? []
+            : [
+                { rt: 92.15, intensity: 20, scan: 67720 },
+                { rt: 92.46, intensity: 100, scan: 67726 },
+              ],
+        })),
       });
     }
     await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
@@ -230,7 +242,9 @@ test("precursor XIC selects MS2 and matched ion toggles product XIC comparison",
 
   const productRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
-    return url.pathname.endsWith("/product-xic") && url.searchParams.get("mz") === "175.119";
+    if (!url.pathname.endsWith("/product-xics")) return false;
+    const body = request.postDataJSON() as { ions: Array<{ mz: number }>; rt_window?: unknown };
+    return body.rt_window === undefined && body.ions.some((ion) => ion.mz === 175.119);
   });
   await clickMs2Peak(page, 67727, 175.119);
   await productRequest;
@@ -239,7 +253,8 @@ test("precursor XIC selects MS2 and matched ion toggles product XIC comparison",
 
   const secondProductRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
-    return url.pathname.endsWith("/product-xic") && url.searchParams.get("mz") === "125";
+    if (!url.pathname.endsWith("/product-xics")) return false;
+    return (request.postDataJSON() as { ions: Array<{ mz: number }> }).ions.some((ion) => ion.mz === 125);
   });
   await clickMs2Peak(page, 67727, 125);
   await secondProductRequest;
@@ -262,10 +277,13 @@ test("adds top fragments, enforces the limit, and switches raw or normalized vie
   await card.getByRole("button", { name: "Add top 3 fragments" }).click();
   await expect(card).toContainText("Selected product ions: 3 / 8");
   await expect(card.getByTestId("plot-series")).toHaveCount(3);
+  await expect(page.getByTestId("live-fragment-row").filter({ has: page.locator('input:checked') })).toHaveCount(3);
+  await expect(page.locator('[data-testid="matched-spectrum-peak"][data-product-ion-selected="true"]')).toHaveCount(3);
 
   await mode.getByRole("button", { name: "Raw intensity" }).click();
   await expect(mode.getByRole("button", { name: "Raw intensity" })).toHaveAttribute("aria-pressed", "true");
   await expect(card.locator('svg[aria-label="Retention Time (min) versus Intensity"]')).toBeVisible();
+  await expect(page.getByTestId("live-fragment-row").filter({ has: page.locator('input:checked') })).toHaveCount(3);
 
   await card.getByRole("button", { name: "Add top 3 fragments" }).click();
   await card.getByRole("button", { name: "Add top 3 fragments" }).click();
@@ -273,10 +291,15 @@ test("adds top fragments, enforces the limit, and switches raw or normalized vie
   await expect(card.getByRole("alert")).toContainText(
     "Maximum 8 product ions can be compared at once. Remove one before adding another.",
   );
+  await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(8);
+  await expect(page.getByRole("checkbox", { checked: false })).toBeDisabled();
 
   await card.getByRole("button", { name: "Clear all" }).click();
   await expect(card).toContainText("Selected product ions: 0 / 8");
   await expect(card).toContainText("No product ion selected.");
+  await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(0);
+  await expect(page.locator('[data-testid="live-fragment-row"][data-product-ion-selected="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="matched-spectrum-peak"][data-product-ion-selected="true"]')).toHaveCount(0);
 });
 
 test("keeps successful product ion traces when one query fails", async ({ page }) => {
@@ -288,6 +311,44 @@ test("keeps successful product ion traces when one query fails", async ({ page }
 
   await expect(card.getByText("Failed to load product ion XIC for b2.")).toBeVisible();
   await expect(card.getByTestId("plot-series")).toHaveCount(2);
+  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+});
+
+test("live fragment checkbox synchronizes table, spectrum, chips, and removal", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByRole("columnheader", { name: "Product XIC" })).toBeVisible();
+  const row = page.getByTestId("live-fragment-row").filter({ hasText: "y5" });
+  const addCheckbox = row.getByRole("checkbox", { name: "Add y5 to product ion XIC" });
+  const batchRequest = page.waitForRequest((request) => request.url().endsWith("/product-xics"));
+  await addCheckbox.check();
+  await batchRequest;
+
+  await expect(row).toHaveAttribute("data-product-ion-selected", "true");
+  await expect(row.getByRole("checkbox", { name: "Remove y5 from product ion XIC" })).toBeChecked();
+  const ionId = await row.getAttribute("data-product-ion-id");
+  if (!ionId) throw new Error("Live fragment row has no product ion id");
+  await expect(page.locator(`[data-testid="matched-spectrum-peak"][data-product-ion-id="${ionId}"]`))
+    .toHaveAttribute("data-product-ion-selected", "true");
+  const card = page.getByTestId("product-ion-xic-card");
+  await expect(card.getByText("y5 175.1190 m/z")).toBeVisible();
+
+  await card.getByRole("button", { name: "Remove y5 product ion XIC" }).click();
+  await expect(row).toHaveAttribute("data-product-ion-selected", "false");
+  await expect(row.getByRole("checkbox", { name: "Add y5 to product ion XIC" })).not.toBeChecked();
+  await expect(page.locator(`[data-testid="matched-spectrum-peak"][data-product-ion-id="${ionId}"]`))
+    .toHaveAttribute("data-product-ion-selected", "false");
+});
+
+test("batch request failure stays inside the product ion card", async ({ page }) => {
+  await mockMzmlMatch(page, 0, -1, undefined, 500);
+  await page.goto("/datasets/demo/matches/1");
+
+  const row = page.getByTestId("live-fragment-row").filter({ hasText: "y5" });
+  await row.getByRole("checkbox", { name: "Add y5 to product ion XIC" }).check();
+
+  await expect(page.getByTestId("product-ion-xic-card")).toContainText("Failed to load product ion XIC.");
   await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
 });
 
@@ -354,13 +415,15 @@ test("MS2 label modes hide only text and keep tooltip and peak click active", as
   await expect(page.getByText("Series y; position 5; charge 1+")).toBeVisible();
   await expect(page.getByText("Click to add product ion XIC.")).toBeVisible();
 
-  const productRequest = page.waitForRequest((request) => request.url().includes("/product-xic"));
+  const productRequest = page.waitForRequest((request) => request.url().includes("/product-xics"));
   await clickMs2Peak(page, 67726, 175.119);
   await productRequest;
   await expect(page.getByTestId("product-ion-xic-card").getByText("y5 175.1190 m/z")).toBeVisible();
+  await expect(page.getByTestId("live-fragment-row").filter({ hasText: "y5" }).getByRole("checkbox")).toBeChecked();
 
   await controls.getByRole("button", { name: "All labels" }).click();
   await expect(svg.getByTestId("spectrum-ion-label")).toHaveCount(9);
+  await expect(page.getByTestId("live-fragment-row").filter({ hasText: "y5" }).getByRole("checkbox")).toBeChecked();
 });
 
 test("unsupported raw format shows a downgrade message without match-level spectrum calls", async ({ page }) => {
@@ -373,6 +436,7 @@ test("unsupported raw format shows a downgrade message without match-level spect
       url.pathname.endsWith("/matches/1/xic")
       || url.pathname.includes("/matches/1/spectrum/")
       || url.pathname.endsWith("/matches/1/product-xic")
+      || url.pathname.endsWith("/matches/1/product-xics")
     ) {
       matchLevelCalls += 1;
     }

@@ -21,6 +21,7 @@ import { BuProductIonXicCard } from "@/features/bu/components/match-detail/BuPro
 import {
   addTopProductIons,
   clearProductIonSelections,
+  MAX_PRODUCT_ION_XICS,
   removeProductIonSelection,
   toggleProductIonSelection,
   toProductIonSelection,
@@ -307,6 +308,7 @@ export function BuMatchDetailPage() {
                   slug={dataset.slug}
                   matchId={parsedMatchId}
                   runId={data.run.run_id}
+                  ms2Scan={ms2.data.scan}
                   available
                   matchedIons={ms2.data.matched_ions}
                   selections={selectedProductIons}
@@ -322,7 +324,12 @@ export function BuMatchDetailPage() {
                   onClear={clearProductIons}
                   onModeChange={setProductIonYAxisMode}
                 />
-                <BuFragmentTable ions={ms2.data.matched_ions} />
+                <BuFragmentTable
+                  ions={ms2.data.matched_ions}
+                  selectedProductIonIds={selectedProductIonIds}
+                  selectionLimitReached={selectedProductIons.length >= MAX_PRODUCT_ION_XICS}
+                  onToggleProductIon={toggleProductIon}
+                />
               </CardContent>
             </Card>
           )}
@@ -339,6 +346,7 @@ export function BuMatchDetailPage() {
                 slug={dataset.slug}
                 matchId={parsedMatchId}
                 runId={data.run.run_id}
+                ms2Scan={null}
                 available={false}
                 matchedIons={[]}
                 selections={[]}

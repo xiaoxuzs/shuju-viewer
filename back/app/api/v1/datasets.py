@@ -11,8 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.api.v1.universal_compat import cutoff_id, cutoff_label, require_dataset
 from app.schemas import BuRunSummary, CutoffOut, DatasetDeletedOut, DatasetOut
-from app.services import import_jobs, spectrum_memory_wiring
-from app.spectrum_memory import CapacityError
+from app.services import import_jobs
 
 router = APIRouter(tags=["datasets"])
 
@@ -146,11 +145,6 @@ def _dataset_out(
     )
 
 
-def _ensure_dataset_spectra_resident(session: Session, dataset: dict[str, Any]) -> None:
-    """Trigger mzML residency for mzML or mixed datasets; wiring filters runs."""
-    spectrum_memory_wiring.ensure_mzml_dataset_resident(session, int(dataset["dataset_id"]))
-
-
 @router.get("/datasets", response_model=list[DatasetOut])
 def list_datasets(session: Session = Depends(get_db)) -> list[DatasetOut]:
     """返回全部数据集，按 id 排序；每个元素附带嵌套的 cutoff 统计。"""
@@ -185,12 +179,6 @@ def get_dataset_detail(
 ) -> DatasetOut:
     """按 slug 取单个数据集；slug 不存在时由依赖注入层返回 404。"""
     dataset = require_dataset(session, slug)
-    try:
-        _ensure_dataset_spectra_resident(session, dataset)
-    except CapacityError as exc:
-        raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
     dataset_id = int(dataset["dataset_id"])
     bu_runs_by_dataset = (
         _bu_runs_by_dataset(session, [dataset_id])

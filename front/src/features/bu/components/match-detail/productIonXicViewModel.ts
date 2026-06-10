@@ -27,7 +27,7 @@ export function normalizeProductIonTrace(
 
 export function buildProductIonXicTrace(
   selection: ProductIonSelection,
-  xic: BuProductXicOut,
+  xic: Pick<BuProductXicOut, "points">,
   color: string,
   mode: ProductIonYAxisMode,
 ): ProductIonXicTrace {

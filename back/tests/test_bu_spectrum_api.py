@@ -6,8 +6,15 @@ import pytest
 from fastapi import HTTPException
 from pyteomics import mass
 
+from app.api.v1.bu import matches as matches_api
 from app.bu.services import chromatogram_service, mobility_service, product_xic_service, spectrum_facade, xic_service
-from app.schemas import BuChromatogramOut, BuMobilitySliceOut
+from app.schemas import (
+    BuChromatogramOut,
+    BuMobilitySliceOut,
+    BuProductXicBatchIn,
+    BuProductXicBatchIonIn,
+    BuProductXicRtWindowIn,
+)
 
 
 def _match(*, raw_format: str = "mzml") -> dict[str, Any]:
@@ -249,6 +256,146 @@ def test_bruker_product_xic_is_unsupported() -> None:
 
     assert exc.value.status_code == 404
     assert exc.value.detail == "unsupported_raw_format"
+
+
+def _batch_ion(ion_id: str, mz: float) -> BuProductXicBatchIonIn:
+    return BuProductXicBatchIonIn(
+        id=ion_id,
+        ion=ion_id.split("|", 1)[0],
+        series="y",
+        position=5,
+        charge=1,
+        mz=mz,
+    )
+
+
+def test_product_xic_batch_loads_spectra_once_and_keeps_no_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+    signal_mz = 175.119
+    spectra = {
+        1: {
+            **_ms2_spec(1),
+            "rt_seconds": 92.15 * 60.0,
+            "mz": [signal_mz],
+            "intensity": [6100.0],
+        },
+        2: {
+            **_ms2_spec(2),
+            "rt_seconds": 92.46 * 60.0,
+            "mz": [signal_mz + 0.1],
+            "intensity": [9999.0],
+        },
+    }
+
+    def get_spectra(*_args: object) -> dict[int, dict[str, Any]]:
+        nonlocal calls
+        calls += 1
+        return spectra
+
+    monkeypatch.setattr(product_xic_service, "get_run_spectra", get_spectra)
+    request = BuProductXicBatchIn(
+        tolerance_ppm=20,
+        ions=[
+            _batch_ion("y5|1|175.119", signal_mz),
+            _batch_ion("y6|1|250", 250.0),
+        ],
+    )
+
+    out = product_xic_service.get_match_product_xics(
+        None, {"dataset_id": 39}, _match(), request  # type: ignore[arg-type]
+    )
+
+    assert calls == 1
+    assert [trace.id for trace in out.traces] == ["y5|1|175.119", "y6|1|250"]
+    assert out.traces[0].status == "ok"
+    assert [point.intensity for point in out.traces[0].points] == [6100.0, 0.0]
+    assert out.traces[1].status == "no_signal"
+    assert [point.intensity for point in out.traces[1].points] == [0.0, 0.0]
+
+
+def test_product_xic_batch_rt_window_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    product_mz = 175.119
+    spectra = {
+        1: {**_ms2_spec(1), "rt_seconds": 92.15 * 60.0, "mz": [product_mz], "intensity": [100.0]},
+        2: {**_ms2_spec(2), "rt_seconds": 92.46 * 60.0, "mz": [product_mz], "intensity": [200.0]},
+    }
+    monkeypatch.setattr(product_xic_service, "get_run_spectra", lambda *_args: spectra)
+    request = BuProductXicBatchIn(
+        ions=[_batch_ion("y5|1|175.119", product_mz)],
+        rt_window=BuProductXicRtWindowIn(start=92.4, end=92.5),
+    )
+
+    out = product_xic_service.get_match_product_xics(
+        None, {"dataset_id": 39}, _match(), request  # type: ignore[arg-type]
+    )
+
+    assert [point.scan for point in out.traces[0].points] == [2]
+
+
+@pytest.mark.parametrize(
+    "ions",
+    [
+        [],
+        [_batch_ion(f"y{index}|1|{100 + index}", 100.0 + index) for index in range(9)],
+    ],
+)
+def test_product_xic_batch_rejects_invalid_ion_count(
+    ions: list[BuProductXicBatchIonIn],
+) -> None:
+    with pytest.raises(ValueError):
+        BuProductXicBatchIn(ions=ions)
+
+
+def test_product_xic_batch_rejects_invalid_mz_and_rt_window() -> None:
+    with pytest.raises(ValueError):
+        _batch_ion("y5|1|-1", -1)
+    with pytest.raises(ValueError):
+        BuProductXicRtWindowIn(start=93.0, end=92.0)
+
+
+def test_bruker_product_xic_batch_is_unsupported() -> None:
+    request = BuProductXicBatchIn(ions=[_batch_ion("y5|1|175.119", 175.119)])
+    with pytest.raises(HTTPException) as exc:
+        product_xic_service.get_match_product_xics(
+            None,
+            {"dataset_id": 39},
+            _match(raw_format="bruker_d"),
+            request,
+        )  # type: ignore[arg-type]
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "unsupported_raw_format"
+
+
+def test_product_xic_batch_route_matches_old_get(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    product_mz = 175.119
+    spectra = {
+        1: {
+            **_ms2_spec(1),
+            "rt_seconds": 92.46 * 60.0,
+            "mz": [product_mz],
+            "intensity": [6100.0],
+        }
+    }
+    monkeypatch.setattr(matches_api, "require_bu_dataset", lambda *_args: {"dataset_id": 39})
+    monkeypatch.setattr(matches_api, "require_bu_match", lambda *_args: _match())
+    monkeypatch.setattr(product_xic_service, "get_run_spectra", lambda *_args: spectra)
+    request = BuProductXicBatchIn(
+        tolerance_ppm=20,
+        ions=[_batch_ion("y5|1|175.119", product_mz)],
+    )
+    batch = matches_api.match_product_xics("demo", 1, request, None)  # type: ignore[arg-type]
+    old_get = matches_api.match_product_xic(
+        "demo", 1, product_mz, 20, None  # type: ignore[arg-type]
+    )
+
+    assert batch.traces[0].id == "y5|1|175.119"
+    assert batch.traces[0].points == old_get.points
+    assert old_get.curve_type == "PRODUCT_ION_XIC"
 
 
 def test_chromatogram_accepts_bruker_run(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,9 +1,9 @@
 import { useMemo, useRef } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { LoaderCircle, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { fetchBuMatchProductXic } from "@/features/bu/api/buClient";
+import { fetchBuMatchProductXics } from "@/features/bu/api/buClient";
 import { BuProductIonXicChart } from "@/features/bu/components/spectrum/BuProductIonXicChart";
 import type { BuMatchedIon } from "@/features/bu/types";
 import {
@@ -13,10 +13,14 @@ import {
 } from "@/features/bu/components/match-detail/productIonSelection";
 import { assignProductIonColors } from "@/features/bu/components/match-detail/productIonColors";
 import {
-  buildProductIonXicTrace,
-  hasProductIonSignal,
   type ProductIonYAxisMode,
 } from "@/features/bu/components/match-detail/productIonXicViewModel";
+import {
+  buildProductIonBatchQueryKey,
+  buildProductIonBatchRequest,
+  buildProductIonBatchTraces,
+  productIonBatchTraceMap,
+} from "@/features/bu/components/match-detail/productIonBatch";
 
 const PRODUCT_XIC_STALE_TIME_MS = 5 * 60_000;
 
@@ -25,6 +29,7 @@ export function BuProductIonXicCard({
   slug,
   matchId,
   runId,
+  ms2Scan,
   available,
   matchedIons,
   selections,
@@ -44,6 +49,7 @@ export function BuProductIonXicCard({
   slug: string;
   matchId: number;
   runId: number | null;
+  ms2Scan: number | null;
   available: boolean;
   matchedIons: BuMatchedIon[];
   selections: ProductIonSelection[];
@@ -68,39 +74,41 @@ export function BuProductIonXicCard({
     colorAssignmentsRef.current = result.assignments;
     return result.colors;
   }, [selections]);
-  const queries = useQueries({
-    queries: available
-      ? selections.map((selection) => ({
-          queryKey: [
-            "bu",
-            datasetId,
-            slug,
-            "matches",
-            matchId,
-            "run",
-            runId,
-            "product-xic",
-            selection.id,
-            selection.theoreticalMz,
-            selection.charge,
-            ppm,
-            rtWindow.start,
-            rtWindow.stop,
-          ],
-          queryFn: () => fetchBuMatchProductXic(slug, matchId, selection.theoreticalMz, ppm),
-          staleTime: PRODUCT_XIC_STALE_TIME_MS,
-        }))
-      : [],
+  const request = useMemo(
+    () => buildProductIonBatchRequest(selections, ppm, null),
+    [ppm, selections],
+  );
+  const queryKey = useMemo(
+    () =>
+      buildProductIonBatchQueryKey({
+        datasetId,
+        slug,
+        matchId,
+        runId,
+        ms2Scan,
+        selections,
+        tolerancePpm: ppm,
+        rtWindowOverride: null,
+      }),
+    [datasetId, matchId, ms2Scan, ppm, runId, selections, slug],
+  );
+  const batchQuery = useQuery({
+    queryKey,
+    queryFn: () => fetchBuMatchProductXics(slug, matchId, request),
+    enabled: available && selections.length > 0,
+    staleTime: PRODUCT_XIC_STALE_TIME_MS,
   });
-  const traces = selections.flatMap((selection, index) => {
-    const xic = queries[index]?.data;
-    return xic
-      ? [buildProductIonXicTrace(selection, xic, colors[selection.id], mode)]
-      : [];
-  });
-  const failedCount = queries.filter((query) => query.isError).length;
-  const loadingCount = queries.filter((query) => query.isPending || query.isFetching).length;
-  const allFailed = selections.length > 0 && failedCount === selections.length;
+  const traceById = useMemo(
+    () => productIonBatchTraceMap(batchQuery.data),
+    [batchQuery.data],
+  );
+  const traces = useMemo(
+    () => buildProductIonBatchTraces(selections, batchQuery.data, colors, mode),
+    [batchQuery.data, colors, mode, selections],
+  );
+  const allFailed =
+    selections.length > 0
+    && selections.every((selection) => traceById.get(selection.id)?.status === "error");
   const addTopDisabled =
     !available
     || matchedIons.length === 0
@@ -169,8 +177,7 @@ export function BuProductIonXicCard({
 
       {selections.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2" data-testid="selected-product-ion-chips">
-          {selections.map((selection, index) => {
-            const query = queries[index];
+          {selections.map((selection) => {
             return (
               <button
                 key={selection.id}
@@ -185,7 +192,7 @@ export function BuProductIonXicCard({
                   style={{ backgroundColor: colors[selection.id] }}
                 />
                 <span>{productIonLabel(selection)} {selection.theoreticalMz.toFixed(4)} m/z</span>
-                {query?.isPending || query?.isFetching ? (
+                {batchQuery.isPending || batchQuery.isFetching ? (
                   <LoaderCircle className="h-3 w-3 animate-spin text-muted-foreground" />
                 ) : (
                   <X className="h-3 w-3 text-muted-foreground" />
@@ -210,11 +217,12 @@ export function BuProductIonXicCard({
         <EmptyState text="No product ion selected. Click a matched fragment peak in the MS2 spectrum to add a product ion XIC." />
       ) : (
         <>
-          {loadingCount > 0 && traces.length === 0 && (
+          {(batchQuery.isPending || batchQuery.isFetching) && traces.length === 0 && (
             <EmptyState text="Loading product ion XIC..." />
           )}
+          {batchQuery.isError && <EmptyState text="Failed to load product ion XIC." tone="error" />}
           {allFailed && <EmptyState text="Failed to load product ion XIC." tone="error" />}
-          {traces.length > 0 && (
+          {!batchQuery.isError && traces.length > 0 && (
             <BuProductIonXicChart
               traces={traces}
               mode={mode}
@@ -233,16 +241,16 @@ export function BuProductIonXicCard({
             />
           )}
           <div className="mt-2 space-y-1 text-xs">
-            {selections.map((selection, index) => {
-              const query = queries[index];
-              if (query?.isError) {
+            {selections.map((selection) => {
+              const trace = traceById.get(selection.id);
+              if (trace?.status === "error") {
                 return (
                   <p key={selection.id} className="text-destructive">
                     Failed to load product ion XIC for {productIonLabel(selection)}.
                   </p>
                 );
               }
-              if (query?.data && !hasProductIonSignal(query.data)) {
+              if (trace?.status === "no_signal") {
                 return (
                   <p key={selection.id} className="text-muted-foreground">
                     No signal detected for {productIonLabel(selection)} in the selected RT window.

@@ -5,8 +5,10 @@ from typing import Any
 
 import pytest
 
+from app.api.v1 import datasets as datasets_api
 from app.api.v1.datasets import _cutoffs_payload, _dataset_out
 from app.schemas import BuRunSummary, CutoffOut
+from app.services import spectrum_memory_wiring
 
 
 class _NoExecuteSession:
@@ -119,3 +121,50 @@ def test_td_cutoffs_payload_omits_empty_cutoff() -> None:
     )
 
     assert [c.kind for c in cutoffs] == ["prsm"]
+
+
+def test_get_dataset_detail_does_not_load_mzml_spectra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = _row(
+        dataset_id=39,
+        slug="bu_pr1_dia",
+        dataset_name="BU PR1 DIA",
+        analysis_mode="BOTTOM_UP",
+    )
+    run = BuRunSummary(
+        run_id=10,
+        file_name="run.mzML",
+        raw_format="mzml",
+        diann_run_name="run",
+    )
+    loader_called = False
+
+    def fail_if_loaded(*_args: Any, **_kwargs: Any) -> None:
+        nonlocal loader_called
+        loader_called = True
+        raise AssertionError("dataset detail must not load mzML spectra")
+
+    monkeypatch.setattr(datasets_api, "require_dataset", lambda *_args: row)
+    monkeypatch.setattr(datasets_api, "_cutoffs_payload", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(datasets_api, "_bu_runs_by_dataset", lambda *_args: {39: [run]})
+    monkeypatch.setattr(
+        spectrum_memory_wiring,
+        "ensure_mzml_dataset_resident",
+        fail_if_loaded,
+    )
+
+    out = datasets_api.get_dataset_detail("bu_pr1_dia", _NoExecuteSession())  # type: ignore[arg-type]
+    data = out.model_dump(mode="json")
+
+    assert loader_called is False
+    assert data["id"] == 39
+    assert data["slug"] == "bu_pr1_dia"
+    assert data["name"] == "BU PR1 DIA"
+    assert data["analysis_mode"] == "BOTTOM_UP"
+    assert data["cutoffs"] == []
+    assert len(data["bu_runs"]) == 1
+    assert data["bu_runs"][0]["run_id"] == 10
+    assert data["bu_runs"][0]["file_name"] == "run.mzML"
+    assert data["bu_runs"][0]["raw_format"] == "mzml"
+    assert data["bu_runs"][0]["diann_run_name"] == "run"

@@ -279,6 +279,32 @@ export interface BuProductXicOut {
   points: BuProductXicPoint[];
 }
 
+export interface BuProductXicBatchIonIn {
+  id: string;
+  ion: string;
+  series: "b" | "y";
+  position: number;
+  charge: number;
+  mz: number;
+}
+
+export interface BuProductXicBatchIn {
+  tolerance_ppm: number;
+  ions: BuProductXicBatchIonIn[];
+  rt_window?: { start: number; end: number };
+}
+
+export interface BuProductXicBatchTraceOut extends BuProductXicBatchIonIn {
+  tolerance_ppm: number;
+  status: "ok" | "no_signal" | "error";
+  points: BuProductXicPoint[];
+  error?: string | null;
+}
+
+export interface BuProductXicBatchOut {
+  traces: BuProductXicBatchTraceOut[];
+}
+
 export interface BuChromatogramOut {
   type: "tic" | "bpc";
   unit_rt: "min";

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BuRunSummary(BaseModel):
@@ -371,6 +371,49 @@ class BuProductXicOut(BaseModel):
     precursor_mz: float
     isolation_filter: bool = True
     points: list[BuProductXicPoint] = Field(default_factory=list)
+
+
+class BuProductXicBatchIonIn(BaseModel):
+    id: str = Field(..., min_length=1)
+    ion: str = Field(..., min_length=1)
+    series: Literal["b", "y"]
+    position: int = Field(..., gt=0)
+    charge: int = Field(..., gt=0)
+    mz: float = Field(..., gt=0, allow_inf_nan=False)
+
+
+class BuProductXicRtWindowIn(BaseModel):
+    start: float = Field(..., ge=0, allow_inf_nan=False)
+    end: float = Field(..., ge=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> "BuProductXicRtWindowIn":
+        if self.end < self.start:
+            raise ValueError("rt_window end must be greater than or equal to start")
+        return self
+
+
+class BuProductXicBatchIn(BaseModel):
+    tolerance_ppm: float = Field(20.0, gt=0, allow_inf_nan=False)
+    ions: list[BuProductXicBatchIonIn] = Field(..., min_length=1, max_length=8)
+    rt_window: BuProductXicRtWindowIn | None = None
+
+
+class BuProductXicBatchTraceOut(BaseModel):
+    id: str
+    ion: str
+    series: Literal["b", "y"]
+    position: int
+    charge: int
+    mz: float
+    tolerance_ppm: float
+    status: Literal["ok", "no_signal", "error"]
+    points: list[BuProductXicPoint] = Field(default_factory=list)
+    error: str | None = None
+
+
+class BuProductXicBatchOut(BaseModel):
+    traces: list[BuProductXicBatchTraceOut] = Field(default_factory=list)
 
 
 class BuChromatogramOut(BaseModel):

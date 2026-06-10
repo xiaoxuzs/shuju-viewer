@@ -14,6 +14,8 @@ import type {
   BuPeptidePage,
   BuProteinDetailOut,
   BuProteinPage,
+  BuProductXicBatchIn,
+  BuProductXicBatchOut,
   BuProductXicOut,
   BuRtMzHeatmapOut,
   BuSpectrumV1,
@@ -115,6 +117,18 @@ export async function fetchBuMatchProductXic(
   const { data } = await api.get<BuProductXicOut>(`/datasets/${slug}/matches/${matchId}/product-xic`, {
     params: { mz, ppm },
   });
+  return data;
+}
+
+export async function fetchBuMatchProductXics(
+  slug: string,
+  matchId: number,
+  request: BuProductXicBatchIn,
+): Promise<BuProductXicBatchOut> {
+  const { data } = await api.post<BuProductXicBatchOut>(
+    `/datasets/${slug}/matches/${matchId}/product-xics`,
+    request,
+  );
   return data;
 }
 

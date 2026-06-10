@@ -1,8 +1,4 @@
-"""Dynamic spectra API backed by in-memory mzML (``app.spectrum_memory``).
-
-Datasets with ``capabilities.spectra_source == "mzml_memory"`` are preloaded
-when ``GET /datasets/{{slug}}`` runs; this route reads from that pool only.
-"""
+"""Dynamic spectra API backed by in-memory mzML (``app.spectrum_memory``)."""
 
 from __future__ import annotations
 
@@ -118,12 +114,13 @@ def mzml_spectrum(
 
     if path_committed:
         release_dataset(dataset_id)
-        try:
-            spectrum_memory_wiring.ensure_mzml_dataset_resident(session, dataset_id)
-        except CapacityError as exc:
-            raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(exc)) from exc
-        except RuntimeError as exc:
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
+
+    try:
+        spectrum_memory_wiring.ensure_mzml_dataset_resident(session, dataset_id)
+    except CapacityError as exc:
+        raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
 
     try:
         spec = get_mzml_spectrum(dataset_id, run_id, scan_number)

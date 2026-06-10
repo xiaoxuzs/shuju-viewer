@@ -31,4 +31,5 @@ def test_bu_routes_have_no_bu_url_prefix() -> None:
     paths = {route.path for route in api_router.routes}
     assert "/api/v1/datasets/{slug}/overview" in paths
     assert "/api/v1/datasets/{slug}/matches" in paths
+    assert "/api/v1/datasets/{slug}/matches/{match_id}/product-xics" in paths
     assert all("/bu/" not in path for path in paths)

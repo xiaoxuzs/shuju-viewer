@@ -254,6 +254,7 @@ test("table headers use neutral mass, not m/z", async ({ page }) => {
   // The fragment table itself must stay neutral-mass based (the m/z mention
   // elsewhere is the spectrum chart's mass-mode toggle, which is expected).
   await expect(card.locator("table").getByText("m/z")).toHaveCount(0);
+  await expect(card.getByRole("columnheader", { name: "Product XIC" })).toHaveCount(0);
 });
 
 test("ppm column shows the backend field value, not a recomputed value", async ({ page }) => {

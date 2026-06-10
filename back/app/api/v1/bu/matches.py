@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.bu.deps import require_bu_dataset, require_bu_match
 from app.bu.services import lists_service, mobility_service, product_xic_service, spectrum_facade, xic_service
-from app.schemas import BuMatchDetailOut, BuMobilitySliceOut, BuProductXicOut, BuSpectrumV1, BuXicOut
+from app.schemas import (
+    BuMatchDetailOut,
+    BuMobilitySliceOut,
+    BuProductXicBatchIn,
+    BuProductXicBatchOut,
+    BuProductXicOut,
+    BuSpectrumV1,
+    BuXicOut,
+)
 
 router = APIRouter()
 
@@ -52,6 +60,18 @@ def match_product_xic(
     dataset = require_bu_dataset(session, slug)
     match = require_bu_match(session, int(dataset["dataset_id"]), match_id)
     return product_xic_service.get_match_product_xic(session, dataset, match, product_mz=mz, ppm=ppm)
+
+
+@router.post("/datasets/{slug}/matches/{match_id}/product-xics", response_model=BuProductXicBatchOut)
+def match_product_xics(
+    slug: str,
+    match_id: int,
+    request: BuProductXicBatchIn,
+    session: Session = Depends(get_db),
+) -> BuProductXicBatchOut:
+    dataset = require_bu_dataset(session, slug)
+    match = require_bu_match(session, int(dataset["dataset_id"]), match_id)
+    return product_xic_service.get_match_product_xics(session, dataset, match, request)
 
 
 @router.get("/datasets/{slug}/matches/{match_id}/spectrum/ms1", response_model=BuSpectrumV1)

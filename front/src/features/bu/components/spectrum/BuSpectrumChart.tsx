@@ -197,6 +197,7 @@ export function BuSpectrumChart({
         .data(visible)
         .join("line")
         .attr("data-testid", (d) => (d.ion ? "matched-spectrum-peak" : null))
+        .attr("data-product-ion-id", (d) => toProductIonSelection(d.ion)?.id ?? null)
         .attr("data-product-ion-selected", (d) => {
           const selection = toProductIonSelection(d.ion);
           return selection && selectedProductIonIds?.has(selection.id) ? "true" : "false";

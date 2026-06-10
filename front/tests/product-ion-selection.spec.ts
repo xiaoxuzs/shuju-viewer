@@ -1,15 +1,24 @@
 import { expect, test } from "@playwright/test";
 
-import type { BuMatchedIon, BuProductXicOut } from "../src/features/bu/types";
+import type {
+  BuMatchedIon,
+  BuProductXicBatchOut,
+  BuProductXicOut,
+} from "../src/features/bu/types";
 import {
   MAX_PRODUCT_ION_XICS,
   addProductIonSelection,
   addTopProductIons,
   buildProductIonId,
   clearProductIonSelections,
+  isProductIonSelected,
   toggleProductIonSelection,
   toProductIonSelection,
 } from "../src/features/bu/components/match-detail/productIonSelection";
+import {
+  buildProductIonBatchQueryKey,
+  buildProductIonBatchTraces,
+} from "../src/features/bu/components/match-detail/productIonBatch";
 import { assignProductIonColors } from "../src/features/bu/components/match-detail/productIonColors";
 import {
   buildProductIonXicTrace,
@@ -104,4 +113,85 @@ test("assigns unique stable colors for active ions", () => {
   expect(new Set(Object.values(first.colors)).size).toBe(3);
   expect(second.colors.b).toBe(first.colors.b);
   expect(third.colors.a).toBe(first.colors.a);
+});
+
+test("keeps table selection stable when rows are reordered", () => {
+  const selected = toProductIonSelection(matchedIon(5, 2))!;
+  const selectedIds = new Set([selected.id]);
+  const reordered = [matchedIon(7), matchedIon(5, 2), matchedIon(1)];
+
+  expect(reordered.map((ion) => isProductIonSelected(ion, selectedIds))).toEqual([false, true, false]);
+});
+
+test("canonical batch query key ignores selection order", () => {
+  const first = toProductIonSelection(matchedIon(1))!;
+  const second = toProductIonSelection(matchedIon(2, 2))!;
+  const context = {
+    datasetId: 39,
+    slug: "demo",
+    matchId: 1,
+    runId: 10,
+    ms2Scan: 100,
+    tolerancePpm: 20,
+    rtWindowOverride: null,
+  };
+
+  expect(buildProductIonBatchQueryKey({ ...context, selections: [first, second] })).toEqual(
+    buildProductIonBatchQueryKey({ ...context, selections: [second, first] }),
+  );
+});
+
+test("batch traces preserve display order and tolerate partial statuses", () => {
+  const first = toProductIonSelection(matchedIon(1))!;
+  const second = toProductIonSelection(matchedIon(2))!;
+  const third = toProductIonSelection(matchedIon(3))!;
+  const response: BuProductXicBatchOut = {
+    traces: [
+      {
+        id: third.id,
+        ion: third.ion,
+        series: third.series,
+        position: third.position,
+        charge: third.charge,
+        mz: third.theoreticalMz,
+        tolerance_ppm: 20,
+        status: "error",
+        error: "failed",
+        points: [],
+      },
+      {
+        id: second.id,
+        ion: second.ion,
+        series: second.series,
+        position: second.position,
+        charge: second.charge,
+        mz: second.theoreticalMz,
+        tolerance_ppm: 20,
+        status: "no_signal",
+        points: [{ rt: 1, intensity: 0, scan: 1 }],
+      },
+      {
+        id: first.id,
+        ion: first.ion,
+        series: first.series,
+        position: first.position,
+        charge: first.charge,
+        mz: first.theoreticalMz,
+        tolerance_ppm: 20,
+        status: "ok",
+        points: [{ rt: 1, intensity: 25, scan: 1 }],
+      },
+    ],
+  };
+
+  const traces = buildProductIonBatchTraces(
+    [second, first, third],
+    response,
+    { [first.id]: "#111", [second.id]: "#222", [third.id]: "#333" },
+    "normalized",
+  );
+
+  expect(traces.map((trace) => trace.ionId)).toEqual([second.id, first.id]);
+  expect(traces[0].points[0].intensity).toBe(0);
+  expect(traces[1].points[0].intensity).toBe(100);
 });

@@ -66,6 +66,14 @@ export function isSameProductIon(a: ProductIonSelection, b: ProductIonSelection)
   return a.id === b.id;
 }
 
+export function isProductIonSelected(
+  ion: BuMatchedIon | null | undefined,
+  selectedIds: ReadonlySet<string>,
+): boolean {
+  const selection = toProductIonSelection(ion);
+  return selection !== null && selectedIds.has(selection.id);
+}
+
 export function addProductIonSelection(
   selections: ProductIonSelection[],
   ion: ProductIonSelection | null,
