@@ -16,6 +16,7 @@ import {
   fetchBuMatchXic,
 } from "@/features/bu/api/buClient";
 import { BuFragmentTable } from "@/features/bu/components/match-detail/BuFragmentTable";
+import { BuPfmbAnnotationCard } from "@/features/bu/components/match-detail/BuPfmbAnnotationCard";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import { MzMobilityScatter } from "@/features/bu/components/spectrum/MzMobilityScatter";
 import { BuProductXicChart } from "@/features/bu/components/spectrum/BuProductXicChart";
@@ -24,7 +25,7 @@ import { BuXicChart, type BuXicPointSelection } from "@/features/bu/components/s
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import type { BuMatchedIon } from "@/features/bu/types";
-import { formatDecimal } from "@/features/bu/utils";
+import { RT_LINK_TOLERANCE_MIN, formatDecimal } from "@/features/bu/utils";
 
 const MS2_PPM = 20;
 const XIC_PPM = 10;
@@ -42,6 +43,8 @@ export function BuMatchDetailPage() {
   const [ms2ModalZoom, setMs2ModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [selectedXicPoint, setSelectedXicPoint] = useState<BuXicPointSelection | null>(null);
   const [selectedProductIon, setSelectedProductIon] = useState<BuMatchedIon | null>(null);
+  // Single source of truth (minutes) linking the XIC, live MS2 and PFMB cards.
+  const [selectedRt, setSelectedRt] = useState<number | null>(null);
   const { data, isLoading, error } = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId],
     queryFn: () => fetchBuMatch(dataset.slug, parsedMatchId),
@@ -55,13 +58,13 @@ export function BuMatchDetailPage() {
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
   });
   const ms2 = useQuery({
-    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms2", MS2_PPM, selectedXicPoint?.rt ?? "default"],
+    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms2", MS2_PPM, selectedRt ?? "default"],
     queryFn: () =>
       fetchBuMatchMs2(
         dataset.slug,
         parsedMatchId,
         MS2_PPM,
-        selectedXicPoint ? { rt: selectedXicPoint.rt } : {},
+        selectedRt !== null ? { rt: selectedRt } : {},
       ),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
   });
@@ -99,10 +102,19 @@ export function BuMatchDetailPage() {
     setMs2ModalZoom(DEFAULT_ZOOM);
     setSelectedXicPoint(null);
     setSelectedProductIon(null);
+    setSelectedRt(null);
   }, [parsedMatchId]);
 
   const selectXicPoint = (selection: BuXicPointSelection) => {
     setSelectedXicPoint(selection);
+    setSelectedRt(selection.rt);
+    setSelectedProductIon(null);
+  };
+
+  // Driven by a PFMB slot click: RT becomes canonical, the XIC marker is cleared.
+  const selectRtFromPfmb = (rt: number) => {
+    setSelectedRt(rt);
+    setSelectedXicPoint(null);
     setSelectedProductIon(null);
   };
 
@@ -142,10 +154,12 @@ export function BuMatchDetailPage() {
                 <p className="text-xs text-muted-foreground">
                   Click a point on the XIC to inspect the corresponding MS2 scan. {ZOOM_HINT}
                 </p>
-                {selectedXicPoint && (
-                  <p className="text-xs font-medium text-foreground">
-                    Selected {selectedXicPoint.traceLabel}: RT {selectedXicPoint.rt.toFixed(4)} min, intensity{" "}
-                    {formatDecimal(selectedXicPoint.intensity, 0)}
+                {selectedRt !== null && (
+                  <p className="text-xs font-medium text-foreground" data-testid="xic-selected-rt">
+                    Selected RT: {selectedRt.toFixed(4)} min
+                    {selectedXicPoint
+                      ? `, ${selectedXicPoint.traceLabel} intensity ${formatDecimal(selectedXicPoint.intensity, 0)}`
+                      : " (from PFMB slot)"}
                   </p>
                 )}
               </CardHeader>
@@ -189,9 +203,16 @@ export function BuMatchDetailPage() {
                 <p className="text-xs text-muted-foreground">
                   Fragment spectrum near the selected retention time. Click a matched b/y fragment peak to view its product ion XIC (MS2 chromatogram).
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground" data-testid="ms2-current-rt">
                   Current scan #{ms2.data.scan}, RT {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
                 </p>
+                {selectedRt !== null &&
+                  Math.abs(ms2.data.rt_minutes - selectedRt) > RT_LINK_TOLERANCE_MIN && (
+                    <p className="text-xs font-medium text-amber-600" data-testid="ms2-rt-out-of-tolerance">
+                      Nearest MS2 scan is {Math.abs(ms2.data.rt_minutes - selectedRt).toFixed(2)} min from the
+                      selected RT.
+                    </p>
+                  )}
               </CardHeader>
               <CardContent>
                 <BuSpectrumChart
@@ -252,6 +273,14 @@ export function BuMatchDetailPage() {
           )}
         </>
       )}
+
+      <BuPfmbAnnotationCard
+        slug={dataset.slug}
+        matchId={parsedMatchId}
+        hasPfmb={Boolean(dataset.capabilities?.has_ms2_pfmb)}
+        selectedRt={selectedRt}
+        onSelectRt={selectRtFromPfmb}
+      />
 
       {xicFullOpen && xic.data && (
         <BuChartModal

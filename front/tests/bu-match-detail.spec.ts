@@ -199,7 +199,7 @@ test("precursor XIC selects MS2 and matched ion opens product XIC", async ({ pag
     },
   });
   await selectedMs2Request;
-  await expect(page.getByText(/Selected M: RT 93.0000 min/)).toBeVisible();
+  await expect(page.getByText(/Selected RT: 93.0000 min/)).toBeVisible();
   await expect(page.getByText(/Current scan #67727, RT 93.0100 min/)).toBeVisible();
 
   const ms2Svg = page.locator('svg[aria-label^="MS2 scan #67727"]');

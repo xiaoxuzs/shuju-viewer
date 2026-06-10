@@ -28,6 +28,8 @@ from app.ingest.bu.protein_description_reader import ProteinDescription, read_pr
 from app.ingest.bu.run_discovery import BuRunFile, discover_bu_runs, match_diann_runs_to_files
 from app.ingest.bu.stats_reader import read_stats_tsv
 from app.ingest.universal_toppic_adapter import ProgressEvent
+from app.pfmb import IndexReader
+from app.pfmb.locator import detect_sidecar
 
 
 console = Console()
@@ -77,6 +79,11 @@ def ingest(
     database_url: str | None = typer.Option(None, "--database-url"),
     q_value_max: float = typer.Option(Q_VALUE_CUTOFF, "--q-value-max"),
     replace: bool = typer.Option(False, "--replace"),
+    pfmb_sidecar_dir: Path | None = typer.Option(
+        None,
+        "--pfmb-sidecar-dir",
+        help="Directory containing the PFMB sidecar (results.pfmb + index.json).",
+    ),
 ) -> None:
     if database_url is None:
         from app.core.config import settings  # noqa: WPS433
@@ -96,6 +103,7 @@ def ingest(
         name=name,
         replace=replace,
         q_value_cutoff=q_value_max,
+        pfmb_sidecar_dir=pfmb_sidecar_dir,
         progress_callback=_cli_progress,
     )
     console.print("[green]DIA-NN universal import done[/green]")
@@ -112,6 +120,7 @@ def ingest_universal_diann(
     replace: bool = False,
     q_value_cutoff: float = Q_VALUE_CUTOFF,
     spectra_source: str | None = None,
+    pfmb_sidecar_dir: Path | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> UniversalDiannImportStats:
     """Run the DIA-NN Bottom-Up path import."""
@@ -127,6 +136,13 @@ def ingest_universal_diann(
         raise ValueError(f"no mzML or Bruker .d runs found under {root}")
     run_file_by_diann = match_diann_runs_to_files(report_info.run_names, run_files)
     spectra_source = spectra_source or _spectra_source_from_runs(run_files)
+
+    pfmb_sidecar = detect_sidecar(pfmb_sidecar_dir) if pfmb_sidecar_dir else None
+    index_reader = IndexReader(pfmb_sidecar["index_path"]) if pfmb_sidecar else None
+    if pfmb_sidecar_dir and pfmb_sidecar is None:
+        raise FileNotFoundError(
+            f"--pfmb-sidecar-dir given but results.pfmb + index.json not found under {pfmb_sidecar_dir}"
+        )
 
     _emit(progress_callback, ProgressEvent("init", None, 0, 1, "初始化 Bottom-Up 数据集"))
     engine = create_engine(database_url, future=True)
@@ -145,6 +161,7 @@ def ingest_universal_diann(
             spectra_source=spectra_source,
             stats_rows=read_stats_tsv(stats_path),
             parquet_total_rows=report_info.total_rows,
+            pfmb_sidecar=pfmb_sidecar,
         )
         _emit(progress_callback, ProgressEvent("init", None, 1, 1, "数据集记录已创建"))
 
@@ -165,6 +182,7 @@ def ingest_universal_diann(
             dataset_id=dataset_id,
             run_id_by_diann=run_id_by_diann,
             description_by_accession=description_by_accession,
+            index_reader=index_reader,
         )
         _emit(progress_callback, ProgressEvent("proteins", None, 0, max(len(proteins), 1), "导入蛋白"))
         protein_id_by_accession = _insert_proteins(
@@ -261,11 +279,13 @@ def _create_dataset(
     spectra_source: str,
     stats_rows: list[dict[str, Any]],
     parquet_total_rows: int,
+    pfmb_sidecar: dict[str, str] | None = None,
 ) -> int:
     caps = {
         "spectra_source": spectra_source,
         "has_ms1": True,
         "has_ms2": True,
+        "has_ms2_pfmb": pfmb_sidecar is not None,
         "has_im": spectra_source in {"mixed", "tdf_memory"},
         "has_dia_windows": True,
         "analysis_shape": "bottom_up_dia",
@@ -280,6 +300,8 @@ def _create_dataset(
         "stats": stats_rows,
         "import_stats": {"parquet_total_rows": parquet_total_rows},
     }
+    if pfmb_sidecar is not None:
+        extra["ms2_annotation"] = pfmb_sidecar
     row = conn.execute(
         text(
             """
@@ -351,6 +373,7 @@ def _collect_entities_and_matches(
     dataset_id: int,
     run_id_by_diann: dict[str, int],
     description_by_accession: dict[str, ProteinDescription],
+    index_reader: IndexReader | None = None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], set[tuple[str, str]], list[dict[str, Any]]]:
     proteins: dict[str, dict[str, Any]] = {}
     peptides: dict[str, dict[str, Any]] = {}
@@ -391,25 +414,60 @@ def _collect_entities_and_matches(
         run_id = run_id_by_diann.get(run_name)
         if run_id is None:
             raise ValueError(f"no run mapping for DIA-NN Run value: {run_name}")
+        retention_time = as_float(row.get("RT"))
+        precursor_charge = as_int(row.get("Precursor.Charge"))
+        extra = match_extra_metadata(row)
+        pfmb_block = _pfmb_match_block(index_reader, sequence, precursor_charge, retention_time)
+        if pfmb_block is not None:
+            extra["pfmb"] = pfmb_block
         matches.append(
             {
                 "dataset_id": dataset_id,
                 "run_id": run_id,
                 "sequence": sequence,
                 "scan_number": -1,
-                "retention_time": as_float(row.get("RT")),
+                "retention_time": retention_time,
                 "modified_sequence": row.get("Modified.Sequence"),
                 "experimental_mass": theoretical_mass_from_precursor(row.get("Precursor.Mz"), row.get("Precursor.Charge")),
                 "precursor_mz": as_float(row.get("Precursor.Mz")),
-                "precursor_charge": as_int(row.get("Precursor.Charge")),
+                "precursor_charge": precursor_charge,
                 "intensity": as_float(row.get("Precursor.Quantity")) or as_float(row.get("Ms2.Area")),
                 "score": as_float(row.get("Global.Q.Value")) or as_float(row.get("Q.Value")),
                 "q_value": as_float(row.get("Q.Value")),
                 "pep": as_float(row.get("PEP")),
-                "extra_metadata": match_extra_metadata(row),
+                "extra_metadata": extra,
             }
         )
     return proteins, peptides, relations, matches
+
+
+def _pfmb_match_block(
+    index_reader: IndexReader | None,
+    sequence: str,
+    charge: int | None,
+    retention_time_minutes: float | None,
+) -> dict[str, Any] | None:
+    """Resolve a match to its PFMB source_row and bake its RT slots.
+
+    DIA-NN ``RT`` is in minutes; ``index.json`` ``slot_rt`` is in seconds, so the
+    RT used for duplicate disambiguation is converted with ``* 60``.
+    """
+
+    if index_reader is None or not sequence or charge is None:
+        return None
+    rt_seconds = retention_time_minutes * 60.0 if retention_time_minutes is not None else None
+    source_row = index_reader.resolve_source_row(sequence, charge, rt_seconds)
+    if source_row is None:
+        return None
+    slots = index_reader.get_slots(source_row)
+    return {
+        "source_row": source_row,
+        "apex_slot": slots[0].apex_slot if slots else None,
+        "slots": [
+            {"prsm_index": slot.prsm_index, "slot_index": slot.slot_index, "slot_rt": slot.slot_rt}
+            for slot in slots
+        ],
+    }
 
 
 def _insert_proteins(

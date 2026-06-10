@@ -305,6 +305,66 @@ export interface BuMobilitySliceOut {
   unit_rt: "min";
 }
 
+export interface BuPfmbMatchedIon {
+  ion_type: "b" | "y" | "c" | "z_dot";
+  fragment_ordinal: number;
+  charge: number;
+  intensity: number;
+  observed_neutral_mass: number;
+  theoretical_neutral_mass: number;
+  mass_error_ppm: number;
+  mass_error_da: number;
+  peak_id: number;
+}
+
+export interface BuMs2SlotItem {
+  prsm_index: number;
+  slot_index: number;
+  slot_rt_seconds: number;
+  rt_minutes: number;
+}
+
+export interface BuMs2SlotListOut {
+  has_pfmb: boolean;
+  source_row: number | null;
+  apex_slot: number | null;
+  slots: BuMs2SlotItem[];
+}
+
+export interface BuMs2AnnotationOut {
+  prsm_index: number;
+  peptide: string;
+  matched_peak_count: number;
+  matched_ions: BuPfmbMatchedIon[];
+}
+
+export interface BuMs2FragmentRow {
+  key: string;
+  ion_type: BuPfmbMatchedIon["ion_type"];
+  fragment_ordinal: number;
+  occurrence: number;
+  total_intensity: number;
+}
+
+export interface BuMs2SlotSummary {
+  prsm_index: number;
+  slot_index: number;
+  rt_minutes: number;
+  matched_peak_count: number;
+  matched_ion_count: number;
+  // Summed once per distinct peak_id; not a true TIC.
+  total_intensity: number;
+}
+
+export interface BuMs2AnnotationMatrixOut {
+  peptide: string;
+  apex_slot: number | null;
+  slots: BuMs2SlotItem[];
+  fragments: BuMs2FragmentRow[];
+  intensity: number[][];
+  slot_summary: BuMs2SlotSummary[];
+}
+
 export interface BuListParams {
   page?: number;
   page_size?: number;

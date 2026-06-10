@@ -6,6 +6,9 @@ import type {
   BuMatchDetailOut,
   BuMobilitySliceOut,
   BuMatchPage,
+  BuMs2AnnotationMatrixOut,
+  BuMs2AnnotationOut,
+  BuMs2SlotListOut,
   BuOverviewOut,
   BuPeptideDetailOut,
   BuPeptidePage,
@@ -117,6 +120,32 @@ export async function fetchBuMatchProductXic(
 
 export async function fetchBuMatchMobilitySlice(slug: string, matchId: number): Promise<BuMobilitySliceOut> {
   const { data } = await api.get<BuMobilitySliceOut>(`/datasets/${slug}/matches/${matchId}/mobility-slice`);
+  return data;
+}
+
+export async function fetchBuMatchMs2Slots(slug: string, matchId: number): Promise<BuMs2SlotListOut> {
+  const { data } = await api.get<BuMs2SlotListOut>(`/datasets/${slug}/matches/${matchId}/ms2-slots`);
+  return data;
+}
+
+export async function fetchBuMatchMs2Annotation(
+  slug: string,
+  matchId: number,
+  prsmIndex: number,
+): Promise<BuMs2AnnotationOut> {
+  const { data } = await api.get<BuMs2AnnotationOut>(
+    `/datasets/${slug}/matches/${matchId}/ms2-annotation/${prsmIndex}`,
+  );
+  return data;
+}
+
+export async function fetchBuMatchMs2AnnotationMatrix(
+  slug: string,
+  matchId: number,
+): Promise<BuMs2AnnotationMatrixOut> {
+  const { data } = await api.get<BuMs2AnnotationMatrixOut>(
+    `/datasets/${slug}/matches/${matchId}/ms2-annotation-matrix`,
+  );
   return data;
 }
 

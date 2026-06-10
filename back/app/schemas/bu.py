@@ -228,6 +228,89 @@ class BuMatchedIon(BaseModel):
     intensity: float
 
 
+class BuPfmbMatchedIon(BaseModel):
+    """One matched peak↔fragment pair from the PFMB pre-computed sidecar.
+
+    Neutral-mass based (distinct from the m/z-based :class:`BuMatchedIon` used by
+    the real-time mzML b/y path), and supports the full b/y/c/z_dot series.
+    """
+
+    ion_type: Literal["b", "y", "c", "z_dot"]
+    fragment_ordinal: int
+    charge: int
+    intensity: float
+    observed_neutral_mass: float
+    theoretical_neutral_mass: float
+    mass_error_ppm: float
+    mass_error_da: float
+    peak_id: int
+
+
+class BuMs2SlotItem(BaseModel):
+    """One RT slot (one PFMB record) of a precursor."""
+
+    prsm_index: int
+    slot_index: int
+    slot_rt_seconds: float
+    rt_minutes: float
+
+
+class BuMs2SlotListOut(BaseModel):
+    """RT slots available for a match's PFMB annotation."""
+
+    has_pfmb: bool
+    source_row: int | None = None
+    apex_slot: int | None = None
+    slots: list[BuMs2SlotItem] = Field(default_factory=list)
+
+
+class BuMs2AnnotationOut(BaseModel):
+    """Pre-computed peak↔fragment annotation for one ``prsm_index``."""
+
+    prsm_index: int
+    peptide: str
+    matched_peak_count: int
+    matched_ions: list[BuPfmbMatchedIon] = Field(default_factory=list)
+
+
+class BuMs2FragmentRow(BaseModel):
+    """One fragment row of the RT x fragment matrix (charges merged)."""
+
+    key: str  # e.g. "b5" (ion_type + fragment_ordinal)
+    ion_type: Literal["b", "y", "c", "z_dot"]
+    fragment_ordinal: int
+    occurrence: int  # number of slots where this fragment has intensity > 0
+    total_intensity: float  # summed intensity across all slots
+
+
+class BuMs2SlotSummary(BaseModel):
+    """Per-slot quality counts (one entry per matrix column, same order)."""
+
+    prsm_index: int
+    slot_index: int
+    rt_minutes: float
+    matched_peak_count: int  # distinct peak_id in that slot
+    matched_ion_count: int  # number of matched ion rows (incl. zero-intensity)
+    total_intensity: float  # summed once per distinct peak_id (NOT a true TIC)
+
+
+class BuMs2AnnotationMatrixOut(BaseModel):
+    """RT x fragment intensity matrix across all PFMB slots of one match.
+
+    Returned in a single request to avoid an N+1 fan-out over slots. ``intensity``
+    is a dense ``len(fragments)`` x ``len(slots)`` grid of summed (charge-merged)
+    intensities; absent cells are ``0.0``. ``slot_summary`` carries per-slot quality
+    counts (aligned with ``slots``) so the trend view needs no extra requests.
+    """
+
+    peptide: str
+    apex_slot: int | None = None
+    slots: list[BuMs2SlotItem] = Field(default_factory=list)
+    fragments: list[BuMs2FragmentRow] = Field(default_factory=list)
+    intensity: list[list[float]] = Field(default_factory=list)
+    slot_summary: list[BuMs2SlotSummary] = Field(default_factory=list)
+
+
 class BuSpectrumMarker(BaseModel):
     mz: float
     label: str
