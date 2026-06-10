@@ -74,14 +74,25 @@ const xic = {
 };
 
 function spectrum(scan: number, rt: number, msLevel: 1 | 2) {
+  const matchedIons = [
+    { ion_type: "b", position: 2, charge: 1, theo_mz: 125, exp_mz: 125, ppm: 0, intensity: 90 },
+    { ion_type: "y", position: 3, charge: 1, theo_mz: 150, exp_mz: 150, ppm: 0, intensity: 80 },
+    { ion_type: "y", position: 5, charge: 1, theo_mz: 175.119, exp_mz: 175.119, ppm: 0, intensity: 100 },
+    { ion_type: "b", position: 4, charge: 1, theo_mz: 200, exp_mz: 200, ppm: 0, intensity: 70 },
+    { ion_type: "y", position: 6, charge: 1, theo_mz: 225, exp_mz: 225, ppm: 0, intensity: 60 },
+    { ion_type: "b", position: 6, charge: 1, theo_mz: 250, exp_mz: 250, ppm: 0, intensity: 50 },
+    { ion_type: "y", position: 7, charge: 1, theo_mz: 275, exp_mz: 275, ppm: 0, intensity: 40 },
+    { ion_type: "b", position: 8, charge: 1, theo_mz: 300, exp_mz: 300, ppm: 0, intensity: 30 },
+    { ion_type: "y", position: 9, charge: 2, theo_mz: 325, exp_mz: 325, ppm: 0, intensity: 20 },
+  ];
   return {
     scan,
     native_id: `scan=${scan}`,
     ms_level: msLevel,
     rt_seconds: rt * 60,
     rt_minutes: rt,
-    mz: msLevel === 2 ? [100, 175.119, 300] : [400, 477.3051, 600],
-    intensity: msLevel === 2 ? [20, 100, 30] : [10, 100, 20],
+    mz: msLevel === 2 ? [100, ...matchedIons.map((ion) => ion.exp_mz), 350] : [400, 477.3051, 600],
+    intensity: msLevel === 2 ? [20, ...matchedIons.map((ion) => ion.intensity), 10] : [10, 100, 20],
     precursor: msLevel === 2
       ? {
           selected_mz: 477.3051,
@@ -91,19 +102,7 @@ function spectrum(scan: number, rt: number, msLevel: 1 | 2) {
           isolation_upper: 6.5,
         }
       : null,
-    matched_ions: msLevel === 2
-      ? [
-          {
-            ion_type: "y",
-            position: 5,
-            charge: 1,
-            theo_mz: 175.119,
-            exp_mz: 175.119,
-            ppm: 0,
-            intensity: 100,
-          },
-        ]
-      : [],
+    matched_ions: msLevel === 2 ? matchedIons : [],
     markers: msLevel === 1 ? [{ mz: 477.3051, label: "precursor", charge: 2 }] : [],
   };
 }
@@ -112,7 +111,12 @@ async function fulfillJson(route: Route, body: unknown) {
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-async function mockMzmlMatch(page: Page, matchDelayMs = 0, scanNumber: number | null | undefined = -1) {
+async function mockMzmlMatch(
+  page: Page,
+  matchDelayMs = 0,
+  scanNumber: number | null | undefined = -1,
+  productFailureMz?: number,
+) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
@@ -128,6 +132,9 @@ async function mockMzmlMatch(page: Page, matchDelayMs = 0, scanNumber: number | 
       return fulfillJson(route, url.searchParams.has("rt") ? spectrum(67727, 93.01, 2) : spectrum(67726, 92.46, 2));
     }
     if (url.pathname.endsWith("/matches/1/product-xic")) {
+      if (Number(url.searchParams.get("mz")) === productFailureMz) {
+        return route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+      }
       return fulfillJson(route, {
         curve_type: "PRODUCT_ION_XIC",
         x_axis: "rt",
@@ -144,6 +151,18 @@ async function mockMzmlMatch(page: Page, matchDelayMs = 0, scanNumber: number | 
       });
     }
     await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+  });
+}
+
+async function clickMs2Peak(page: Page, scan: number, mz: number) {
+  const svg = page.locator(`svg[aria-label^="MS2 scan #${scan}"]`).first();
+  const box = await svg.boundingBox();
+  if (!box) throw new Error("MS2 SVG has no bounding box");
+  await svg.click({
+    position: {
+      x: 72 + (box.width - 92) * ((mz - 100) / 250),
+      y: box.height - 60,
+    },
   });
 }
 
@@ -177,11 +196,16 @@ test("shows a generic English error without exposing backend details", async ({ 
   await expect(page.getByText(backendError)).toHaveCount(0);
 });
 
-test("precursor XIC selects MS2 and matched ion opens product XIC", async ({ page }) => {
+test("precursor XIC selects MS2 and matched ion toggles product XIC comparison", async ({ page }) => {
   await mockMzmlMatch(page);
   await page.goto("/datasets/demo/matches/1");
 
   await expect(page.getByRole("heading", { name: "Precursor XIC" })).toBeVisible();
+  const productCard = page.getByTestId("product-ion-xic-card");
+  await expect(productCard.getByRole("heading", { name: "Product ion XIC comparison" })).toBeVisible();
+  await expect(productCard).toContainText(
+    "No product ion selected. Click a matched fragment peak in the MS2 spectrum to add a product ion XIC.",
+  );
   await expect(page.getByText(/MS1 extracted ion chromatogram for the precursor/)).toBeVisible();
   await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan #67726");
   await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan RT: 92.4600 min");
@@ -204,24 +228,67 @@ test("precursor XIC selects MS2 and matched ion opens product XIC", async ({ pag
   await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan #67727");
   await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan RT: 93.0100 min");
 
-  const ms2Svg = page.locator('svg[aria-label^="MS2 scan #67727"]');
-  const ms2Box = await ms2Svg.boundingBox();
-  if (!ms2Box) throw new Error("MS2 SVG has no bounding box");
   const productRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
     return url.pathname.endsWith("/product-xic") && url.searchParams.get("mz") === "175.119";
   });
-  await ms2Svg.click({
-    position: {
-      x: 72 + (ms2Box.width - 92) * (75.119 / 200),
-      y: 24,
-    },
-  });
+  await clickMs2Peak(page, 67727, 175.119);
   await productRequest;
-  await expect(page.getByText("Product ion XIC: y5 / m/z 175.1190")).toBeVisible();
+  await expect(productCard.getByText("y5 175.1190 m/z")).toBeVisible();
+  await expect(productCard.getByTestId("plot-series")).toHaveCount(1);
 
-  await page.getByRole("button", { name: "clear" }).click();
-  await expect(page.getByText("Product ion XIC: y5 / m/z 175.1190")).toBeHidden();
+  const secondProductRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname.endsWith("/product-xic") && url.searchParams.get("mz") === "125";
+  });
+  await clickMs2Peak(page, 67727, 125);
+  await secondProductRequest;
+  await expect(productCard.getByTestId("plot-series")).toHaveCount(2);
+
+  await productCard.getByRole("button", { name: "Remove y5 product ion XIC" }).click();
+  await expect(productCard.getByText("b2 125.0000 m/z")).toBeVisible();
+  await productCard.getByRole("button", { name: "Clear all" }).click();
+  await expect(productCard).toContainText("No product ion selected.");
+});
+
+test("adds top fragments, enforces the limit, and switches raw or normalized views", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const card = page.getByTestId("product-ion-xic-card");
+  const mode = card.getByTestId("product-ion-y-axis-mode");
+  await expect(mode.getByRole("button", { name: "Normalized" })).toHaveAttribute("aria-pressed", "true");
+
+  await card.getByRole("button", { name: "Add top 3 fragments" }).click();
+  await expect(card).toContainText("Selected product ions: 3 / 8");
+  await expect(card.getByTestId("plot-series")).toHaveCount(3);
+
+  await mode.getByRole("button", { name: "Raw intensity" }).click();
+  await expect(mode.getByRole("button", { name: "Raw intensity" })).toHaveAttribute("aria-pressed", "true");
+  await expect(card.locator('svg[aria-label="Retention Time (min) versus Intensity"]')).toBeVisible();
+
+  await card.getByRole("button", { name: "Add top 3 fragments" }).click();
+  await card.getByRole("button", { name: "Add top 3 fragments" }).click();
+  await expect(card).toContainText("Selected product ions: 8 / 8");
+  await expect(card.getByRole("alert")).toContainText(
+    "Maximum 8 product ions can be compared at once. Remove one before adding another.",
+  );
+
+  await card.getByRole("button", { name: "Clear all" }).click();
+  await expect(card).toContainText("Selected product ions: 0 / 8");
+  await expect(card).toContainText("No product ion selected.");
+});
+
+test("keeps successful product ion traces when one query fails", async ({ page }) => {
+  await mockMzmlMatch(page, 0, -1, 125);
+  await page.goto("/datasets/demo/matches/1");
+
+  const card = page.getByTestId("product-ion-xic-card");
+  await card.getByRole("button", { name: "Add top 3 fragments" }).click();
+
+  await expect(card.getByText("Failed to load product ion XIC for b2.")).toBeVisible();
+  await expect(card.getByTestId("plot-series")).toHaveCount(2);
+  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
 });
 
 for (const scanNumber of [-1, null, undefined]) {
@@ -269,7 +336,7 @@ test("MS2 label modes hide only text and keep tooltip and peak click active", as
   const controls = page.getByTestId("spectrum-label-mode").first();
   const svg = page.locator('svg[aria-label^="MS2 scan #67726"]');
   await expect(controls.getByRole("button", { name: "Top labels" })).toHaveAttribute("aria-pressed", "true");
-  await expect(svg.getByTestId("spectrum-ion-label")).toHaveCount(1);
+  expect(await svg.getByTestId("spectrum-ion-label").count()).toBeGreaterThan(0);
 
   await controls.getByRole("button", { name: "No labels" }).click();
   await expect(svg.getByTestId("spectrum-ion-label")).toHaveCount(0);
@@ -278,26 +345,22 @@ test("MS2 label modes hide only text and keep tooltip and peak click active", as
   if (!box) throw new Error("MS2 SVG has no bounding box");
   await svg.hover({
     position: {
-      x: 72 + (box.width - 92) * (75.119 / 200),
+      x: 72 + (box.width - 92) * (75.119 / 250),
       y: 120,
     },
   });
   await expect(page.getByText("Theoretical m/z 175.1190")).toBeVisible();
   await expect(page.getByText("Experimental m/z 175.1190")).toBeVisible();
   await expect(page.getByText("Series y; position 5; charge 1+")).toBeVisible();
+  await expect(page.getByText("Click to add product ion XIC.")).toBeVisible();
 
   const productRequest = page.waitForRequest((request) => request.url().includes("/product-xic"));
-  await svg.click({
-    position: {
-      x: 72 + (box.width - 92) * (75.119 / 200),
-      y: 24,
-    },
-  });
+  await clickMs2Peak(page, 67726, 175.119);
   await productRequest;
-  await expect(page.getByText("Product ion XIC: y5 / m/z 175.1190")).toBeVisible();
+  await expect(page.getByTestId("product-ion-xic-card").getByText("y5 175.1190 m/z")).toBeVisible();
 
   await controls.getByRole("button", { name: "All labels" }).click();
-  await expect(svg.getByTestId("spectrum-ion-label")).toHaveCount(1);
+  await expect(svg.getByTestId("spectrum-ion-label")).toHaveCount(9);
 });
 
 test("unsupported raw format shows a downgrade message without match-level spectrum calls", async ({ page }) => {

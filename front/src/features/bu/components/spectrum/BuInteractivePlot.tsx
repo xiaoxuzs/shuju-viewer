@@ -244,6 +244,8 @@ export function BuInteractivePlot({
         .selectAll<SVGPathElement, (typeof normalizedSeries)[number]>("path")
         .data(normalizedSeries)
         .join("path")
+        .attr("data-testid", "plot-series")
+        .attr("data-series-label", (d) => d.label)
         .attr("fill", "none")
         .attr("stroke", (d) => d.color)
         .attr("stroke-width", (d) => (d.fill ? 1.5 : 1.35))

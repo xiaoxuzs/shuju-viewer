@@ -310,6 +310,153 @@
     <p>本次遵守“不修改代码”的要求，也没有停止或重启现有前后端。为避免与正在运行的约 6.84 GiB 后端进程叠加内存并导致系统失稳，没有在第二进程完整解析 BU 的 1.346 GiB mzML。所有标记为“推算”的数字均与实测数据分开陈述。</p>
   </section>
 
+  <section>
+    <h2>优化目标</h2>
+    <p>优化不应只是把全量加载挪到后台，因为那仍会消耗约 5–7 GiB 内存。推荐目标是：<strong>数据集入口只读取元数据；谱图按需读取；概览图使用预聚合结果；任何单个页面都不再要求整份 mzML 转成 Python 对象常驻内存。</strong></p>
+    <table>
+      <thead>
+        <tr>
+          <th>场景</th>
+          <th>建议验收目标</th>
+          <th>当前参考值</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>冷启动后打开 xzx/BU 数据集首页</td>
+          <td>详情接口 P95 ≤ 300 ms；不读取 mzML；后端内存无显著增长</td>
+          <td>xzx 解析约 1.402 s；BU 需要处理 1.346 GiB mzML</td>
+        </tr>
+        <tr>
+          <td>BU RT–m/z 热图</td>
+          <td>P95 ≤ 500 ms；后端最多返回 6,400 个聚合格子</td>
+          <td>热态约 1.7–2.5 s，首次记录 16.4 s</td>
+        </tr>
+        <tr>
+          <td>BU TIC/BPC</td>
+          <td>P95 ≤ 300 ms；不在请求内遍历全部峰数组</td>
+          <td>热态约 0.7–0.8 s</td>
+        </tr>
+        <tr>
+          <td>查看单张 MS1/MS2</td>
+          <td>只读取目标 scan 及必要邻域；常规请求 P95 ≤ 1 s</td>
+          <td>必须先把整个 mzML 载入内存</td>
+        </tr>
+        <tr>
+          <td>后端内存</td>
+          <td>只打开数据集首页时保持在 1 GiB 以内；缓存有明确上限</td>
+          <td>当前私有内存约 6.842 GiB</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>推荐实施顺序</h2>
+    <h3>第一阶段：先让数据集入口立即返回</h3>
+    <p><span class="tag">P0</span>从 <code>GET /datasets/{slug}</code> 中移除 <code>_ensure_dataset_spectra_resident</code>。该接口只负责返回数据集元数据、cutoff 和 BU run 摘要，不再触碰 mzML。</p>
+    <p>建议修改边界：</p>
+    <ul>
+      <li><code>back/app/api/v1/datasets.py</code>：详情路由不再负责谱图常驻。</li>
+      <li><code>back/app/services/spectrum_memory_wiring.py</code>：保留为谱图访问层使用，不由元数据路由调用。</li>
+      <li><code>front/src/features/bu/routes/DatasetModeGate.tsx</code>：无需为这一步重构；现有请求会自然变快。</li>
+    </ul>
+    <p><strong>效果：</strong>xzx 和 BU 数据集首页会首先恢复为轻量页面。即使后续谱图能力尚未完成优化，也不会再阻塞用户进入数据集。</p>
+    <p><strong>注意：</strong>仅完成这一步会把等待从“打开数据集”移动到“第一次查看谱图”。因此它是必要的止血措施，但不是最终方案。</p>
+
+    <h3>第二阶段：用按 scan 读取替代整数据集常驻</h3>
+    <p><span class="tag">P0</span>在 <code>back/app/spectrum_memory/</code> 内建立窄接口，例如：</p>
+    <pre><code>get_spectrum(dataset_id, run_id, scan_number)
+get_spectra_in_rt_range(dataset_id, run_id, rt_start, rt_end)
+get_run_summary(dataset_id, run_id)</code></pre>
+    <p>接口背后的实现应使用 mzML 索引随机访问目标 scan，或在首次解析时生成轻量 sidecar 索引；不要再向 API 层暴露整份 <code>run_to_spectra</code> 字典。</p>
+    <ul>
+      <li>单张 MS1/MS2：只读取目标 scan；需要母子谱关系时读取少量相邻 scan。</li>
+      <li>Precursor XIC/Product XIC：按 RT 窗口读取相关 MS1/MS2，不遍历无关时间范围。</li>
+      <li>缓存单位改为 scan 或小 RT 分块，并设置明确的字节上限和 LRU 淘汰。</li>
+      <li>缓存内部保留 NumPy 数组；只在构造最终 JSON 响应时转换当前请求所需数组。</li>
+    </ul>
+    <p>模块边界应保持低耦合：API 路由只调用谱图服务；谱图服务只依赖统一 reader 接口；mzML 索引、缓存和文件解析细节留在独立模块中。</p>
+
+    <h3>第三阶段：把 BU RT–m/z 分箱放到数据库</h3>
+    <p><span class="tag">P0（BU）</span>当前实现把 110,026 个点全部取回 Python。应改为数据库完成分箱，只返回非空格子的 <code>rt_bin、mz_bin、count</code>。</p>
+    <p>推荐流程：</p>
+    <ol>
+      <li>先查询当前过滤条件下的 <code>min/max retention_time</code> 与 <code>min/max precursor_mz</code>。</li>
+      <li>使用 PostgreSQL <code>width_bucket</code> 或等价表达式按 80×80 分组。</li>
+      <li>数据库执行 <code>GROUP BY rt_bin, mz_bin</code>，Python 只负责把最多 6,400 个格子放进响应矩阵。</li>
+    </ol>
+    <p>涉及模块应限制在 <code>back/app/bu/services/overview_service.py</code> 及对应测试，不要把 SQL 拼装移到路由层。</p>
+    <p class="note">不建议把“新增索引”当作第一解决方案。现有 SQL 的数据库执行时间实测约 76 ms，主要损耗发生在返回十万行之后。先减少返回行数，再根据新的执行计划决定是否增加复合或部分索引。</p>
+
+    <h3>第四阶段：预生成 BU TIC/BPC 概览数据</h3>
+    <p><span class="tag">P1（BU）</span>TIC/BPC 是 run 级稳定派生数据，不应在每次请求中重新遍历全部 MS1 峰。</p>
+    <ul>
+      <li>优先在导入完成阶段生成 <code>rt、tic、bpc</code> 的下采样结果。</li>
+      <li>结果可存为独立 sidecar 文件或专用小表；不要塞入万能 JSON 大字段。</li>
+      <li>接口直接读取最多 8,000 个点，切换 TIC/BPC 时不再访问原始峰数组。</li>
+      <li>旧数据集可提供独立的一次性回填命令，不要在普通 GET 请求中隐式回填。</li>
+    </ul>
+    <p>建议新增独立的 BU 概览派生模块，由 ingest 编排调用其公开 API；不要把预计算逻辑写进 <code>api/v1/bu/chromatogram.py</code>。</p>
+
+    <h3>第五阶段：优化 overview 聚合与前端加载节奏</h3>
+    <p><span class="tag">P1（BU）</span><code>/overview</code> 中多个独立 count 子查询和 run 统计可继续优化，但优先级低于整包 mzML、热图和 TIC/BPC。</p>
+    <ul>
+      <li>检查是否能用一次条件聚合或小型汇总表返回稳定计数。</li>
+      <li>稳定统计可在导入完成时写入专用 summary，而不是每次打开首页重算。</li>
+      <li>前端继续让卡片独立显示 skeleton；某张图失败或较慢时，不阻塞数据集标题、导航和其他摘要。</li>
+      <li>不要用单纯延长 React Query <code>staleTime</code> 掩盖后端问题；它只能改善同一浏览器会话的重复访问。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>不推荐的做法</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>做法</th>
+          <th>为什么不推荐</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>应用启动时预热所有数据集</td>
+          <td>启动更慢、内存峰值更高，并且会加载用户可能根本不会访问的数据。</td>
+        </tr>
+        <tr>
+          <td>只把全量加载改成后台线程</td>
+          <td>页面入口会变快，但 5–7 GiB 内存和 CPU/I/O 成本仍存在，还会与正常请求争抢资源。</td>
+        </tr>
+        <tr>
+          <td>继续增大全局内存池</td>
+          <td>当前问题是对象表示和加载粒度不合理；增大上限只会推迟换页或 OOM。</td>
+        </tr>
+        <tr>
+          <td>只增加数据库索引</td>
+          <td>RT–m/z SQL 已经只需约 76 ms，无法解释接口的大部分耗时。</td>
+        </tr>
+        <tr>
+          <td>把所有优化塞进 datasets.py 或 overview_service.py</td>
+          <td>会破坏项目要求的低耦合、高模块化，使 mzML 读取、缓存、派生数据与路由再次混杂。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>验证与交付建议</h2>
+    <p>每个阶段都应先记录基线，再实施最小改动并复测。建议在 <code>cs/</code> 中新增中文性能验收入口，同时在 <code>back/tests/</code> 保留行为单元测试。</p>
+    <ol>
+      <li><strong>数据集入口测试：</strong>模拟 mzML reader，断言 <code>GET /datasets/{slug}</code> 不调用任何谱图加载函数。</li>
+      <li><strong>按需读取测试：</strong>请求一个 scan，断言 reader 未遍历整份文件；重复请求验证小缓存命中。</li>
+      <li><strong>热图一致性测试：</strong>用固定小数据比较数据库分箱与原 Python 算法的格子计数。</li>
+      <li><strong>TIC/BPC 一致性测试：</strong>比较预生成结果与原始算法，明确下采样误差边界。</li>
+      <li><strong>性能脚本：</strong>分别记录冷启动详情、首次谱图、热图、TIC/BPC、进程私有内存和工作集。</li>
+      <li><strong>回归测试：</strong>覆盖 xzx Top-Down PrSM 谱图、BU mzML match detail、BU Bruker run，避免只优化一种数据形态。</li>
+    </ol>
+    <p>推荐交付顺序为：<strong>详情接口解耦 → RT–m/z 数据库分箱 → TIC/BPC 派生数据 → scan/RT 分块读取 → overview 次级优化</strong>。前两项改动范围较小、收益最直接；整套按需谱图读取应作为独立任务设计和验收。</p>
+  </section>
+
   <footer>Viewer 项目只读性能调查报告</footer>
 </main>
 </body>

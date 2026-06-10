@@ -9,6 +9,7 @@ import {
   layoutSpectrumLabels,
   type SpectrumLabelMode,
 } from "@/features/bu/components/spectrum/spectrumLabelLayout";
+import { toProductIonSelection } from "@/features/bu/components/match-detail/productIonSelection";
 
 interface ChartPeak {
   mz: number;
@@ -53,6 +54,7 @@ export function BuSpectrumChart({
   zoom: zoomProp,
   onZoomChange,
   onMatchedIonClick,
+  selectedProductIonIds,
   onOpenFull,
   className,
 }: {
@@ -65,6 +67,7 @@ export function BuSpectrumChart({
   zoom?: Zoom;
   onZoomChange?: (zoom: Zoom) => void;
   onMatchedIonClick?: (ion: BuMatchedIon) => void;
+  selectedProductIonIds?: ReadonlySet<string>;
   onOpenFull?: () => void;
   className?: string;
 }) {
@@ -193,12 +196,20 @@ export function BuSpectrumChart({
         .selectAll<SVGLineElement, ChartPeak>("line")
         .data(visible)
         .join("line")
+        .attr("data-testid", (d) => (d.ion ? "matched-spectrum-peak" : null))
+        .attr("data-product-ion-selected", (d) => {
+          const selection = toProductIonSelection(d.ion);
+          return selection && selectedProductIonIds?.has(selection.id) ? "true" : "false";
+        })
         .attr("x1", (d) => xScale(d.mz))
         .attr("x2", (d) => xScale(d.mz))
         .attr("y1", y0)
         .attr("y2", (d) => yScale(d.intensity))
         .attr("stroke", (d) => colorFor(d))
-        .attr("stroke-width", (d) => (d.ion ? 1.8 : 0.7))
+        .attr("stroke-width", (d) => {
+          const selection = toProductIonSelection(d.ion);
+          return selection && selectedProductIonIds?.has(selection.id) ? 3.6 : d.ion ? 1.8 : 0.7;
+        })
         .attr("opacity", (d) => (d.ion ? 1 : 0.85));
 
       const visibleMarkers = (spectrum.markers ?? []).filter((marker) => marker.mz >= x0 && marker.mz <= x1);
@@ -367,7 +378,7 @@ export function BuSpectrumChart({
       if (clickTimer) clearTimeout(clickTimer);
       applyZoomRef.current = null;
     };
-  }, [fullX, height, labelMode, peaks, spectrum.markers, width]);
+  }, [fullX, height, labelMode, peaks, selectedProductIonIds, spectrum.markers, width]);
 
   useEffect(() => {
     applyZoomRef.current?.(zoom);
@@ -444,6 +455,13 @@ export function BuSpectrumChart({
               <div className="font-mono">Theoretical m/z {tooltip.peak.ion.theo_mz.toFixed(4)}</div>
               <div className="font-mono">Experimental m/z {tooltip.peak.ion.exp_mz.toFixed(4)}</div>
               <div className="font-mono">{tooltip.peak.ion.ppm.toFixed(2)} ppm</div>
+              {onMatchedIonClick && (
+                <div className="mt-1 font-medium text-foreground">
+                  {selectedProductIonIds?.has(toProductIonSelection(tooltip.peak.ion)?.id ?? "")
+                    ? "Click to remove product ion XIC."
+                    : "Click to add product ion XIC."}
+                </div>
+              )}
             </>
           )}
         </div>

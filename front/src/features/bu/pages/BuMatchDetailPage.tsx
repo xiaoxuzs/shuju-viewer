@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
@@ -12,20 +12,27 @@ import {
   fetchBuMatchMobilitySlice,
   fetchBuMatchMs1,
   fetchBuMatchMs2,
-  fetchBuMatchProductXic,
   fetchBuMatchXic,
 } from "@/features/bu/api/buClient";
 import { BuFragmentTable } from "@/features/bu/components/match-detail/BuFragmentTable";
 import { BuEvidenceSummary } from "@/features/bu/components/match-detail/BuEvidenceSummary";
 import { BuPfmbAnnotationCard } from "@/features/bu/components/match-detail/BuPfmbAnnotationCard";
+import { BuProductIonXicCard } from "@/features/bu/components/match-detail/BuProductIonXicCard";
+import {
+  addTopProductIons,
+  clearProductIonSelections,
+  removeProductIonSelection,
+  toggleProductIonSelection,
+  toProductIonSelection,
+  type ProductIonSelection,
+} from "@/features/bu/components/match-detail/productIonSelection";
+import type { ProductIonYAxisMode } from "@/features/bu/components/match-detail/productIonXicViewModel";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import { MzMobilityScatter } from "@/features/bu/components/spectrum/MzMobilityScatter";
-import { BuProductXicChart } from "@/features/bu/components/spectrum/BuProductXicChart";
 import { BuSpectrumChart } from "@/features/bu/components/spectrum/BuSpectrumChart";
 import { BuXicChart, type BuXicPointSelection } from "@/features/bu/components/spectrum/BuXicChart";
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
-import type { BuMatchedIon } from "@/features/bu/types";
 import {
   RT_LINK_TOLERANCE_MIN,
   SCAN_UNAVAILABLE_REASON,
@@ -37,6 +44,8 @@ import {
 
 const MS2_PPM = 20;
 const XIC_PPM = 10;
+const PRODUCT_ION_LIMIT_WARNING =
+  "Maximum 8 product ions can be compared at once. Remove one before adding another.";
 const ZOOM_HINT = "wheel to zoom (Shift = Y) · brush-drag = X";
 
 export function BuMatchDetailPage() {
@@ -50,7 +59,9 @@ export function BuMatchDetailPage() {
   const [ms1ModalZoom, setMs1ModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [ms2ModalZoom, setMs2ModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [selectedXicPoint, setSelectedXicPoint] = useState<BuXicPointSelection | null>(null);
-  const [selectedProductIon, setSelectedProductIon] = useState<BuMatchedIon | null>(null);
+  const [selectedProductIons, setSelectedProductIons] = useState<ProductIonSelection[]>([]);
+  const [productIonYAxisMode, setProductIonYAxisMode] = useState<ProductIonYAxisMode>("normalized");
+  const [productIonWarning, setProductIonWarning] = useState<string | null>(null);
   // Single source of truth linking the XIC, live MS2 and PFMB cards.
   const [inspectedRt, setInspectedRt] = useState<{ rt: number; source: InspectedRtSource } | null>(null);
   const selectedRt = inspectedRt?.rt ?? null;
@@ -77,20 +88,6 @@ export function BuMatchDetailPage() {
       ),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
   });
-  const productXic = useQuery({
-    queryKey: [
-      "bu",
-      dataset.slug,
-      "matches",
-      parsedMatchId,
-      "product-xic",
-      selectedProductIon?.theo_mz ?? null,
-      MS2_PPM,
-    ],
-    queryFn: () =>
-      fetchBuMatchProductXic(dataset.slug, parsedMatchId, selectedProductIon!.theo_mz, MS2_PPM),
-    enabled: !!isMzml && Number.isFinite(parsedMatchId) && selectedProductIon !== null,
-  });
   const ms1 = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms1"],
     queryFn: () => fetchBuMatchMs1(dataset.slug, parsedMatchId),
@@ -110,21 +107,64 @@ export function BuMatchDetailPage() {
     setMs1ModalZoom(DEFAULT_ZOOM);
     setMs2ModalZoom(DEFAULT_ZOOM);
     setSelectedXicPoint(null);
-    setSelectedProductIon(null);
+    setSelectedProductIons([]);
+    setProductIonYAxisMode("normalized");
+    setProductIonWarning(null);
     setInspectedRt(null);
   }, [parsedMatchId]);
+
+  useEffect(() => {
+    setSelectedProductIons([]);
+    setProductIonWarning(null);
+  }, [
+    data?.run.run_id,
+    data?.precursor_mz,
+    data?.precursor_charge,
+    ms2.data?.scan,
+    selectedRt,
+  ]);
 
   const selectXicPoint = (selection: BuXicPointSelection) => {
     setSelectedXicPoint(selection);
     setInspectedRt({ rt: selection.rt, source: "xic" });
-    setSelectedProductIon(null);
+    setSelectedProductIons([]);
+    setProductIonWarning(null);
   };
 
   // Driven by a PFMB slot click: RT becomes canonical, the XIC marker is cleared.
   const selectRtFromPfmb = (rt: number) => {
     setInspectedRt({ rt, source: "pfmb" });
     setSelectedXicPoint(null);
-    setSelectedProductIon(null);
+    setSelectedProductIons([]);
+    setProductIonWarning(null);
+  };
+
+  const selectedProductIonIds = useMemo(
+    () => new Set(selectedProductIons.map((ion) => ion.id)),
+    [selectedProductIons],
+  );
+
+  const toggleProductIon = (matchedIon: Parameters<typeof toProductIonSelection>[0]) => {
+    const selection = toProductIonSelection(matchedIon);
+    const result = toggleProductIonSelection(selectedProductIons, selection);
+    setSelectedProductIons(result.selections);
+    setProductIonWarning(result.limitReached ? PRODUCT_ION_LIMIT_WARNING : null);
+  };
+
+  const removeProductIon = (ionId: string) => {
+    setSelectedProductIons((current) => removeProductIonSelection(current, ionId));
+    setProductIonWarning(null);
+  };
+
+  const addTopFragments = () => {
+    const result = addTopProductIons(selectedProductIons, ms2.data?.matched_ions ?? []);
+    setSelectedProductIons(result.selections);
+    setProductIonWarning(result.limitReached ? PRODUCT_ION_LIMIT_WARNING : null);
+  };
+
+  const clearProductIons = () => {
+    setSelectedProductIons(clearProductIonSelections());
+    setProductIonWarning(null);
   };
 
   if (isLoading) return <PageLoading />;
@@ -238,7 +278,7 @@ export function BuMatchDetailPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Live mzML MS2 matching</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Matched fragments are calculated from the selected mzML MS2 scan. Click a matched b/y fragment peak to view its product ion XIC (MS2 chromatogram).
+                  Matched fragments are calculated from the selected mzML MS2 scan. Click a matched b/y fragment peak to add or remove its product ion XIC.
                 </p>
                 <p className="text-xs text-muted-foreground" data-testid="ms2-current-rt">
                   MS2 scan #{ms2.data.scan}. MS2 scan RT: {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
@@ -258,29 +298,30 @@ export function BuMatchDetailPage() {
                   precursorCharge={data.precursor_charge}
                   precursorMz={data.precursor_mz}
                   ppm={MS2_PPM}
-                  onMatchedIonClick={setSelectedProductIon}
+                  onMatchedIonClick={toggleProductIon}
+                  selectedProductIonIds={selectedProductIonIds}
                   onOpenFull={() => setMs2FullOpen(true)}
                 />
-                {selectedProductIon && productXic.isLoading && <Skeleton className="mt-4 h-56" />}
-                {selectedProductIon && productXic.error && (
-                  <div className="mt-4 text-sm">
-                    <DataLoadError compact />
-                    <button
-                      type="button"
-                      onClick={() => setSelectedProductIon(null)}
-                      className="mt-2 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      clear product ion XIC
-                    </button>
-                  </div>
-                )}
-                {selectedProductIon && productXic.data && (
-                  <BuProductXicChart
-                    xic={productXic.data}
-                    ion={selectedProductIon}
-                    onClear={() => setSelectedProductIon(null)}
-                  />
-                )}
+                <BuProductIonXicCard
+                  datasetId={dataset.id}
+                  slug={dataset.slug}
+                  matchId={parsedMatchId}
+                  runId={data.run.run_id}
+                  available
+                  matchedIons={ms2.data.matched_ions}
+                  selections={selectedProductIons}
+                  mode={productIonYAxisMode}
+                  ppm={MS2_PPM}
+                  rtWindow={{ start: data.rt_window.rt_start, stop: data.rt_window.rt_stop }}
+                  identificationRt={data.identification_rt_apex ?? data.rt_window.rt_apex}
+                  inspectedRt={selectedRt}
+                  ms2ScanRt={ms2.data.rt_minutes}
+                  warning={productIonWarning}
+                  onRemove={removeProductIon}
+                  onAddTop={addTopFragments}
+                  onClear={clearProductIons}
+                  onModeChange={setProductIonYAxisMode}
+                />
                 <BuFragmentTable ions={ms2.data.matched_ions} />
               </CardContent>
             </Card>
@@ -293,6 +334,25 @@ export function BuMatchDetailPage() {
               {isBruker
                 ? "Bruker .d match-level Precursor XIC and MS1/MS2 spectra are not supported."
                 : "This raw format does not support match-level Precursor XIC or MS1/MS2 spectra."}
+              <BuProductIonXicCard
+                datasetId={dataset.id}
+                slug={dataset.slug}
+                matchId={parsedMatchId}
+                runId={data.run.run_id}
+                available={false}
+                matchedIons={[]}
+                selections={[]}
+                mode={productIonYAxisMode}
+                ppm={MS2_PPM}
+                rtWindow={{ start: data.rt_window.rt_start, stop: data.rt_window.rt_stop }}
+                identificationRt={data.identification_rt_apex ?? data.rt_window.rt_apex}
+                inspectedRt={selectedRt}
+                ms2ScanRt={null}
+                onRemove={() => {}}
+                onAddTop={() => {}}
+                onClear={() => {}}
+                onModeChange={setProductIonYAxisMode}
+              />
             </CardContent>
           </Card>
           {isBruker && (
@@ -377,7 +437,8 @@ export function BuMatchDetailPage() {
             height={Math.max(BU_CHART.ms2Height, 620)}
             zoom={ms2ModalZoom}
             onZoomChange={setMs2ModalZoom}
-            onMatchedIonClick={setSelectedProductIon}
+            onMatchedIonClick={toggleProductIon}
+            selectedProductIonIds={selectedProductIonIds}
           />
         </BuChartModal>
       )}
