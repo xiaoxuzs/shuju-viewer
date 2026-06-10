@@ -16,6 +16,7 @@ import {
   fetchBuMatchXic,
 } from "@/features/bu/api/buClient";
 import { BuFragmentTable } from "@/features/bu/components/match-detail/BuFragmentTable";
+import { BuEvidenceSummary } from "@/features/bu/components/match-detail/BuEvidenceSummary";
 import { BuPfmbAnnotationCard } from "@/features/bu/components/match-detail/BuPfmbAnnotationCard";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import { MzMobilityScatter } from "@/features/bu/components/spectrum/MzMobilityScatter";
@@ -161,6 +162,17 @@ export function BuMatchDetailPage() {
           <Field label="Spectrum" value={isMzml ? "mzML precursor XIC + MS1/MS2" : "match-level spectra unsupported"} />
         </CardContent>
       </Card>
+
+      <BuEvidenceSummary
+        slug={dataset.slug}
+        matchId={parsedMatchId}
+        match={data}
+        hasPfmb={Boolean(dataset.capabilities?.has_ms2_pfmb)}
+        inspectedRt={inspectedRt}
+        selectedXicPoint={selectedXicPoint}
+        xic={{ data: xic.data, isLoading: xic.isLoading, isError: xic.isError }}
+        ms2={{ data: ms2.data, isLoading: ms2.isLoading, isError: ms2.isError }}
+      />
 
       {isMzml ? (
         <>

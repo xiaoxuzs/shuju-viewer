@@ -4,10 +4,9 @@ import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BuMs2AnnotationMatrixOut, BuMs2AnnotationOut } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
+import { calculatePfmbCoverage } from "@/features/bu/components/match-detail/evidenceSummaryModel";
 import {
   PFMB_SERIES_COLOR,
-  cleavageSite,
-  pfmbResidues,
   seriesLabel,
   type PfmbIonType,
 } from "@/features/bu/components/match-detail/pfmbSeries";
@@ -37,17 +36,10 @@ export function BuPfmbQualitySummary({
   onSelectRt: (rt: number) => void;
 }) {
   const ions = annotation.matched_ions;
-  const peptideLen = useMemo(() => pfmbResidues(annotation.peptide).length, [annotation.peptide]);
-
-  const coverage = useMemo(() => {
-    if (peptideLen < 2) return null;
-    const sites = new Set<number>();
-    for (const ion of ions) {
-      const site = cleavageSite(ion, peptideLen);
-      if (site >= 1 && site <= peptideLen - 1) sites.add(site);
-    }
-    return { covered: sites.size, total: peptideLen - 1, ratio: sites.size / (peptideLen - 1) };
-  }, [ions, peptideLen]);
+  const coverage = useMemo(
+    () => calculatePfmbCoverage(annotation.peptide, annotation),
+    [annotation],
+  );
 
   const ppm = useMemo(() => {
     const values = ions.map((i) => i.mass_error_ppm).filter((v) => Number.isFinite(v));

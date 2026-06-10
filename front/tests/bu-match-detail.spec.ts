@@ -253,6 +253,53 @@ test("labels identification, MS1, and MS2 retention times independently", async 
   await expect(page.getByText(/MS2 scan RT: 92.4600 min/)).toBeVisible();
 });
 
+test("Evidence Summary shows PFMB fallback without hiding live evidence", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const summary = page.getByTestId("bu-evidence-summary");
+  await expect(summary.getByTestId("evidence-live-ms2")).toContainText("Live matched b/y ions");
+  await expect(summary.getByTestId("evidence-pfmb")).toContainText("PFMB annotation not available");
+});
+
+test("MS2 label modes hide only text and keep tooltip and peak click active", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const controls = page.getByTestId("spectrum-label-mode").first();
+  const svg = page.locator('svg[aria-label^="MS2 scan #67726"]');
+  await expect(controls.getByRole("button", { name: "Top labels" })).toHaveAttribute("aria-pressed", "true");
+  await expect(svg.getByTestId("spectrum-ion-label")).toHaveCount(1);
+
+  await controls.getByRole("button", { name: "No labels" }).click();
+  await expect(svg.getByTestId("spectrum-ion-label")).toHaveCount(0);
+
+  const box = await svg.boundingBox();
+  if (!box) throw new Error("MS2 SVG has no bounding box");
+  await svg.hover({
+    position: {
+      x: 72 + (box.width - 92) * (75.119 / 200),
+      y: 120,
+    },
+  });
+  await expect(page.getByText("Theoretical m/z 175.1190")).toBeVisible();
+  await expect(page.getByText("Experimental m/z 175.1190")).toBeVisible();
+  await expect(page.getByText("Series y; position 5; charge 1+")).toBeVisible();
+
+  const productRequest = page.waitForRequest((request) => request.url().includes("/product-xic"));
+  await svg.click({
+    position: {
+      x: 72 + (box.width - 92) * (75.119 / 200),
+      y: 24,
+    },
+  });
+  await productRequest;
+  await expect(page.getByText("Product ion XIC: y5 / m/z 175.1190")).toBeVisible();
+
+  await controls.getByRole("button", { name: "All labels" }).click();
+  await expect(svg.getByTestId("spectrum-ion-label")).toHaveCount(1);
+});
+
 test("unsupported raw format shows a downgrade message without match-level spectrum calls", async ({ page }) => {
   let matchLevelCalls = 0;
   await page.route("**/api/v1/**", async (route) => {

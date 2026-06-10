@@ -89,6 +89,12 @@ const matrixPayload = {
     [0, 30, 20],
     [0, 500, 0],
   ],
+  detected: [
+    [true, true, true],
+    [true, true, true],
+    [false, true, true],
+    [false, true, false],
+  ],
 };
 
 const xicStub = {
@@ -124,19 +130,23 @@ async function fulfillJson(route: Route, body: unknown) {
 }
 
 interface Counters {
+  slots: number;
   matrix: number;
   annotationPrsm: number[];
 }
 
 async function mockPfmb(page: Page): Promise<Counters> {
-  const counters: Counters = { matrix: 0, annotationPrsm: [] };
+  const counters: Counters = { slots: 0, matrix: 0, annotationPrsm: [] };
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
     if (p === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
     const detailMatch = p.match(/\/datasets\/demo\/matches\/(\d+)$/);
     if (detailMatch) return fulfillJson(route, matchDetail(Number(detailMatch[1])));
-    if (/\/matches\/\d+\/ms2-slots$/.test(p)) return fulfillJson(route, slotsPayload);
+    if (/\/matches\/\d+\/ms2-slots$/.test(p)) {
+      counters.slots += 1;
+      return fulfillJson(route, slotsPayload);
+    }
     if (/\/matches\/\d+\/ms2-annotation-matrix$/.test(p)) {
       counters.matrix += 1;
       return fulfillJson(route, matrixPayload);
@@ -178,10 +188,29 @@ test("heatmap loads with a single matrix request and no per-slot N+1", async ({ 
   // 4 fragment families x 3 slots = 12 cells, from ONE request.
   await expect(card.getByTestId("pfmb-heatmap-cell")).toHaveCount(12);
   expect(counters.matrix).toBe(1);
+  expect(counters.slots).toBe(1);
   // Active-slot annotation is fetched once (apex), never once-per-slot.
   expect(new Set(counters.annotationPrsm).size).toBeLessThanOrEqual(1);
+  expect(counters.annotationPrsm).toHaveLength(1);
   expect(counters.annotationPrsm).not.toContain(100);
   expect(counters.annotationPrsm).not.toContain(102);
+});
+
+test("heatmap distinguishes detected zero from not detected when metadata exists", async ({ page }) => {
+  await mockPfmb(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const heatmap = page.getByTestId("pfmb-heatmap");
+  await expect(heatmap.getByTestId("pfmb-heatmap-legend")).toContainText("Log intensity");
+  await expect(heatmap.getByTestId("pfmb-heatmap-legend")).toContainText("Matched zero intensity");
+  await expect(heatmap.locator('[data-family="y5"][data-col="0"]')).toHaveAttribute(
+    "data-detection",
+    "matched-zero",
+  );
+  await expect(heatmap.locator('[data-family="c3"][data-col="0"]')).toHaveAttribute(
+    "data-detection",
+    "not-detected",
+  );
 });
 
 test("clicking a heatmap cell switches RT and highlights the fragment", async ({ page }) => {
@@ -194,6 +223,19 @@ test("clicking a heatmap cell switches RT and highlights the fragment", async ({
 
   await expect(card.getByTestId("pfmb-selected-rt")).toContainText("93.99");
   await expect(card.getByTestId("pfmb-ion-row").filter({ hasText: "b2" })).toHaveAttribute("data-highlighted", "true");
+  await expect(card.locator('[data-testid="seq-site"][data-site="2"]')).toHaveAttribute("data-highlighted", "true");
+});
+
+test("heatmap tooltip reports ion, slot RT, intensity, and detection state", async ({ page }) => {
+  await mockPfmb(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const cell = page.locator('[data-testid="pfmb-heatmap-cell"][data-family="y5"][data-col="0"]');
+  await cell.hover();
+  const tooltip = page.getByTestId("pfmb-heatmap-tooltip");
+  await expect(tooltip).toContainText("y5");
+  await expect(tooltip).toContainText("PFMB slot RT 93.9900 min");
+  await expect(tooltip).toContainText("Matched peak with zero intensity");
 });
 
 test("clicking a covered sequence site highlights the table row", async ({ page }) => {
@@ -204,6 +246,14 @@ test("clicking a covered sequence site highlights the table row", async ({ page 
   await expect(card.getByTestId("pfmb-sequence-coverage")).toBeVisible();
   await expect(card.getByTestId("seq-residue")).toHaveCount(7);
   await expect(card.getByTestId("pfmb-sequence-coverage")).not.toContainText("[+57.021464]");
+  await expect(card.locator('[data-testid="seq-residue"][data-index="1"]')).toHaveAttribute(
+    "title",
+    "Residue P, index 1",
+  );
+  await expect(card.locator('[data-testid="seq-site"][data-site="4"]')).toHaveAttribute(
+    "title",
+    /Cleavage position 4; supported ion series: z\.; matched ions: z\.3\^2\+/,
+  );
 
   // Site 4 is covered only by z_dot3.
   await card.locator('[data-testid="seq-site"][data-site="4"]').click();

@@ -140,6 +140,7 @@ def get_annotation_matrix(dataset: dict[str, Any], match: dict[str, Any]) -> BuM
     # fragment key -> (ion_type, ordinal); fragment key -> {col -> summed intensity}
     fragment_meta: dict[str, tuple[str, int]] = {}
     fragment_cells: dict[str, dict[int, float]] = {}
+    fragment_detected: dict[str, set[int]] = {}
     slot_summary: list[BuMs2SlotSummary] = []
     for col, slot in enumerate(slots):
         annotation = reader.read(slot.prsm_index)
@@ -150,6 +151,7 @@ def get_annotation_matrix(dataset: dict[str, Any], match: dict[str, Any]) -> BuM
             fragment_meta.setdefault(key, (ion.ion_type, ion.fragment_ordinal))
             cells = fragment_cells.setdefault(key, {})
             cells[col] = cells.get(col, 0.0) + float(ion.intensity)
+            fragment_detected.setdefault(key, set()).add(col)
         slot_summary.append(
             BuMs2SlotSummary(
                 prsm_index=slot.prsm_index,
@@ -178,6 +180,10 @@ def get_annotation_matrix(dataset: dict[str, Any], match: dict[str, Any]) -> BuM
         [fragment_cells[row.key].get(col, 0.0) for col in range(len(slots))]
         for row in rows
     ]
+    detected = [
+        [col in fragment_detected[row.key] for col in range(len(slots))]
+        for row in rows
+    ]
 
     return BuMs2AnnotationMatrixOut(
         peptide=peptide,
@@ -185,6 +191,7 @@ def get_annotation_matrix(dataset: dict[str, Any], match: dict[str, Any]) -> BuM
         slots=slots,
         fragments=rows,
         intensity=intensity,
+        detected=detected,
         slot_summary=slot_summary,
     )
 

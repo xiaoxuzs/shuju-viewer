@@ -366,6 +366,7 @@ export interface BuMs2AnnotationMatrixOut {
   slots: BuMs2SlotItem[];
   fragments: BuMs2FragmentRow[];
   intensity: number[][];
+  detected?: boolean[][];
   slot_summary: BuMs2SlotSummary[];
 }
 

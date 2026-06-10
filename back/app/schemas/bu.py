@@ -311,6 +311,8 @@ class BuMs2AnnotationMatrixOut(BaseModel):
     slots: list[BuMs2SlotItem] = Field(default_factory=list)
     fragments: list[BuMs2FragmentRow] = Field(default_factory=list)
     intensity: list[list[float]] = Field(default_factory=list)
+    # Same dimensions as intensity. True means a matched row exists even when intensity is zero.
+    detected: list[list[bool]] = Field(default_factory=list)
     slot_summary: list[BuMs2SlotSummary] = Field(default_factory=list)
 
 

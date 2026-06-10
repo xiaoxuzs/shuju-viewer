@@ -5,6 +5,10 @@ import { Maximize2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BuMatchedIon, BuSpectrumV1 } from "@/features/bu/types";
 import { BU_CHART, DEFAULT_ZOOM, formatIntensity, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
+import {
+  layoutSpectrumLabels,
+  type SpectrumLabelMode,
+} from "@/features/bu/components/spectrum/spectrumLabelLayout";
 
 interface ChartPeak {
   mz: number;
@@ -90,6 +94,7 @@ export function BuSpectrumChart({
   const [width, setWidth] = useState(760);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; peak: ChartPeak } | null>(null);
   const [internalZoom, setInternalZoom] = useState<Zoom>(DEFAULT_ZOOM);
+  const [labelMode, setLabelMode] = useState<SpectrumLabelMode>("top");
   const zoom = zoomProp ?? internalZoom;
   const controlled = zoomProp !== undefined;
   const zoomRef = useRef(zoom);
@@ -121,6 +126,10 @@ export function BuSpectrumChart({
   useEffect(() => {
     if (!controlled) setInternalZoom(DEFAULT_ZOOM);
   }, [peaks, controlled]);
+
+  useEffect(() => {
+    setLabelMode("top");
+  }, [spectrum.scan]);
 
   const applyZoomRef = useRef<((zoom: Zoom) => void) | null>(null);
 
@@ -216,86 +225,43 @@ export function BuSpectrumChart({
         .attr("fill", BU_CHART.apex)
         .text((d) => `${d.label}${d.charge ? ` +${d.charge}` : ""}`);
 
-      const LABEL_W = 26;
-      const LABEL_H = 20;
-      const LABEL_X_OFFSET = -4;
-      const MAIN_FONT = 11;
-      const SUB_FONT = 7.5;
-
       const matched = visible.filter((p) => p.ion).sort((a, b) => b.intensity - a.intensity);
-      const placed: {
-        peak: ChartPeak;
-        px: number;
-        py: number;
-        x0: number;
-        y0: number;
-        x1: number;
-        y1: number;
-      }[] = [];
-
-      for (const peak of matched) {
+      const candidates = matched.flatMap((peak) => {
         const px = xScale(peak.mz);
-        if (px < 0 || px > innerW) continue;
         const py = yScale(peak.intensity);
-        if (py < 0 || py > innerH) continue;
-
-        const x0 = px + LABEL_X_OFFSET;
-        const x1 = x0 + LABEL_W;
-        const y1 = py - 2;
-        const y0 = y1 - LABEL_H;
-        if (y0 < 0 || x0 < 0 || x1 > innerW) continue;
-
-        let collides = false;
-        for (const slot of placed) {
-          if (!(x1 <= slot.x0 || x0 >= slot.x1 || y1 <= slot.y0 || y0 >= slot.y1)) {
-            collides = true;
-            break;
-          }
-        }
-        if (collides) continue;
-
-        placed.push({ peak, px, py, x0, y0, x1, y1 });
-      }
-
-      labelsG.selectAll("*").remove();
-      for (const slot of placed) {
-        const ion = slot.peak.ion!;
-        const color = colorFor(slot.peak);
-        const letter = ion.ion_type;
-
-        labelsG
-          .append("text")
-          .attr("x", slot.px)
-          .attr("y", slot.py - 5)
-          .attr("text-anchor", "start")
-          .attr("font-family", "Arial, Helvetica, sans-serif")
-          .attr("font-size", MAIN_FONT)
-          .attr("font-weight", 600)
-          .attr("fill", color)
-          .text(letter);
-
-        if (ion.charge > 1) {
-          labelsG
-            .append("text")
-            .attr("x", slot.px + MAIN_FONT * 0.7)
-            .attr("y", slot.py - MAIN_FONT - 1)
-            .attr("text-anchor", "start")
-            .attr("font-family", "Arial, Helvetica, sans-serif")
-            .attr("font-size", SUB_FONT)
-            .attr("fill", color)
-            .text(`${ion.charge}+`);
-        }
-
-        labelsG
-          .append("text")
-          .attr("x", slot.px + MAIN_FONT * 0.7)
-          .attr("y", slot.py - 1)
-          .attr("text-anchor", "start")
-          .attr("font-family", "Arial, Helvetica, sans-serif")
-          .attr("font-size", SUB_FONT)
-          .attr("fill", color)
-          .text(String(ion.position));
-      }
+        if (px < 0 || px > innerW || py < 0 || py > innerH) return [];
+        const label = ionLabel(peak.ion!);
+        const labelWidth = Math.max(28, label.length * 7);
+        return [{
+          id: `${peak.mz}-${label}`,
+          x: Math.max(labelWidth / 2, Math.min(innerW - labelWidth / 2, px)),
+          y: Math.max(18, py - 3),
+          intensity: peak.intensity,
+          width: labelWidth,
+          height: 17,
+          peak,
+          label,
+        }];
+      });
+      const topLimit = Math.min(20, Math.max(6, Math.floor(innerW / 44)));
+      const selectedIds = new Set(
+        layoutSpectrumLabels(candidates, labelMode, innerW, innerH, topLimit).map((candidate) => candidate.id),
+      );
+      const selectedLabels = candidates.filter((candidate) => selectedIds.has(candidate.id));
+      labelsG
+        .selectAll<SVGTextElement, (typeof selectedLabels)[number]>("text")
+        .data(selectedLabels, (candidate) => candidate.id)
+        .join("text")
+        .attr("data-testid", "spectrum-ion-label")
+        .attr("data-ion", (candidate) => candidate.label)
+        .attr("x", (candidate) => candidate.x)
+        .attr("y", (candidate) => candidate.y - 3)
+        .attr("text-anchor", "middle")
+        .attr("font-family", "Arial, Helvetica, sans-serif")
+        .attr("font-size", 11)
+        .attr("font-weight", 600)
+        .attr("fill", (candidate) => colorFor(candidate.peak))
+        .text((candidate) => candidate.label);
     };
     applyZoomRef.current = applyZoom;
 
@@ -401,7 +367,7 @@ export function BuSpectrumChart({
       if (clickTimer) clearTimeout(clickTimer);
       applyZoomRef.current = null;
     };
-  }, [fullX, height, peaks, spectrum.markers, width]);
+  }, [fullX, height, labelMode, peaks, spectrum.markers, width]);
 
   useEffect(() => {
     applyZoomRef.current?.(zoom);
@@ -414,6 +380,31 @@ export function BuSpectrumChart({
         <div className="text-center text-sm text-muted-foreground">{subtitle}</div>
       </div>
       <svg ref={svgRef} aria-label={title} />
+      {spectrum.ms_level === 2 && (
+        <div
+          className="absolute left-2 top-12 inline-flex overflow-hidden rounded-md border border-border bg-card text-[11px] shadow-sm"
+          data-testid="spectrum-label-mode"
+        >
+          {([
+            ["top", "Top labels"],
+            ["all", "All labels"],
+            ["none", "No labels"],
+          ] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setLabelMode(mode)}
+              aria-pressed={labelMode === mode}
+              className={cn(
+                "px-2 py-0.5 transition-colors",
+                labelMode === mode ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="absolute right-2 top-12 flex items-center gap-1">
         <button
           type="button"
@@ -443,9 +434,17 @@ export function BuSpectrumChart({
           <div className="font-mono">m/z {tooltip.peak.mz.toFixed(4)}</div>
           <div className="font-mono text-muted-foreground">int {formatIntensity(tooltip.peak.intensity)}</div>
           {tooltip.peak.ion && (
-            <div className="font-semibold" style={{ color: colorFor(tooltip.peak) }}>
-              {ionLabel(tooltip.peak.ion)} · {tooltip.peak.ion.ppm.toFixed(2)} ppm
-            </div>
+            <>
+              <div className="font-semibold" style={{ color: colorFor(tooltip.peak) }}>
+                {ionLabel(tooltip.peak.ion)}
+              </div>
+              <div className="font-mono text-muted-foreground">
+                Series {tooltip.peak.ion.ion_type}; position {tooltip.peak.ion.position}; charge {tooltip.peak.ion.charge}+
+              </div>
+              <div className="font-mono">Theoretical m/z {tooltip.peak.ion.theo_mz.toFixed(4)}</div>
+              <div className="font-mono">Experimental m/z {tooltip.peak.ion.exp_mz.toFixed(4)}</div>
+              <div className="font-mono">{tooltip.peak.ion.ppm.toFixed(2)} ppm</div>
+            </>
           )}
         </div>
       )}

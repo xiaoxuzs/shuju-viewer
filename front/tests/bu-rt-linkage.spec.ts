@@ -227,6 +227,34 @@ test("live mzML and pre-computed PFMB evidence stay visibly distinct", async ({ 
   })).toBeVisible();
 });
 
+test("Evidence Summary shows complete source-specific evidence", async ({ page }) => {
+  await mockRt(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const summary = page.getByTestId("bu-evidence-summary");
+  await expect(summary.getByRole("heading", { name: "Evidence Summary" })).toBeVisible();
+  await expect(summary.getByTestId("evidence-identification")).toContainText("Identification RT apex");
+  await expect(summary.getByTestId("evidence-chromatographic")).toContainText("Precursor XIC");
+  await expect(summary.getByTestId("evidence-live-ms2")).toContainText("Live matched b/y ions");
+  await expect(summary.getByTestId("evidence-pfmb")).toContainText("PFMB fragment coverage");
+  await expect(summary.getByTestId("evidence-pfmb")).toContainText("PFMB matched peak rows");
+  await expect(summary.getByTestId("evidence-mass-accuracy")).toContainText("Live MS2 mass accuracy");
+  await expect(summary.getByTestId("evidence-mass-accuracy")).toContainText("PFMB mass accuracy");
+  await expect(summary).not.toContainText(/confidence|High|Medium|Low/);
+});
+
+test("legacy PFMB matrix does not claim zero versus absence", async ({ page }) => {
+  await mockRt(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const legend = page.getByTestId("pfmb-heatmap-legend");
+  await expect(legend).toContainText("Zero / not detected (legacy)");
+  await expect(page.locator('[data-testid="pfmb-heatmap-cell"][data-family="y5"][data-col="0"]')).toHaveAttribute(
+    "data-detection",
+    "detected",
+  );
+});
+
 test("clicking an XIC point selects the nearest PFMB slot", async ({ page }) => {
   await mockRt(page);
   await page.goto("/datasets/demo/matches/1");

@@ -1,19 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-
+import { useCallback, useEffect, useState } from "react";
 import { DataLoadError } from "@/components/common/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import {
-  fetchBuMatchMs2Annotation,
-  fetchBuMatchMs2AnnotationMatrix,
-  fetchBuMatchMs2Slots,
-} from "@/features/bu/api/buClient";
 import { BuPfmbFragmentTable } from "@/features/bu/components/match-detail/BuPfmbFragmentTable";
 import { BuPfmbHeatmap } from "@/features/bu/components/match-detail/BuPfmbHeatmap";
 import { BuPfmbQualitySummary } from "@/features/bu/components/match-detail/BuPfmbQualitySummary";
 import { BuSequenceCoverage } from "@/features/bu/components/match-detail/BuSequenceCoverage";
+import { useBuPfmbEvidence } from "@/features/bu/components/match-detail/useBuPfmbEvidence";
 import { BuPfmbSpectrumChart, type PfmbMassMode } from "@/features/bu/components/spectrum/BuPfmbSpectrumChart";
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import type { BuMs2AnnotationOut, BuMs2SlotItem } from "@/features/bu/types";
@@ -41,53 +35,17 @@ export function BuPfmbAnnotationCard({
   selectedRtSource,
   onSelectRt,
 }: Props) {
-  const slots = useQuery({
-    queryKey: ["bu", slug, "matches", matchId, "ms2-slots"],
-    queryFn: () => fetchBuMatchMs2Slots(slug, matchId),
-    enabled: hasPfmb && Number.isFinite(matchId),
-  });
-
-  const slotData = slots.data;
-  const hasSlots = Boolean(slotData?.has_pfmb && slotData.slots.length > 0);
-
-  // Active slot is derived from the shared selectedRt:
-  //  - no RT selected -> apex slot (default)
-  //  - RT selected and a slot is within tolerance -> that nearest slot
-  //  - RT selected but nearest slot is too far -> keep apex, surface a hint
-  const { activeSlot, nearestDistance } = useMemo(() => {
-    if (!hasSlots) return { activeSlot: null as BuMs2SlotItem | null, nearestDistance: null as number | null };
-    const list = slotData!.slots;
-    const apexSlot = list.find((s) => s.slot_index === slotData!.apex_slot) ?? list[0];
-    if (selectedRt == null) return { activeSlot: apexSlot, nearestDistance: null as number | null };
-    let nearest = list[0];
-    let best = Infinity;
-    for (const slot of list) {
-      const distance = Math.abs(slot.rt_minutes - selectedRt);
-      if (distance < best) {
-        best = distance;
-        nearest = slot;
-      }
-    }
-    if (best > RT_LINK_TOLERANCE_MIN) return { activeSlot: apexSlot, nearestDistance: best };
-    return { activeSlot: nearest, nearestDistance: best };
-  }, [hasSlots, slotData, selectedRt]);
-
-  const outOfTolerance =
-    selectedRt != null && nearestDistance != null && nearestDistance > RT_LINK_TOLERANCE_MIN;
-  const activePrsm = activeSlot?.prsm_index ?? null;
-
-  const annotation = useQuery({
-    queryKey: ["bu", slug, "matches", matchId, "ms2-annotation", activePrsm],
-    queryFn: () => fetchBuMatchMs2Annotation(slug, matchId, activePrsm!),
-    enabled: hasPfmb && activePrsm !== null,
-  });
-
-  // Single request for the whole RT x fragment matrix (no per-slot N+1).
-  const matrix = useQuery({
-    queryKey: ["bu", slug, "matches", matchId, "ms2-annotation-matrix"],
-    queryFn: () => fetchBuMatchMs2AnnotationMatrix(slug, matchId),
-    enabled: hasPfmb && hasSlots,
-  });
+  const {
+    slots,
+    slotData,
+    hasSlots,
+    activeSlot,
+    activePrsm,
+    nearestDistance,
+    outOfTolerance,
+    annotation,
+    matrix,
+  } = useBuPfmbEvidence({ slug, matchId, hasPfmb, selectedRt });
 
   // Cross-component highlight, keyed by charge-merged fragment family (e.g. "b5").
   const [highlight, setHighlight] = useState<ReadonlySet<string>>(new Set());
