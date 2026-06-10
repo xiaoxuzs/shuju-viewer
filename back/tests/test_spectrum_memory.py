@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -228,3 +230,134 @@ def test_eviction_coordinator_single_dataset_exceeds_max_raises(tmp_path: Path) 
             coord.ensure_dataset_resident(spec)
 
     assert coord.residency_of(501) == Residency.ABSENT
+
+
+def test_concurrent_same_dataset_loads_once(tmp_path: Path) -> None:
+    mdb = _mzml_bundle_mod()
+    path = tmp_path / "single-flight.mzML"
+    path.write_bytes(b"x")
+    spec = MzmlBundleSpec(dataset_id=601, runs=(MzmlRunFileSpec(run_id=1, mzml_path=path),))
+    coord = EvictionCoordinator()
+    coord._max = 10_000
+    load_started = threading.Event()
+    release_load = threading.Event()
+    call_count = 0
+    call_count_lock = threading.Lock()
+
+    def load(current_spec: MzmlBundleSpec) -> _FakeBundle:
+        nonlocal call_count
+        with call_count_lock:
+            call_count += 1
+        load_started.set()
+        assert release_load.wait(timeout=2)
+        return _fake_load_factory(accounted=200)(current_spec)
+
+    def ensure_and_get() -> dict[int, dict]:
+        coord.ensure_dataset_resident(spec)
+        spectra = coord.get_mzml_run_spectra(601, run_id=1)
+        assert spectra is not None
+        return spectra
+
+    with (
+        patch("app.spectrum_memory.eviction_coordinator.pre_load_reserve_bytes", return_value=50),
+        patch.object(mdb.DatasetMzmlBundle, "load", side_effect=load),
+        ThreadPoolExecutor(max_workers=4) as pool,
+    ):
+        futures = [pool.submit(ensure_and_get) for _ in range(4)]
+        assert load_started.wait(timeout=1)
+        assert coord.residency_of(601) == Residency.LOADING
+        release_load.set()
+        results = [future.result(timeout=2) for future in futures]
+
+    assert call_count == 1
+    assert all(result is results[0] for result in results)
+    assert coord.residency_of(601) == Residency.READY
+
+
+def test_different_dataset_loads_can_overlap(tmp_path: Path) -> None:
+    mdb = _mzml_bundle_mod()
+    path1 = tmp_path / "overlap-a.mzML"
+    path2 = tmp_path / "overlap-b.mzML"
+    path1.write_bytes(b"x")
+    path2.write_bytes(b"x")
+    spec1 = MzmlBundleSpec(dataset_id=701, runs=(MzmlRunFileSpec(run_id=1, mzml_path=path1),))
+    spec2 = MzmlBundleSpec(dataset_id=702, runs=(MzmlRunFileSpec(run_id=1, mzml_path=path2),))
+    coord = EvictionCoordinator()
+    coord._max = 10_000
+    both_started = threading.Event()
+    release_loads = threading.Event()
+    started: set[int] = set()
+    started_lock = threading.Lock()
+
+    def load(current_spec: MzmlBundleSpec) -> _FakeBundle:
+        with started_lock:
+            started.add(current_spec.dataset_id)
+            if len(started) == 2:
+                both_started.set()
+        assert release_loads.wait(timeout=2)
+        return _fake_load_factory(accounted=200)(current_spec)
+
+    with (
+        patch("app.spectrum_memory.eviction_coordinator.pre_load_reserve_bytes", return_value=50),
+        patch.object(mdb.DatasetMzmlBundle, "load", side_effect=load),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        future1 = pool.submit(coord.ensure_dataset_resident, spec1)
+        future2 = pool.submit(coord.ensure_dataset_resident, spec2)
+        assert both_started.wait(timeout=1)
+        assert coord.residency_of(701) == Residency.LOADING
+        assert coord.residency_of(702) == Residency.LOADING
+        release_loads.set()
+        future1.result(timeout=2)
+        future2.result(timeout=2)
+
+    assert started == {701, 702}
+    assert coord.residency_of(701) == Residency.READY
+    assert coord.residency_of(702) == Residency.READY
+
+
+def test_failed_dataset_load_releases_waiters_and_clears_loading(tmp_path: Path) -> None:
+    mdb = _mzml_bundle_mod()
+    path = tmp_path / "failed-single-flight.mzML"
+    path.write_bytes(b"x")
+    spec = MzmlBundleSpec(dataset_id=801, runs=(MzmlRunFileSpec(run_id=1, mzml_path=path),))
+    coord = EvictionCoordinator()
+    coord._max = 10_000
+    load_started = threading.Event()
+    release_failure = threading.Event()
+    failure = RuntimeError("mzML parse failed")
+    attempts = 0
+
+    def load(current_spec: MzmlBundleSpec) -> _FakeBundle:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            load_started.set()
+            assert release_failure.wait(timeout=2)
+            raise failure
+        return _fake_load_factory(accounted=200)(current_spec)
+
+    with (
+        patch("app.spectrum_memory.eviction_coordinator.pre_load_reserve_bytes", return_value=50),
+        patch.object(mdb.DatasetMzmlBundle, "load", side_effect=load),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        loader = pool.submit(coord.ensure_dataset_resident, spec)
+        assert load_started.wait(timeout=1)
+        waiter = pool.submit(coord.ensure_dataset_resident, spec)
+        assert coord.residency_of(801) == Residency.LOADING
+        release_failure.set()
+
+        with pytest.raises(RuntimeError) as loader_exc:
+            loader.result(timeout=2)
+        with pytest.raises(RuntimeError) as waiter_exc:
+            waiter.result(timeout=2)
+
+        assert loader_exc.value is failure
+        assert waiter_exc.value is failure
+        assert coord.residency_of(801) == Residency.ABSENT
+
+        coord.ensure_dataset_resident(spec)
+
+    assert attempts == 2
+    assert coord.residency_of(801) == Residency.READY
