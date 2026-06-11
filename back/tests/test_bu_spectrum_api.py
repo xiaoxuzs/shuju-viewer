@@ -15,6 +15,15 @@ from app.schemas import (
     BuProductXicBatchIonIn,
     BuProductXicRtWindowIn,
 )
+from app.services import spectrum_memory_wiring
+from app.services.mzml_scan_reader import (
+    MzmlFileNotFoundError,
+    MzmlIndexError,
+    MzmlMappingError,
+    SpectrumNotFoundError,
+    UnsupportedMzmlError,
+)
+from app.spectrum_memory.mzml_dataset_bundle import DatasetMzmlBundle
 
 
 def _match(*, raw_format: str = "mzml") -> dict[str, Any]:
@@ -58,7 +67,12 @@ def _ms2_spec(scan: int = 67726) -> dict[str, Any]:
     }
 
 
+def _fail(*_args: Any, **_kwargs: Any) -> None:
+    raise AssertionError("unexpected spectrum loading path")
+
+
 def test_match_ms2_resolves_scan_and_matches_by_ions(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(spectrum_facade, "get_spectrum_by_scan", _fail)
     monkeypatch.setattr(spectrum_facade, "get_run_spectra", lambda *_args: {67726: _ms2_spec()})
 
     out = spectrum_facade.get_match_ms2(None, {"dataset_id": 39}, _match(), ppm=20)  # type: ignore[arg-type]
@@ -78,6 +92,7 @@ def test_match_ms2_resolves_nearest_rt_with_matching_isolation_window(monkeypatc
         },
         67726: {**_ms2_spec(67726), "rt_seconds": 92.48 * 60.0},
     }
+    monkeypatch.setattr(spectrum_facade, "get_spectrum_by_scan", _fail)
     monkeypatch.setattr(spectrum_facade, "get_run_spectra", lambda *_args: spectra)
 
     out = spectrum_facade.get_match_ms2(None, {"dataset_id": 39}, _match(), rt=92.46)  # type: ignore[arg-type]
@@ -103,19 +118,110 @@ def test_match_ms2_rt_does_not_fall_back_to_another_isolation_window(monkeypatch
     assert exc.value.detail["error"] == "ms2_scan_not_found_for_rt"
 
 
-def test_match_ms2_returns_explicit_scan(monkeypatch: pytest.MonkeyPatch) -> None:
-    spectra = {
-        67720: {**_ms2_spec(67720), "rt_seconds": 92.30 * 60.0},
-        67726: _ms2_spec(67726),
-    }
-    monkeypatch.setattr(spectrum_facade, "get_run_spectra", lambda *_args: spectra)
+@pytest.mark.parametrize(
+    "source",
+    ["query", "resolved_scan", "ms2_scan", "match_scan"],
+)
+def test_match_ms2_explicit_scan_uses_indexed_reader_only(
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+) -> None:
+    expected_scan = 67720
+    match = _match()
+    query_scan = None
+    if source == "query":
+        query_scan = expected_scan
+    elif source == "match_scan":
+        match["scan_number"] = expected_scan
+    else:
+        match["extra_metadata"][source] = expected_scan
 
-    out = spectrum_facade.get_match_ms2(None, {"dataset_id": 39}, _match(), scan=67720)  # type: ignore[arg-type]
+    calls: list[tuple[Any, int, int, int]] = []
 
-    assert out.scan == 67720
+    def get_one(session: Any, dataset_id: int, run_id: int, scan_number: int):
+        calls.append((session, dataset_id, run_id, scan_number))
+        return _ms2_spec(scan_number), False
+
+    monkeypatch.setattr(spectrum_facade, "get_spectrum_by_scan", get_one)
+    monkeypatch.setattr(spectrum_facade, "get_run_spectra", _fail)
+    monkeypatch.setattr(spectrum_memory_wiring, "ensure_mzml_dataset_resident", _fail)
+    monkeypatch.setattr(DatasetMzmlBundle, "load", _fail)
+    monkeypatch.setattr(
+        "app.spectrum_memory.mzml_spectrum_extract.load_mzml_path_to_scan_map",
+        _fail,
+    )
+
+    session = object()
+    out = spectrum_facade.get_match_ms2(
+        session,  # type: ignore[arg-type]
+        {"dataset_id": 39},
+        match,
+        scan=query_scan,
+    )
+
+    assert calls == [(session, 39, 10, expected_scan)]
+    assert out.scan == expected_scan
+    assert out.ms_level == 2
+    assert len(out.matched_ions) >= 10
 
 
-def test_bruker_match_ms2_is_unsupported() -> None:
+def test_match_ms2_explicit_scan_rejects_ms1_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        spectrum_facade,
+        "get_spectrum_by_scan",
+        lambda *_args: ({**_ms2_spec(67720), "ms_level": 1}, False),
+    )
+    monkeypatch.setattr(spectrum_facade, "get_run_spectra", _fail)
+
+    with pytest.raises(HTTPException) as exc:
+        spectrum_facade.get_match_ms2(
+            None,  # type: ignore[arg-type]
+            {"dataset_id": 39},
+            _match(),
+            scan=67720,
+        )
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "ms2_scan_not_found"
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        (SpectrumNotFoundError("scan not found"), 404),
+        (MzmlFileNotFoundError("mzML not found"), 404),
+        (MzmlMappingError("cannot map run"), 409),
+        (UnsupportedMzmlError("embedded index required"), 422),
+        (MzmlIndexError("corrupted index"), 500),
+    ],
+)
+def test_match_ms2_explicit_scan_maps_indexed_reader_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    expected_status: int,
+) -> None:
+    def raise_error(*_args: Any, **_kwargs: Any):
+        raise error
+
+    monkeypatch.setattr(spectrum_facade, "get_spectrum_by_scan", raise_error)
+    monkeypatch.setattr(spectrum_facade, "get_run_spectra", _fail)
+
+    with pytest.raises(HTTPException) as exc:
+        spectrum_facade.get_match_ms2(
+            None,  # type: ignore[arg-type]
+            {"dataset_id": 39},
+            _match(),
+            scan=67720,
+        )
+
+    assert exc.value.status_code == expected_status
+    assert exc.value.detail == str(error)
+
+
+def test_bruker_match_ms2_is_unsupported(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(spectrum_facade, "get_spectrum_by_scan", _fail)
     with pytest.raises(HTTPException) as exc:
         spectrum_facade.get_match_ms2(None, {"dataset_id": 39}, _match(raw_format="bruker_d"))  # type: ignore[arg-type]
 
@@ -142,6 +248,7 @@ def test_match_ms1_resolves_nearby_ms1_and_adds_precursor_marker(monkeypatch: py
             "intensity": [1000.0, 2000.0],
         },
     }
+    monkeypatch.setattr(spectrum_facade, "get_spectrum_by_scan", _fail)
     monkeypatch.setattr(spectrum_facade, "get_run_spectra", lambda *_args: spectra)
 
     out = spectrum_facade.get_match_ms1(None, {"dataset_id": 39}, _match())  # type: ignore[arg-type]
@@ -153,7 +260,8 @@ def test_match_ms1_resolves_nearby_ms1_and_adds_precursor_marker(monkeypatch: py
     assert out.precursor and out.precursor.charge == 2
 
 
-def test_bruker_match_ms1_is_unsupported() -> None:
+def test_bruker_match_ms1_is_unsupported(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(spectrum_facade, "get_spectrum_by_scan", _fail)
     with pytest.raises(HTTPException) as exc:
         spectrum_facade.get_match_ms1(None, {"dataset_id": 39}, _match(raw_format="bruker_d"))  # type: ignore[arg-type]
 

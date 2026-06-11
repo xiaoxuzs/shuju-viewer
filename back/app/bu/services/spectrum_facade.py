@@ -11,7 +11,16 @@ from app.bu.services.scan_resolver import resolve_ms1_scan, resolve_ms2_scan, re
 from app.bu.services.theoretical_fragments import match_by_ions
 from app.schemas import BuSpectrumMarker, BuSpectrumPrecursor, BuSpectrumV1
 from app.services import spectrum_memory_wiring
-from app.spectrum_memory import CapacityError, NotResidentError, get_mzml_run_spectra
+from app.services.mzml_scan_reader import (
+    MzmlFileNotFoundError,
+    MzmlIndexError,
+    MzmlMappingError,
+    RunNotFoundError,
+    SpectrumNotFoundError,
+    UnsupportedMzmlError,
+    get_spectrum_by_scan,
+)
+from app.spectrum_memory import CapacityError, NotResidentError, get_mzml_run_spectra, release_dataset
 
 
 def _json_object(raw: Any) -> dict[str, Any]:
@@ -20,6 +29,30 @@ def _json_object(raw: Any) -> dict[str, Any]:
 
 def _raw_format(match: dict[str, Any]) -> str:
     return str(_json_object(match.get("run_metadata")).get("raw_format") or "").lower()
+
+
+def _positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _explicit_ms2_scan(match: dict[str, Any], scan: int | None) -> int | None:
+    requested = _positive_int(scan)
+    if requested is not None:
+        return requested
+    meta = _json_object(match.get("extra_metadata"))
+    for value in (
+        meta.get("resolved_scan"),
+        meta.get("ms2_scan"),
+        match.get("scan_number"),
+    ):
+        resolved = _positive_int(value)
+        if resolved is not None:
+            return resolved
+    return None
 
 
 def ensure_mzml_match(match: dict[str, Any]) -> None:
@@ -45,6 +78,29 @@ def get_run_spectra(session: Session, dataset_id: int, run_id: int) -> dict[int,
     if spectra is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="run_spectra_not_found")
     return spectra
+
+
+def _get_indexed_ms2(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    scan: int,
+) -> dict[str, Any]:
+    try:
+        spec, path_committed = get_spectrum_by_scan(session, dataset_id, run_id, scan)
+    except (RunNotFoundError, MzmlFileNotFoundError, SpectrumNotFoundError) as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except MzmlMappingError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except UnsupportedMzmlError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    except MzmlIndexError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
+    if path_committed:
+        release_dataset(dataset_id)
+    if int(spec.get("ms_level") or 1) != 2:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="ms2_scan_not_found")
+    return spec
 
 
 def _precursor_payload(raw: dict[str, Any] | None) -> BuSpectrumPrecursor | None:
@@ -95,13 +151,20 @@ def get_match_ms2(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="scan_and_rt_are_mutually_exclusive")
     dataset_id = int(dataset["dataset_id"])
     run_id = int(match["run_id"])
-    spectra = get_run_spectra(session, dataset_id, run_id)
-    selected_scan = scan
-    if selected_scan is None:
-        selected_scan = resolve_ms2_scan_at_rt(match, spectra, rt) if rt is not None else resolve_ms2_scan(match, spectra)
-    spec = spectra.get(selected_scan)
-    if spec is None or int(spec.get("ms_level") or 1) != 2:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="ms2_scan_not_found")
+    selected_scan = None if rt is not None else _explicit_ms2_scan(match, scan)
+    if selected_scan is not None:
+        spec = _get_indexed_ms2(session, dataset_id, run_id, selected_scan)
+    else:
+        # TODO: replace RT/isolation-window resolution with a lightweight RT index.
+        spectra = get_run_spectra(session, dataset_id, run_id)
+        fallback_scan = (
+            resolve_ms2_scan_at_rt(match, spectra, rt)
+            if rt is not None
+            else resolve_ms2_scan(match, spectra)
+        )
+        spec = spectra.get(fallback_scan)
+        if spec is None or int(spec.get("ms_level") or 1) != 2:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="ms2_scan_not_found")
     mz = [float(v) for v in (spec.get("mz") or [])]
     intensity = [float(v) for v in (spec.get("intensity") or [])]
     matched_ions = match_by_ions(
@@ -122,6 +185,7 @@ def get_match_ms1(
     ensure_mzml_match(match)
     dataset_id = int(dataset["dataset_id"])
     run_id = int(match["run_id"])
+    # TODO: resolve the best nearby MS1 through a lightweight RT/scan index.
     spectra = get_run_spectra(session, dataset_id, run_id)
     scan = resolve_ms1_scan(match, spectra)
     spec = spectra.get(scan)
