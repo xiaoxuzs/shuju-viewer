@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import builtins
+import os
 from pathlib import Path
 
 import pytest
@@ -18,13 +20,41 @@ def test_fingerprint_stable_ordering(tmp_path: Path) -> None:
     assert r1.file_count == 2
 
 
-def test_fingerprint_changes_when_content_changes(tmp_path: Path) -> None:
+def test_fingerprint_changes_when_nanosecond_mtime_changes(tmp_path: Path) -> None:
     f = tmp_path / "one.bin"
     f.write_bytes(b"hello")
     before = compute_dataset_metadata_fingerprint(tmp_path).fingerprint
     f.write_bytes(b"world")
+    first_stat = f.stat()
+    os.utime(
+        f,
+        ns=(
+            first_stat.st_atime_ns,
+            first_stat.st_mtime_ns + 1_000_000,
+        ),
+    )
     after = compute_dataset_metadata_fingerprint(tmp_path).fingerprint
     assert before != after
+
+
+def test_fingerprint_does_not_read_large_mzml_contents(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mzml = tmp_path / "large.mzML"
+    with mzml.open("wb") as handle:
+        handle.truncate(64 * 1024 * 1024)
+
+    def fail_open(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("fingerprint must not read file contents")
+
+    monkeypatch.setattr(builtins, "open", fail_open)
+    monkeypatch.setattr(Path, "open", fail_open)
+
+    result = compute_dataset_metadata_fingerprint(tmp_path)
+
+    assert result.file_count == 1
+    assert len(result.fingerprint) == 32
 
 
 def test_excludes_noise_files(tmp_path: Path) -> None:

@@ -10,7 +10,7 @@ resolves the TopPIC ingest root, computes a fast metadata fingerprint for
 duplicate detection, then runs the same universal ingest adapters as before.
 
 Progress phases include ``fingerprint``, ``init``, ``proteins``, ``matches``,
-and ``finalize``.
+``finalize``, and post-commit ``derived_data`` generation.
 """
 
 from __future__ import annotations
@@ -50,6 +50,7 @@ from app.services.mzml_mapping import (
     build_mapping_from_extracted_dataset,
     normalize_spectrum_file_name,
 )
+from app.services.post_import_derived_data import build_post_import_derived_data
 from app.spectrum_memory import release_dataset
 
 log = get_logger(__name__)
@@ -69,6 +70,7 @@ _PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
     "assign_toppic_runs_from_prsm_headers_s",
     "description_update_s",
     "db_finalize_paths_and_metadata_s",
+    "derived_data_backfill_s",
     "job_status_success_update_s",
     "total_path_import_worker_s",
 )
@@ -538,6 +540,53 @@ def _validate_bu_mzml_mapping(ingest_root: Path) -> None:
         raise RuntimeError("DIA-NN report did not map any Run value to an mzML file.")
 
 
+def _run_post_import_derived_data(job_id: str, dataset_id: int) -> str | None:
+    """Build derived data without turning a completed DB import into a failure."""
+    manual_command = (
+        f"python scripts/backfill_dataset_derived_data.py --dataset-id {dataset_id}"
+    )
+    _update_job(
+        job_id,
+        stage="derived_data",
+        stage_label="Building derived data",
+        stage_detail="Generating mzML scan indexes and applicable chromatogram summaries...",
+        message="Building derived data...",
+        progress=99.6,
+    )
+    try:
+        result = build_post_import_derived_data(dataset_id)
+    except Exception as exc:  # noqa: BLE001 - import data is already committed
+        log.exception(
+            "post-import derived-data build failed dataset_id=%s",
+            dataset_id,
+        )
+        return (
+            f"Derived data generation failed: {exc}. "
+            f"Retry with: {manual_command}"
+        )
+
+    failed_runs = [run for run in result.runs if run.error is not None]
+    if failed_runs:
+        failed_ids = ", ".join(str(run.run_id) for run in failed_runs)
+        log.warning(
+            "post-import derived-data build completed with errors "
+            "dataset_id=%s run_ids=%s",
+            dataset_id,
+            failed_ids,
+        )
+        return (
+            f"Derived data generation failed for run(s): {failed_ids}. "
+            f"Retry with: {manual_command}"
+        )
+
+    log.info(
+        "post-import derived-data build completed dataset_id=%s runs=%s",
+        dataset_id,
+        len(result.runs),
+    )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Background job runner
 # ---------------------------------------------------------------------------
@@ -890,19 +939,33 @@ def run_path_import_job(
             ) from exc
         _slice("db_finalize_paths_and_metadata_s")
 
+        derived_data_warning = _run_post_import_derived_data(
+            job_id,
+            stats.dataset_id,
+        )
+        _slice("derived_data_backfill_s")
+
+        final_detail = (
+            f"proteins={stats.proteins}, proteoforms={stats.proteoforms}, "
+            f"matches={stats.matches}"
+        )
+        if derived_data_warning is not None:
+            final_detail = f"{final_detail}. Warning: {derived_data_warning}"
+
         _update_job(
             job_id,
             status="success",
-            message="Import finished.",
+            message=(
+                "Import finished with derived data warnings."
+                if derived_data_warning is not None
+                else "Import finished."
+            ),
             error=None,
             dataset_slug=slug,
             progress=100.0,
             stage="success",
             stage_label=_PHASE_LABELS["success"],
-            stage_detail=(
-                f"proteins={stats.proteins}, proteoforms={stats.proteoforms}, "
-                f"matches={stats.matches}"
-            ),
+            stage_detail=final_detail,
         )
         _slice("job_status_success_update_s")
 
