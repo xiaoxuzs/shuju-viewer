@@ -130,6 +130,9 @@ def get_rt_mz_heatmap(
     bins_mz: int,
     decoy: bool,
 ) -> BuRtMzHeatmapOut:
+    if bins_rt <= 0 or bins_mz <= 0:
+        raise ValueError("RT-m/z heatmap bin counts must be positive")
+
     dataset_id = int(dataset["dataset_id"])
     clauses = [
         "dataset_id = :dataset_id",
@@ -145,54 +148,134 @@ def get_rt_mz_heatmap(
     if not decoy:
         clauses.append("COALESCE(is_decoy_match, false) = false")
 
-    rows = session.execute(
+    where_sql = " AND ".join(clauses)
+    bounds = session.execute(
         text(
             f"""
-            SELECT retention_time, precursor_mz
+            SELECT
+                min(retention_time) AS rt_min,
+                max(retention_time) AS rt_max,
+                min(precursor_mz) AS mz_min,
+                max(precursor_mz) AS mz_max,
+                count(*) AS total_points
             FROM identification_matches
-            WHERE {' AND '.join(clauses)}
+            WHERE {where_sql}
             """
         ),
         params,
-    ).mappings().all()
-    points = [(float(row["retention_time"]), float(row["precursor_mz"])) for row in rows]
-    return build_rt_mz_heatmap(points, bins_rt=bins_rt, bins_mz=bins_mz, run_id=run_id)
-
-
-def build_rt_mz_heatmap(
-    points: list[tuple[float, float]],
-    *,
-    bins_rt: int,
-    bins_mz: int,
-    run_id: int | None,
-) -> BuRtMzHeatmapOut:
-    if not points:
+    ).mappings().one()
+    total_points = int(bounds["total_points"] or 0)
+    if total_points == 0:
         return BuRtMzHeatmapOut(run_id=run_id)
 
-    rt_values = [point[0] for point in points]
-    mz_values = [point[1] for point in points]
-    rt_min, rt_max = min(rt_values), max(rt_values)
-    mz_min, mz_max = min(mz_values), max(mz_values)
+    rt_min = float(bounds["rt_min"])
+    rt_max = float(bounds["rt_max"])
+    mz_min = float(bounds["mz_min"])
+    mz_max = float(bounds["mz_max"])
     if rt_min == rt_max:
         rt_max = rt_min + 1.0
     if mz_min == mz_max:
         mz_max = mz_min + 1.0
 
-    rt_edges = _edges(rt_min, rt_max, bins_rt)
-    mz_edges = _edges(mz_min, mz_max, bins_mz)
-    counts = [[0 for _ in range(bins_mz)] for _ in range(bins_rt)]
-    for rt, mz in points:
-        rt_bin = min(max(int((rt - rt_min) / (rt_max - rt_min) * bins_rt), 0), bins_rt - 1)
-        mz_bin = min(max(int((mz - mz_min) / (mz_max - mz_min) * bins_mz), 0), bins_mz - 1)
-        counts[rt_bin][mz_bin] += 1
+    aggregate_params = {
+        **params,
+        "rt_min": rt_min,
+        "rt_max": rt_max,
+        "mz_min": mz_min,
+        "mz_max": mz_max,
+        "bins_rt": bins_rt,
+        "bins_mz": bins_mz,
+    }
+    # Viewer runs on PostgreSQL; width_bucket keeps raw identification rows in the database.
+    rows = session.execute(
+        text(
+            f"""
+            SELECT
+                LEAST(
+                    GREATEST(
+                        width_bucket(
+                            retention_time::double precision,
+                            :rt_min,
+                            :rt_max,
+                            :bins_rt
+                        ),
+                        1
+                    ),
+                    :bins_rt
+                ) - 1 AS rt_bin,
+                LEAST(
+                    GREATEST(
+                        width_bucket(
+                            precursor_mz::double precision,
+                            :mz_min,
+                            :mz_max,
+                            :bins_mz
+                        ),
+                        1
+                    ),
+                    :bins_mz
+                ) - 1 AS mz_bin,
+                count(*) AS point_count
+            FROM identification_matches
+            WHERE {where_sql}
+            GROUP BY rt_bin, mz_bin
+            ORDER BY rt_bin, mz_bin
+            """
+        ),
+        aggregate_params,
+    ).mappings().all()
+    return build_rt_mz_heatmap_from_bins(
+        rows,
+        rt_min=rt_min,
+        rt_max=rt_max,
+        mz_min=mz_min,
+        mz_max=mz_max,
+        bins_rt=bins_rt,
+        bins_mz=bins_mz,
+        total_points=total_points,
+        run_id=run_id,
+    )
 
-    max_count = max((max(row) for row in counts), default=0)
+
+def build_rt_mz_heatmap_from_bins(
+    rows: list[dict[str, Any]],
+    *,
+    rt_min: float,
+    rt_max: float,
+    mz_min: float,
+    mz_max: float,
+    bins_rt: int,
+    bins_mz: int,
+    total_points: int,
+    run_id: int | None,
+) -> BuRtMzHeatmapOut:
+    if len(rows) > bins_rt * bins_mz:
+        raise RuntimeError("RT-m/z aggregate returned more rows than available bins")
+
+    counts = [[0 for _ in range(bins_mz)] for _ in range(bins_rt)]
+    max_count = 0
+    aggregated_total = 0
+    seen: set[tuple[int, int]] = set()
+    for row in rows:
+        rt_bin = int(row["rt_bin"])
+        mz_bin = int(row["mz_bin"])
+        point_count = int(row["point_count"])
+        key = (rt_bin, mz_bin)
+        if not 0 <= rt_bin < bins_rt or not 0 <= mz_bin < bins_mz or key in seen:
+            raise RuntimeError("RT-m/z aggregate returned an invalid bin")
+        seen.add(key)
+        counts[rt_bin][mz_bin] = point_count
+        aggregated_total += point_count
+        max_count = max(max_count, point_count)
+    if aggregated_total != total_points:
+        raise RuntimeError("RT-m/z aggregate point count does not match bounds query")
+
     return BuRtMzHeatmapOut(
-        rt_edges=rt_edges,
-        mz_edges=mz_edges,
+        rt_edges=_edges(rt_min, rt_max, bins_rt),
+        mz_edges=_edges(mz_min, mz_max, bins_mz),
         counts=counts,
         max_count=max_count,
-        total_points=len(points),
+        total_points=total_points,
         run_id=run_id,
     )
 
