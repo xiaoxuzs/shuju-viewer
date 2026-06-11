@@ -410,3 +410,45 @@ def find_ms2_scans_by_rt_and_isolation(
         raise ScanMetadataNotFoundError("ms2_scans_not_found")
     order = np.lexsort((index.scan_number[positions], index.retention_time[positions]))
     return [_metadata_at(index, int(positions[int(item)])) for item in order]
+
+
+def find_nearest_ms2_scan(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    rt: float,
+    precursor_mz: float,
+    *,
+    max_delta_minutes: float | None = None,
+    derived_root: Path | None = None,
+) -> ScanMetadata:
+    """Find the nearest MS2 matching the legacy isolation-window semantics."""
+    if max_delta_minutes is not None and max_delta_minutes < 0:
+        raise ValueError("max_delta_minutes must be non-negative")
+    index = load_scan_index(session, dataset_id, run_id, derived_root=derived_root)
+    distance = np.abs(index.retention_time - float(rt))
+    target_present = np.isfinite(index.isolation_target_mz)
+    lower_bound = np.where(
+        np.isfinite(index.isolation_lower_mz),
+        index.isolation_lower_mz,
+        index.isolation_target_mz,
+    )
+    upper_bound = np.where(
+        np.isfinite(index.isolation_upper_mz),
+        index.isolation_upper_mz,
+        index.isolation_target_mz,
+    )
+    isolation_match = target_present & (precursor_mz >= lower_bound) & (precursor_mz <= upper_bound)
+    selected_match = (
+        ~target_present
+        & np.isfinite(index.precursor_mz)
+        & (np.abs(index.precursor_mz - float(precursor_mz)) <= 2.0)
+    )
+    mask = (index.ms_level == 2) & (isolation_match | selected_match)
+    if max_delta_minutes is not None:
+        mask &= distance <= max_delta_minutes
+    positions = np.flatnonzero(mask)
+    if positions.size == 0:
+        raise ScanMetadataNotFoundError("ms2_scan_not_found")
+    order = np.lexsort((index.scan_number[positions], distance[positions]))
+    return _metadata_at(index, int(positions[int(order[0])]))

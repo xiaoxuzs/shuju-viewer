@@ -479,3 +479,151 @@ def test_find_ms2_scans_by_rt_and_isolation_uses_absolute_bounds(
     )
 
     assert [result.scan_number for result in results] == [1]
+
+
+def test_find_nearest_ms2_scan_orders_by_rt_distance_then_scan(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "run.mzML"
+    source_path.write_bytes(b"source")
+    index = mzml_scan_index.build_scan_index_from_spectra(
+        [
+            _spectrum(
+                30,
+                ms_level=2,
+                rt_minutes=10.10,
+                intensity=[1.0],
+                target_mz=500.0,
+                lower_offset=10.0,
+                upper_offset=10.0,
+            ),
+            _spectrum(
+                20,
+                ms_level=2,
+                rt_minutes=9.95,
+                intensity=[1.0],
+                target_mz=500.0,
+                lower_offset=10.0,
+                upper_offset=10.0,
+            ),
+            _spectrum(
+                10,
+                ms_level=2,
+                rt_minutes=10.05,
+                intensity=[1.0],
+                target_mz=500.0,
+                lower_offset=10.0,
+                upper_offset=10.0,
+            ),
+        ]
+    )
+    derived_root = tmp_path / "derived"
+    mzml_scan_index.write_scan_index(
+        dataset_id=DATASET_ID,
+        run_id=RUN_ID,
+        source_path=source_path,
+        index=index,
+        derived_root=derived_root,
+    )
+    _use_source_path(monkeypatch, source_path)
+
+    result = mzml_scan_index.find_nearest_ms2_scan(
+        None,  # type: ignore[arg-type]
+        DATASET_ID,
+        RUN_ID,
+        10.0,
+        500.0,
+        max_delta_minutes=0.5,
+        derived_root=derived_root,
+    )
+
+    assert result.scan_number == 10
+
+
+def test_find_nearest_ms2_scan_supports_selected_mz_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "run.mzML"
+    source_path.write_bytes(b"source")
+    index = mzml_scan_index.build_scan_index_from_spectra(
+        [
+            _spectrum(
+                1,
+                ms_level=2,
+                rt_minutes=1.0,
+                intensity=[1.0],
+                selected_mz=501.5,
+            ),
+            _spectrum(
+                2,
+                ms_level=2,
+                rt_minutes=1.1,
+                intensity=[1.0],
+                selected_mz=600.0,
+            ),
+        ]
+    )
+    derived_root = tmp_path / "derived"
+    mzml_scan_index.write_scan_index(
+        dataset_id=DATASET_ID,
+        run_id=RUN_ID,
+        source_path=source_path,
+        index=index,
+        derived_root=derived_root,
+    )
+    _use_source_path(monkeypatch, source_path)
+
+    result = mzml_scan_index.find_nearest_ms2_scan(
+        None,  # type: ignore[arg-type]
+        DATASET_ID,
+        RUN_ID,
+        1.0,
+        500.0,
+        max_delta_minutes=0.5,
+        derived_root=derived_root,
+    )
+
+    assert result.scan_number == 1
+
+
+def test_find_nearest_ms2_scan_applies_optional_rt_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "run.mzML"
+    source_path.write_bytes(b"source")
+    index = mzml_scan_index.build_scan_index_from_spectra(
+        [
+            _spectrum(
+                1,
+                ms_level=2,
+                rt_minutes=2.0,
+                intensity=[1.0],
+                target_mz=500.0,
+                lower_offset=10.0,
+                upper_offset=10.0,
+            )
+        ]
+    )
+    derived_root = tmp_path / "derived"
+    mzml_scan_index.write_scan_index(
+        dataset_id=DATASET_ID,
+        run_id=RUN_ID,
+        source_path=source_path,
+        index=index,
+        derived_root=derived_root,
+    )
+    _use_source_path(monkeypatch, source_path)
+
+    with pytest.raises(mzml_scan_index.ScanMetadataNotFoundError):
+        mzml_scan_index.find_nearest_ms2_scan(
+            None,  # type: ignore[arg-type]
+            DATASET_ID,
+            RUN_ID,
+            1.0,
+            500.0,
+            max_delta_minutes=0.5,
+            derived_root=derived_root,
+        )

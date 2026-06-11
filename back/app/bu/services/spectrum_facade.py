@@ -7,10 +7,18 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.bu.services.scan_resolver import resolve_ms1_scan, resolve_ms2_scan, resolve_ms2_scan_at_rt
 from app.bu.services.theoretical_fragments import match_by_ions
 from app.schemas import BuSpectrumMarker, BuSpectrumPrecursor, BuSpectrumV1
 from app.services import spectrum_memory_wiring
+from app.services.mzml_scan_index import (
+    ScanIndexError,
+    ScanIndexMissingError,
+    ScanIndexStaleError,
+    ScanIndexUnsupportedError,
+    ScanMetadataNotFoundError,
+    find_nearest_ms1_scan,
+    find_nearest_ms2_scan,
+)
 from app.services.mzml_scan_reader import (
     MzmlFileNotFoundError,
     MzmlIndexError,
@@ -37,6 +45,18 @@ def _positive_int(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def _float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _rt_apex(match: dict[str, Any]) -> float | None:
+    meta = _json_object(match.get("extra_metadata"))
+    return _float(match.get("retention_time")) or _float(meta.get("rt_apex"))
 
 
 def _explicit_ms2_scan(match: dict[str, Any], scan: int | None) -> int | None:
@@ -80,11 +100,14 @@ def get_run_spectra(session: Session, dataset_id: int, run_id: int) -> dict[int,
     return spectra
 
 
-def _get_indexed_ms2(
+def _get_indexed_spectrum(
     session: Session,
     dataset_id: int,
     run_id: int,
     scan: int,
+    *,
+    expected_ms_level: int,
+    not_found_detail: str,
 ) -> dict[str, Any]:
     try:
         spec, path_committed = get_spectrum_by_scan(session, dataset_id, run_id, scan)
@@ -98,9 +121,54 @@ def _get_indexed_ms2(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
     if path_committed:
         release_dataset(dataset_id)
-    if int(spec.get("ms_level") or 1) != 2:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="ms2_scan_not_found")
+    if int(spec.get("ms_level") or 1) != expected_ms_level:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=not_found_detail)
     return spec
+
+
+def _get_indexed_ms2(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    scan: int,
+) -> dict[str, Any]:
+    return _get_indexed_spectrum(
+        session,
+        dataset_id,
+        run_id,
+        scan,
+        expected_ms_level=2,
+        not_found_detail="ms2_scan_not_found",
+    )
+
+
+def _scan_index_error(
+    exc: Exception,
+    *,
+    dataset_id: int,
+    run_id: int,
+) -> HTTPException:
+    command = (
+        "python scripts/backfill_mzml_scan_indexes.py "
+        f"--dataset-id {dataset_id} --run-id {run_id}"
+    )
+    if isinstance(exc, ScanIndexMissingError):
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"error": "scan_index_missing", "backfill_command": command},
+        )
+    if isinstance(exc, ScanIndexStaleError):
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"error": "scan_index_stale", "backfill_command": command},
+        )
+    if isinstance(exc, (RunNotFoundError, MzmlFileNotFoundError)):
+        return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if isinstance(exc, MzmlMappingError):
+        return HTTPException(status.HTTP_409_CONFLICT, detail=str(exc))
+    if isinstance(exc, ScanIndexUnsupportedError):
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
+    return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 
 def _precursor_payload(raw: dict[str, Any] | None) -> BuSpectrumPrecursor | None:
@@ -155,16 +223,46 @@ def get_match_ms2(
     if selected_scan is not None:
         spec = _get_indexed_ms2(session, dataset_id, run_id, selected_scan)
     else:
-        # TODO: replace RT/isolation-window resolution with a lightweight RT index.
-        spectra = get_run_spectra(session, dataset_id, run_id)
-        fallback_scan = (
-            resolve_ms2_scan_at_rt(match, spectra, rt)
-            if rt is not None
-            else resolve_ms2_scan(match, spectra)
-        )
-        spec = spectra.get(fallback_scan)
-        if spec is None or int(spec.get("ms_level") or 1) != 2:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="ms2_scan_not_found")
+        rt_target = rt if rt is not None else _rt_apex(match)
+        precursor_mz = _float(match.get("precursor_mz"))
+        error_name = "ms2_scan_not_found_for_rt" if rt is not None else "ms2_scan_not_found"
+        if rt_target is None or precursor_mz is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": error_name,
+                    "match_id": match.get("match_id"),
+                    "rt" if rt is not None else "rt_apex": rt_target,
+                    "precursor_mz": precursor_mz,
+                },
+            )
+        try:
+            candidate = find_nearest_ms2_scan(
+                session,
+                dataset_id,
+                run_id,
+                rt_target,
+                precursor_mz,
+                max_delta_minutes=None if rt is not None else 0.5,
+            )
+        except ScanMetadataNotFoundError as exc:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": error_name,
+                    "match_id": match.get("match_id"),
+                    "rt" if rt is not None else "rt_apex": rt_target,
+                    "precursor_mz": precursor_mz,
+                },
+            ) from exc
+        except (
+            ScanIndexError,
+            RunNotFoundError,
+            MzmlFileNotFoundError,
+            MzmlMappingError,
+        ) as exc:
+            raise _scan_index_error(exc, dataset_id=dataset_id, run_id=run_id) from exc
+        spec = _get_indexed_ms2(session, dataset_id, run_id, candidate.scan_number)
     mz = [float(v) for v in (spec.get("mz") or [])]
     intensity = [float(v) for v in (spec.get("intensity") or [])]
     matched_ions = match_by_ions(
@@ -185,12 +283,48 @@ def get_match_ms1(
     ensure_mzml_match(match)
     dataset_id = int(dataset["dataset_id"])
     run_id = int(match["run_id"])
-    # TODO: resolve the best nearby MS1 through a lightweight RT/scan index.
-    spectra = get_run_spectra(session, dataset_id, run_id)
-    scan = resolve_ms1_scan(match, spectra)
-    spec = spectra.get(scan)
-    if spec is None or int(spec.get("ms_level") or 1) != 1:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="ms1_scan_not_found")
+    rt_apex = _rt_apex(match)
+    if rt_apex is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "ms1_scan_not_found",
+                "match_id": match.get("match_id"),
+                "rt_apex": rt_apex,
+            },
+        )
+    try:
+        candidate = find_nearest_ms1_scan(
+            session,
+            dataset_id,
+            run_id,
+            rt_apex,
+            window_minutes=0.25,
+        )
+    except ScanMetadataNotFoundError as exc:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "ms1_scan_not_found",
+                "match_id": match.get("match_id"),
+                "rt_apex": rt_apex,
+            },
+        ) from exc
+    except (
+        ScanIndexError,
+        RunNotFoundError,
+        MzmlFileNotFoundError,
+        MzmlMappingError,
+    ) as exc:
+        raise _scan_index_error(exc, dataset_id=dataset_id, run_id=run_id) from exc
+    spec = _get_indexed_spectrum(
+        session,
+        dataset_id,
+        run_id,
+        candidate.scan_number,
+        expected_ms_level=1,
+        not_found_detail="ms1_scan_not_found",
+    )
     precursor_mz = match.get("precursor_mz")
     charge_raw = match.get("precursor_charge")
     try:
