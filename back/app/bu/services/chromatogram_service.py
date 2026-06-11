@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.bu.tdf_reader import chromatogram as tdf_chromatogram
 from app.bu.tdf_reader import dia_windows as tdf_dia_windows
 from app.bu.tdf_reader.session_cache import TdfpyUnavailable
-from app.bu.services.spectrum_facade import get_run_spectra
+from app.bu.services import chromatogram_summary
 from app.schemas import BuChromatogramOut, BuDiaWindowsOut
 
 MAX_POINTS = 8000
@@ -52,6 +52,11 @@ def get_chromatogram(
     *,
     chrom_type: Literal["tic", "bpc"],
 ) -> BuChromatogramOut:
+    if chrom_type not in {"tic", "bpc"}:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="invalid_chromatogram_type",
+        )
     dataset_id = int(dataset["dataset_id"])
     run = _run_row(session, dataset_id, run_id)
     run_meta = _json_object(run.get("run_metadata"))
@@ -66,22 +71,27 @@ def get_chromatogram(
     if raw_format != "mzml":
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="incompatible_run_format")
 
-    spectra = get_run_spectra(session, dataset_id, run_id)
-    points: list[tuple[float, float]] = []
-    for spec in spectra.values():
-        if int(spec.get("ms_level") or 1) != 1:
-            continue
-        values = [float(v) for v in (spec.get("intensity") or [])]
-        if chrom_type == "tic":
-            y = sum(values)
-        else:
-            y = max(values) if values else 0.0
-        rt_min = float(spec.get("rt_seconds") or 0.0) / 60.0
-        points.append((rt_min, y))
-    points.sort(key=lambda item: item[0])
-    rt = [p[0] for p in points]
-    intensity = [p[1] for p in points]
-    original = len(rt)
+    try:
+        source_path = chromatogram_summary.resolve_run_source_path(run)
+        summary = chromatogram_summary.load_summary(
+            dataset_id=dataset_id,
+            run_id=run_id,
+            source_path=source_path,
+        )
+    except chromatogram_summary.ChromatogramSummaryMissingError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="chromatogram_summary_missing",
+        ) from exc
+    except (chromatogram_summary.ChromatogramSummaryStaleError, FileNotFoundError) as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="chromatogram_summary_stale",
+        ) from exc
+
+    rt = summary.rt
+    intensity = summary.tic if chrom_type == "tic" else summary.bpc
+    original = summary.points_count
     rt, intensity, downsampled = _downsample(rt, intensity)
     return BuChromatogramOut(
         type=chrom_type,
