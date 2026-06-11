@@ -72,7 +72,7 @@ class _StrictPreIndexedMzML(mzml.PreIndexedMzML):
         return index
 
 
-def _resolve_run_mzml_path(
+def resolve_run_mzml_path(
     session: Session,
     dataset_id: int,
     run_id: int,
@@ -170,7 +170,7 @@ def _require_embedded_index(path: Path) -> None:
         raise UnsupportedMzmlError("mzML does not contain an embedded indexListOffset")
 
 
-def _scan_number(native_id: str) -> int | None:
+def parse_native_scan_number(native_id: str) -> int | None:
     match = _NATIVE_SCAN_RE.search(native_id)
     return int(match.group(1)) if match else None
 
@@ -195,7 +195,7 @@ def _store_scan_index(
 def _build_scan_index(native_ids: Any) -> dict[int, str]:
     scan_index: dict[int, str] = {}
     for native_id in native_ids:
-        scan_number = _scan_number(str(native_id))
+        scan_number = parse_native_scan_number(str(native_id))
         if scan_number is None:
             continue
         existing = scan_index.get(scan_number)
@@ -245,5 +245,5 @@ def get_spectrum_by_scan(
     run_id: int,
     scan_number: int,
 ) -> tuple[dict[str, Any], bool]:
-    path, path_committed = _resolve_run_mzml_path(session, dataset_id, run_id)
+    path, path_committed = resolve_run_mzml_path(session, dataset_id, run_id)
     return read_indexed_spectrum(path, scan_number), path_committed
