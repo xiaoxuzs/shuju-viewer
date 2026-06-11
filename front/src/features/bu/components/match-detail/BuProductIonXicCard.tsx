@@ -2,7 +2,9 @@ import { useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LoaderCircle, X } from "lucide-react";
 
+import { PlotStatus } from "@/components/common/plot-status";
 import { cn } from "@/lib/utils";
+import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 import { fetchBuMatchProductXics } from "@/features/bu/api/buClient";
 import { BuProductIonXicChart } from "@/features/bu/components/spectrum/BuProductIonXicChart";
 import type { BuMatchedIon } from "@/features/bu/types";
@@ -97,6 +99,7 @@ export function BuProductIonXicCard({
     queryFn: () => fetchBuMatchProductXics(slug, matchId, request),
     enabled: available && selections.length > 0,
     staleTime: PRODUCT_XIC_STALE_TIME_MS,
+    retry: chartQueryRetry,
   });
   const traceById = useMemo(
     () => productIonBatchTraceMap(batchQuery.data),
@@ -109,6 +112,13 @@ export function BuProductIonXicCard({
   const allFailed =
     selections.length > 0
     && selections.every((selection) => traceById.get(selection.id)?.status === "error");
+  const allNoSignal =
+    selections.length > 0
+    && batchQuery.data !== undefined
+    && (
+      batchQuery.data.traces.length === 0
+      || selections.every((selection) => traceById.get(selection.id)?.status === "no_signal")
+    );
   const addTopDisabled =
     !available
     || matchedIons.length === 0
@@ -214,15 +224,24 @@ export function BuProductIonXicCard({
       ) : matchedIons.length === 0 ? (
         <EmptyState text="No matched fragment ions available for product ion XIC." />
       ) : selections.length === 0 ? (
-        <EmptyState text="No product ion selected. Click a matched fragment peak in the MS2 spectrum to add a product ion XIC." />
+        <EmptyState text="Select product ions to display product XIC." />
       ) : (
         <>
           {(batchQuery.isPending || batchQuery.isFetching) && traces.length === 0 && (
-            <EmptyState text="Loading product ion XIC..." />
+            <PlotStatus kind="loading" title="Loading product XIC..." className="mt-4 min-h-48" />
           )}
-          {batchQuery.isError && <EmptyState text="Failed to load product ion XIC." tone="error" />}
-          {allFailed && <EmptyState text="Failed to load product ion XIC." tone="error" />}
-          {!batchQuery.isError && traces.length > 0 && (
+          {batchQuery.isError && <ProductXicErrorState error={batchQuery.error} />}
+          {!batchQuery.isError && allFailed && (
+            <PlotStatus kind="error" title="Failed to load product ion XIC." className="mt-4 min-h-48" />
+          )}
+          {!batchQuery.isError && !allFailed && allNoSignal && (
+            <PlotStatus
+              kind="no_signal"
+              title="No product ion signal in the selected range."
+              className="mt-4 min-h-48"
+            />
+          )}
+          {!batchQuery.isError && !allFailed && !allNoSignal && traces.length > 0 && (
             <BuProductIonXicChart
               traces={traces}
               mode={mode}
@@ -240,38 +259,68 @@ export function BuProductIonXicCard({
               ]}
             />
           )}
-          <div className="mt-2 space-y-1 text-xs">
-            {selections.map((selection) => {
-              const trace = traceById.get(selection.id);
-              if (trace?.status === "error") {
-                return (
-                  <p key={selection.id} className="text-destructive">
-                    Failed to load product ion XIC for {productIonLabel(selection)}.
-                  </p>
-                );
-              }
-              if (trace?.status === "no_signal") {
-                return (
-                  <p key={selection.id} className="text-muted-foreground">
-                    No signal detected for {productIonLabel(selection)} in the selected RT window.
-                  </p>
-                );
-              }
-              return null;
-            })}
-          </div>
+          {!allNoSignal && (
+            <div className="mt-2 space-y-1 text-xs">
+              {selections.map((selection) => {
+                const trace = traceById.get(selection.id);
+                if (trace?.status === "error") {
+                  return (
+                    <p key={selection.id} className="text-destructive">
+                      Failed to load product ion XIC for {productIonLabel(selection)}.
+                    </p>
+                  );
+                }
+                if (trace?.status === "no_signal") {
+                  return (
+                    <p key={selection.id} className="text-muted-foreground">
+                      No signal detected for {productIonLabel(selection)} in the selected RT window.
+                    </p>
+                  );
+                }
+                return null;
+              })}
+            </div>
+          )}
         </>
       )}
     </section>
   );
 }
 
-function EmptyState({ text, tone = "muted" }: { text: string; tone?: "muted" | "error" }) {
+function ProductXicErrorState({ error }: { error: unknown }) {
+  const parsed = parseApiError(error);
+  if (parsed.kind === "scan_index_missing") {
+    return (
+      <PlotStatus
+        kind="derived_missing"
+        title="Derived scan index is not ready."
+        command={parsed.backfillCommand}
+        className="mt-4 min-h-48"
+      />
+    );
+  }
+  if (parsed.kind === "scan_index_stale") {
+    return (
+      <PlotStatus
+        kind="derived_stale"
+        title="Derived scan index is stale."
+        command={parsed.backfillCommand}
+        className="mt-4 min-h-48"
+      />
+    );
+  }
+  if (parsed.kind === "unsupported_raw_format" || parsed.kind === "indexed_mzml_unsupported") {
+    return <PlotStatus kind="unsupported" className="mt-4 min-h-48" />;
+  }
+  return <PlotStatus kind="error" title="Failed to load product ion XIC." className="mt-4 min-h-48" />;
+}
+
+function EmptyState({ text }: { text: string }) {
   return (
     <div
       className={cn(
         "mt-4 rounded-md border border-dashed px-4 py-8 text-center text-sm",
-        tone === "error" ? "text-destructive" : "text-muted-foreground",
+        "text-muted-foreground",
       )}
     >
       {text}

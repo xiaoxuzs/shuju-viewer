@@ -5,6 +5,7 @@ import { RotateCcw } from "lucide-react";
 
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageLoading } from "@/components/common/page-loading";
+import { PlotStatus } from "@/components/common/plot-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -34,6 +35,7 @@ import { BuSpectrumChart } from "@/features/bu/components/spectrum/BuSpectrumCha
 import { BuXicChart, type BuXicPointSelection } from "@/features/bu/components/spectrum/BuXicChart";
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
+import type { BuSpectrumV1, BuXicOut } from "@/features/bu/types";
 import {
   RT_LINK_TOLERANCE_MIN,
   SCAN_UNAVAILABLE_REASON,
@@ -42,6 +44,7 @@ import {
   inspectedRtSourceLabel,
   type InspectedRtSource,
 } from "@/features/bu/utils";
+import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 
 const MS2_PPM = 20;
 const XIC_PPM = 10;
@@ -77,6 +80,7 @@ export function BuMatchDetailPage() {
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "xic", XIC_PPM],
     queryFn: () => fetchBuMatchXic(dataset.slug, parsedMatchId, XIC_PPM),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
+    retry: chartQueryRetry,
   });
   const ms2 = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms2", MS2_PPM, selectedRt ?? "default"],
@@ -88,16 +92,19 @@ export function BuMatchDetailPage() {
         selectedRt !== null ? { rt: selectedRt } : {},
       ),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
+    retry: chartQueryRetry,
   });
   const ms1 = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms1"],
     queryFn: () => fetchBuMatchMs1(dataset.slug, parsedMatchId),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
+    retry: chartQueryRetry,
   });
   const mobility = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "mobility-slice"],
     queryFn: () => fetchBuMatchMobilitySlice(dataset.slug, parsedMatchId),
     enabled: !!isBruker && Number.isFinite(parsedMatchId),
+    retry: chartQueryRetry,
   });
 
   useEffect(() => {
@@ -217,9 +224,13 @@ export function BuMatchDetailPage() {
 
       {isMzml ? (
         <>
-          {xic.isLoading && <Skeleton className="h-56" />}
-          {xic.error && <DataLoadError compact />}
-          {xic.data && (
+          {xic.isLoading ? (
+            <PlotStatus kind="loading" title="Loading precursor XIC..." />
+          ) : xic.error ? (
+            <MatchPlotErrorState error={xic.error} plot="xic" />
+          ) : xic.data && !hasXicSignal(xic.data) ? (
+            <PlotStatus kind="no_signal" title="No precursor signal in the selected range." />
+          ) : xic.data ? (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Precursor XIC</CardTitle>
@@ -250,10 +261,14 @@ export function BuMatchDetailPage() {
                 />
               </CardContent>
             </Card>
-          )}
-          {ms1.isLoading && <Skeleton className="h-64" />}
-          {ms1.error && <DataLoadError compact />}
-          {ms1.data && (
+          ) : null}
+          {ms1.isLoading ? (
+            <PlotStatus kind="loading" title="Loading MS1 spectrum..." className="min-h-64" />
+          ) : ms1.error ? (
+            <MatchPlotErrorState error={ms1.error} plot="spectrum" />
+          ) : ms1.data && !hasSpectrumPeaks(ms1.data) ? (
+            <PlotStatus kind="empty" title="No MS1 spectrum peaks are available." className="min-h-64" />
+          ) : ms1.data ? (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">MS1 spectrum from mzML</CardTitle>
@@ -271,10 +286,14 @@ export function BuMatchDetailPage() {
                 />
               </CardContent>
             </Card>
-          )}
-          {ms2.isLoading && <Skeleton className="h-64" />}
-          {ms2.error && <DataLoadError compact />}
-          {ms2.data && (
+          ) : null}
+          {ms2.isLoading ? (
+            <PlotStatus kind="loading" title="Loading MS2 spectrum..." className="min-h-64" />
+          ) : ms2.error ? (
+            <MatchPlotErrorState error={ms2.error} plot="spectrum" />
+          ) : ms2.data && !hasSpectrumPeaks(ms2.data) ? (
+            <PlotStatus kind="empty" title="No MS2 spectrum peaks are available." className="min-h-64" />
+          ) : ms2.data ? (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Live mzML MS2 matching</CardTitle>
@@ -332,7 +351,7 @@ export function BuMatchDetailPage() {
                 />
               </CardContent>
             </Card>
-          )}
+          ) : null}
         </>
       ) : (
         <>
@@ -373,7 +392,7 @@ export function BuMatchDetailPage() {
               </CardHeader>
               <CardContent>
                 {mobility.isLoading && <Skeleton className="h-72" />}
-                {mobility.error && <DataLoadError compact />}
+                {Boolean(mobility.error) && <DataLoadError compact />}
                 {mobility.data && <MzMobilityScatter slice={mobility.data} />}
               </CardContent>
             </Card>
@@ -451,6 +470,66 @@ export function BuMatchDetailPage() {
         </BuChartModal>
       )}
     </div>
+  );
+}
+
+function hasXicSignal(xic: BuXicOut): boolean {
+  if (xic.rt.length === 0) return false;
+  const traces = xic.traces.length > 0 ? xic.traces.map((trace) => trace.intensity) : [xic.intensity];
+  return traces.some((intensities) => intensities.some((value) => Number.isFinite(value) && value > 0));
+}
+
+function hasSpectrumPeaks(spectrum: BuSpectrumV1): boolean {
+  return spectrum.mz.length > 0 && spectrum.intensity.length > 0;
+}
+
+function MatchPlotErrorState({ error, plot }: { error: unknown; plot: "xic" | "spectrum" }) {
+  const parsed = parseApiError(error);
+  if (parsed.kind === "scan_index_missing") {
+    return (
+      <PlotStatus
+        kind="derived_missing"
+        title="Derived scan index is not ready."
+        command={parsed.backfillCommand}
+      />
+    );
+  }
+  if (parsed.kind === "scan_index_stale") {
+    return (
+      <PlotStatus
+        kind="derived_stale"
+        title="Derived scan index is stale."
+        command={parsed.backfillCommand}
+      />
+    );
+  }
+  if (parsed.kind === "unsupported_raw_format") {
+    return <PlotStatus kind="unsupported" />;
+  }
+  if (parsed.kind === "indexed_mzml_unsupported") {
+    return (
+      <PlotStatus
+        kind="unsupported"
+        title="This mzML file does not support indexed spectrum access."
+      />
+    );
+  }
+  if (parsed.kind === "not_found") {
+    return (
+      <PlotStatus
+        kind="not_found"
+        title={plot === "spectrum" ? "The requested spectrum could not be found." : undefined}
+      />
+    );
+  }
+  if (parsed.kind === "no_signal") {
+    return <PlotStatus kind="no_signal" />;
+  }
+  return (
+    <PlotStatus
+      kind="error"
+      title={plot === "spectrum" ? "Something went wrong while loading this spectrum." : undefined}
+    />
   );
 }
 

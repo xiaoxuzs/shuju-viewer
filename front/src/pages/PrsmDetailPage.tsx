@@ -10,11 +10,12 @@ import { RotateCcw } from "lucide-react";
 import { fetchDataset, fetchMs1Spectrum, fetchMs2Spectrum, fetchMzmlSpectrum, fetchPrsm } from "@/api/client";
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageLoading } from "@/components/common/page-loading";
+import { PlotStatus } from "@/components/common/plot-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/common/stat";
 import { Badge } from "@/components/ui/badge";
+import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 import { formatEValue, formatNumber } from "@/lib/utils";
 
 import {
@@ -115,6 +116,7 @@ export function PrsmDetailPage() {
       (spectraSource === "mzml_memory"
         ? ms1Scan != null && Number.isFinite(ms1Scan)
         : ms1Id != null && Number.isFinite(ms1Id)),
+    retry: chartQueryRetry,
   });
   const ms2Query = useQuery({
     queryKey: ["ms2", spectraSource, slug, prsm?.run_id, ms2Id, ms2Scan],
@@ -132,6 +134,7 @@ export function PrsmDetailPage() {
       (spectraSource === "mzml_memory"
         ? ms2Scan != null && Number.isFinite(ms2Scan)
         : ms2Id != null && Number.isFinite(ms2Id)),
+    retry: chartQueryRetry,
   });
 
   // Memoize the chart-peak arrays so the inline and modal charts share the
@@ -320,9 +323,9 @@ export function PrsmDetailPage() {
           </CardHeader>
           <CardContent>
             {ms1Query.isLoading ? (
-              <Skeleton className="h-[240px]" />
+              <PlotStatus kind="loading" title="Loading MS1 spectrum..." className="min-h-[240px]" />
             ) : ms1Query.isError ? (
-              <DataLoadError compact />
+              <PrsmSpectrumErrorState error={ms1Query.error} />
             ) : (
               <SpectrumChart
                 key={`ms1-inline-${spectraSource}-${ms1Scan ?? ms1Id ?? "none"}-${spectrumIntensityMode}`}
@@ -348,9 +351,9 @@ export function PrsmDetailPage() {
           </CardHeader>
           <CardContent>
             {ms2Query.isLoading ? (
-              <Skeleton className="h-[260px]" />
+              <PlotStatus kind="loading" title="Loading MS2 spectrum..." className="min-h-[260px]" />
             ) : ms2Query.isError ? (
-              <DataLoadError compact />
+              <PrsmSpectrumErrorState error={ms2Query.error} />
             ) : (
               <SpectrumChart
                 key={`ms2-inline-${spectraSource}-${ms2Scan ?? ms2Id ?? "none"}-${spectrumIntensityMode}`}
@@ -481,6 +484,35 @@ export function PrsmDetailPage() {
         </SpectrumModal>
       )}
     </>
+  );
+}
+
+function PrsmSpectrumErrorState({ error }: { error: unknown }) {
+  const parsed = parseApiError(error);
+  if (parsed.kind === "indexed_mzml_unsupported") {
+    return (
+      <PlotStatus
+        kind="unsupported"
+        title="This mzML file does not support indexed spectrum access."
+        className="min-h-[240px]"
+      />
+    );
+  }
+  if (parsed.kind === "not_found") {
+    return (
+      <PlotStatus
+        kind="not_found"
+        title="The requested spectrum could not be found."
+        className="min-h-[240px]"
+      />
+    );
+  }
+  return (
+    <PlotStatus
+      kind="error"
+      title="Something went wrong while loading this spectrum."
+      className="min-h-[240px]"
+    />
   );
 }
 

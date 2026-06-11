@@ -117,6 +117,14 @@ async function mockMzmlMatch(
   scanNumber: number | null | undefined = -1,
   productFailureMz?: number,
   productBatchStatus = 200,
+  options: {
+    endpointErrors?: Partial<Record<"xic" | "ms1" | "ms2" | "product", {
+      status: number;
+      detail: unknown;
+    }>>;
+    xicBody?: typeof xic;
+    productNoSignal?: boolean;
+  } = {},
 ) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -127,12 +135,48 @@ async function mockMzmlMatch(
       }
       return fulfillJson(route, matchDetail("mzml", scanNumber));
     }
-    if (url.pathname.endsWith("/matches/1/xic")) return fulfillJson(route, xic);
-    if (url.pathname.endsWith("/matches/1/spectrum/ms1")) return fulfillJson(route, spectrum(500, 92.45, 1));
+    if (url.pathname.endsWith("/matches/1/xic")) {
+      const failure = options.endpointErrors?.xic;
+      if (failure) {
+        return route.fulfill({
+          status: failure.status,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: failure.detail }),
+        });
+      }
+      return fulfillJson(route, options.xicBody ?? xic);
+    }
+    if (url.pathname.endsWith("/matches/1/spectrum/ms1")) {
+      const failure = options.endpointErrors?.ms1;
+      if (failure) {
+        return route.fulfill({
+          status: failure.status,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: failure.detail }),
+        });
+      }
+      return fulfillJson(route, spectrum(500, 92.45, 1));
+    }
     if (url.pathname.endsWith("/matches/1/spectrum/ms2")) {
+      const failure = options.endpointErrors?.ms2;
+      if (failure) {
+        return route.fulfill({
+          status: failure.status,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: failure.detail }),
+        });
+      }
       return fulfillJson(route, url.searchParams.has("rt") ? spectrum(67727, 93.01, 2) : spectrum(67726, 92.46, 2));
     }
     if (url.pathname.endsWith("/matches/1/product-xics")) {
+      const failure = options.endpointErrors?.product;
+      if (failure) {
+        return route.fulfill({
+          status: failure.status,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: failure.detail }),
+        });
+      }
       if (productBatchStatus >= 400) {
         return route.fulfill({ status: productBatchStatus, contentType: "application/json", body: "{}" });
       }
@@ -151,10 +195,15 @@ async function mockMzmlMatch(
         traces: request.ions.map((ion) => ({
           ...ion,
           tolerance_ppm: request.tolerance_ppm,
-          status: ion.mz === productFailureMz ? "error" : "ok",
+          status: ion.mz === productFailureMz ? "error" : options.productNoSignal ? "no_signal" : "ok",
           error: ion.mz === productFailureMz ? "failed" : null,
           points: ion.mz === productFailureMz
             ? []
+            : options.productNoSignal
+              ? [
+                  { rt: 92.15, intensity: 0, scan: 67720 },
+                  { rt: 92.46, intensity: 0, scan: 67726 },
+                ]
             : [
                 { rt: 92.15, intensity: 20, scan: 67720 },
                 { rt: 92.46, intensity: 100, scan: 67726 },
@@ -216,7 +265,7 @@ test("precursor XIC selects MS2 and matched ion toggles product XIC comparison",
   const productCard = page.getByTestId("product-ion-xic-card");
   await expect(productCard.getByRole("heading", { name: "Product ion XIC comparison" })).toBeVisible();
   await expect(productCard).toContainText(
-    "No product ion selected. Click a matched fragment peak in the MS2 spectrum to add a product ion XIC.",
+    "Select product ions to display product XIC.",
   );
   await expect(page.getByText(/MS1 extracted ion chromatogram for the precursor/)).toBeVisible();
   await expect(page.getByTestId("ms2-current-rt")).toContainText("MS2 scan #67726");
@@ -263,7 +312,7 @@ test("precursor XIC selects MS2 and matched ion toggles product XIC comparison",
   await productCard.getByRole("button", { name: "Remove y5 product ion XIC" }).click();
   await expect(productCard.getByText("b2 125.0000 m/z")).toBeVisible();
   await productCard.getByRole("button", { name: "Clear all" }).click();
-  await expect(productCard).toContainText("No product ion selected.");
+  await expect(productCard).toContainText("Select product ions to display product XIC.");
 });
 
 test("adds top fragments, enforces the limit, and switches raw or normalized views", async ({ page }) => {
@@ -296,7 +345,7 @@ test("adds top fragments, enforces the limit, and switches raw or normalized vie
 
   await card.getByRole("button", { name: "Clear all" }).click();
   await expect(card).toContainText("Selected product ions: 0 / 8");
-  await expect(card).toContainText("No product ion selected.");
+  await expect(card).toContainText("Select product ions to display product XIC.");
   await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(0);
   await expect(page.locator('[data-testid="live-fragment-row"][data-product-ion-selected="true"]')).toHaveCount(0);
   await expect(page.locator('[data-testid="matched-spectrum-peak"][data-product-ion-selected="true"]')).toHaveCount(0);
@@ -349,6 +398,72 @@ test("batch request failure stays inside the product ion card", async ({ page })
   await row.getByRole("checkbox", { name: "Add y5 to product ion XIC" }).check();
 
   await expect(page.getByTestId("product-ion-xic-card")).toContainText("Failed to load product ion XIC.");
+  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+});
+
+test("scan-index missing XIC stays local and preserves its backfill command", async ({ page }) => {
+  const command = "python scripts/backfill_mzml_scan_indexes.py --dataset-id 39 --run-id 10";
+  await mockMzmlMatch(page, 0, -1, undefined, 200, {
+    endpointErrors: {
+      xic: {
+        status: 409,
+        detail: { error: "scan_index_missing", backfill_command: command },
+      },
+    },
+  });
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByText("Derived scan index is not ready.")).toBeVisible();
+  await expect(page.getByText(command)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MS1 spectrum from mzML" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+});
+
+test("empty precursor XIC shows a no-signal state without hiding spectra", async ({ page }) => {
+  await mockMzmlMatch(page, 0, -1, undefined, 200, {
+    xicBody: {
+      ...xic,
+      intensity: [0, 0, 0],
+      traces: xic.traces.map((trace) => ({ ...trace, intensity: [0, 0, 0] })),
+    },
+  });
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByText("No precursor signal in the selected range.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MS1 spectrum from mzML" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+});
+
+test("product XIC stale state stays inside the product card", async ({ page }) => {
+  const command = "python scripts/backfill_mzml_scan_indexes.py --dataset-id 39 --run-id 10";
+  await mockMzmlMatch(page, 0, -1, undefined, 200, {
+    endpointErrors: {
+      product: {
+        status: 409,
+        detail: { error: "scan_index_stale", backfill_command: command },
+      },
+    },
+  });
+  await page.goto("/datasets/demo/matches/1");
+
+  const row = page.getByTestId("live-fragment-row").filter({ hasText: "y5" });
+  await row.getByRole("checkbox", { name: "Add y5 to product ion XIC" }).check();
+
+  const card = page.getByTestId("product-ion-xic-card");
+  await expect(card.getByText("Derived scan index is stale.")).toBeVisible();
+  await expect(card.getByText(command)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+});
+
+test("all no-signal product traces show one local no-signal state", async ({ page }) => {
+  await mockMzmlMatch(page, 0, -1, undefined, 200, { productNoSignal: true });
+  await page.goto("/datasets/demo/matches/1");
+
+  const card = page.getByTestId("product-ion-xic-card");
+  await card.getByRole("button", { name: "Add top 3 fragments" }).click();
+
+  await expect(card.getByText("No product ion signal in the selected range.")).toBeVisible();
+  await expect(card.getByTestId("plot-series")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
 });
 

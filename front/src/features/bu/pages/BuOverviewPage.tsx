@@ -5,8 +5,8 @@ import { RotateCcw } from "lucide-react";
 
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageLoading } from "@/components/common/page-loading";
+import { PlotStatus } from "@/components/common/plot-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   fetchBuOverview,
   fetchBuRtMzHeatmap,
@@ -23,6 +23,7 @@ import { DiaWindowMap } from "@/features/bu/components/spectrum/DiaWindowMap";
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import { formatCount } from "@/features/bu/utils";
+import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 
 const ZOOM_HINT = "wheel to zoom (Shift = Y) · brush-drag = X";
 
@@ -43,11 +44,13 @@ export function BuOverviewPage() {
     queryKey: ["bu", dataset.slug, "chromatogram", selectedRun?.run_id, chromType],
     queryFn: () => fetchBuRunChromatogram(dataset.slug, selectedRun!.run_id, chromType),
     enabled: !!selectedRun,
+    retry: chartQueryRetry,
   });
   const diaWindows = useQuery({
     queryKey: ["bu", dataset.slug, "dia-windows", selectedRun?.run_id],
     queryFn: () => fetchBuRunDiaWindows(dataset.slug, selectedRun!.run_id),
     enabled: selectedRun?.raw_format === "bruker_d",
+    retry: chartQueryRetry,
   });
   const rtMz = useQuery({
     queryKey: ["bu", dataset.slug, "rt-mz", selectedRun?.run_id, qMax],
@@ -60,6 +63,7 @@ export function BuOverviewPage() {
         decoy: false,
       }),
     enabled: !!data && !!selectedRun,
+    retry: chartQueryRetry,
   });
 
   useEffect(() => {
@@ -108,11 +112,22 @@ export function BuOverviewPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {chromatogram.isLoading && <Skeleton className="h-60" />}
-          {chromatogram.error && <DataLoadError compact />}
-          {chromatogram.data && (
+          {chromatogram.isLoading ? (
+            <PlotStatus kind="loading" title={`Loading ${chromType.toUpperCase()} chromatogram...`} />
+          ) : chromatogram.error ? (
+            <ChromatogramErrorState
+              error={chromatogram.error}
+              command={
+                selectedRun
+                  ? `python scripts/backfill_dataset_derived_data.py --dataset-id ${dataset.id} --run-id ${selectedRun.run_id}`
+                  : null
+              }
+            />
+          ) : chromatogram.data?.rt.length === 0 ? (
+            <PlotStatus kind="empty" title="No chromatogram data available." />
+          ) : chromatogram.data ? (
             <BuChromatogramChart chromatogram={chromatogram.data} onOpenFull={() => setChromFullOpen(true)} />
-          )}
+          ) : null}
         </CardContent>
       </Card>
 
@@ -121,9 +136,15 @@ export function BuOverviewPage() {
           <CardTitle className="text-base">RT-m/z Identifications</CardTitle>
         </CardHeader>
         <CardContent>
-          {rtMz.isLoading && <Skeleton className="h-72" />}
-          {rtMz.error && <DataLoadError compact />}
-          {rtMz.data && <RtMzMiniHeatmap heatmap={rtMz.data} />}
+          {rtMz.isLoading ? (
+            <PlotStatus kind="loading" title="Loading RT-m/z heatmap..." className="min-h-72" />
+          ) : rtMz.error ? (
+            <PlotStatus kind="error" className="min-h-72" />
+          ) : rtMz.data?.total_points === 0 ? (
+            <PlotStatus kind="empty" title="No RT-m/z identifications available." className="min-h-72" />
+          ) : rtMz.data ? (
+            <RtMzMiniHeatmap heatmap={rtMz.data} />
+          ) : null}
         </CardContent>
       </Card>
 
@@ -133,9 +154,13 @@ export function BuOverviewPage() {
             <CardTitle className="text-base">DIA Isolation Windows</CardTitle>
           </CardHeader>
           <CardContent>
-            {diaWindows.isLoading && <Skeleton className="h-72" />}
-            {diaWindows.error && <DataLoadError compact />}
-            {diaWindows.data && <DiaWindowMap diaWindows={diaWindows.data} />}
+            {diaWindows.isLoading ? (
+              <PlotStatus kind="loading" title="Loading DIA isolation windows..." className="min-h-72" />
+            ) : diaWindows.error ? (
+              <PlotStatus kind="error" className="min-h-72" />
+            ) : diaWindows.data ? (
+              <DiaWindowMap diaWindows={diaWindows.data} />
+            ) : null}
           </CardContent>
         </Card>
       )}
@@ -175,6 +200,32 @@ export function BuOverviewPage() {
       )}
     </div>
   );
+}
+
+function ChromatogramErrorState({ error, command }: { error: unknown; command: string | null }) {
+  const parsed = parseApiError(error);
+  if (parsed.kind === "chromatogram_summary_missing") {
+    return (
+      <PlotStatus
+        kind="derived_missing"
+        title="Derived chromatogram data is not ready."
+        command={parsed.backfillCommand ?? command}
+      />
+    );
+  }
+  if (parsed.kind === "chromatogram_summary_stale") {
+    return (
+      <PlotStatus
+        kind="derived_stale"
+        title="Derived chromatogram data is stale."
+        command={parsed.backfillCommand ?? command}
+      />
+    );
+  }
+  if (parsed.kind === "unsupported_raw_format") {
+    return <PlotStatus kind="unsupported" />;
+  }
+  return <PlotStatus kind="error" />;
 }
 
 function ResetZoomButton({ zoom, onReset }: { zoom: Zoom; onReset: () => void }) {
