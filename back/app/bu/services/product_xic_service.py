@@ -7,8 +7,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.bu.services.scan_resolver import isolation_window_contains
-from app.bu.services.spectrum_facade import ensure_mzml_match, get_run_spectra
+from app.bu.services.spectrum_facade import ensure_mzml_match
 from app.schemas import (
     BuProductXicBatchIn,
     BuProductXicBatchOut,
@@ -16,6 +15,24 @@ from app.schemas import (
     BuProductXicOut,
     BuProductXicPoint,
 )
+from app.services.mzml_scan_index import (
+    ScanIndexError,
+    ScanIndexMissingError,
+    ScanIndexStaleError,
+    ScanIndexUnsupportedError,
+    find_product_xic_ms2_scans,
+)
+from app.services.mzml_scan_reader import (
+    MzmlFileNotFoundError,
+    MzmlIndexError,
+    MzmlMappingError,
+    RunNotFoundError,
+    SpectrumNotFoundError,
+    UnsupportedMzmlError,
+    get_spectrum_by_scan,
+    indexed_reader_scope,
+)
+from app.spectrum_memory import release_dataset
 
 
 def _json_object(raw: Any) -> dict[str, Any]:
@@ -59,6 +76,63 @@ def _best_intensities(
     return best
 
 
+def _scan_index_http_error(
+    exc: Exception,
+    *,
+    dataset_id: int,
+    run_id: int,
+) -> HTTPException:
+    command = (
+        "python scripts/backfill_mzml_scan_indexes.py "
+        f"--dataset-id {dataset_id} --run-id {run_id}"
+    )
+    if isinstance(exc, ScanIndexMissingError):
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"error": "scan_index_missing", "backfill_command": command},
+        )
+    if isinstance(exc, ScanIndexStaleError):
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"error": "scan_index_stale", "backfill_command": command},
+        )
+    if isinstance(exc, (RunNotFoundError, MzmlFileNotFoundError)):
+        return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if isinstance(exc, MzmlMappingError):
+        return HTTPException(status.HTTP_409_CONFLICT, detail=str(exc))
+    if isinstance(exc, ScanIndexUnsupportedError):
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
+    return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
+def _indexed_ms2_spectrum(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    scan_number: int,
+) -> dict[str, Any]:
+    try:
+        spec, path_committed = get_spectrum_by_scan(
+            session,
+            dataset_id,
+            run_id,
+            scan_number,
+        )
+    except (RunNotFoundError, MzmlFileNotFoundError, SpectrumNotFoundError) as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except MzmlMappingError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except UnsupportedMzmlError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except MzmlIndexError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    if path_committed:
+        release_dataset(dataset_id)
+    if int(spec.get("ms_level") or 1) != 2:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="product_xic_ms2_scan_not_found")
+    return spec
+
+
 def _extract_product_xics(
     session: Session,
     dataset: dict[str, Any],
@@ -75,31 +149,51 @@ def _extract_product_xics(
 
     dataset_id = int(dataset["dataset_id"])
     run_id = int(match["run_id"])
-    spectra = get_run_spectra(session, dataset_id, run_id)
     rt_lo, rt_hi = rt_window_override or _rt_window(match)
     targets = [(product_mz, product_mz * ppm * 1e-6) for product_mz in product_mzs]
     points_by_target: list[list[BuProductXicPoint]] = [[] for _ in product_mzs]
-
-    for spec_scan, spec in spectra.items():
-        if int(spec.get("ms_level") or 1) != 2:
-            continue
-        rt_seconds = _as_float(spec.get("rt_seconds"))
-        if rt_seconds is None:
-            continue
-        rt_minutes = rt_seconds / 60.0
-        if rt_minutes < rt_lo or rt_minutes > rt_hi:
-            continue
-        if not isolation_window_contains(spec, precursor_mz):
-            continue
-        intensities = _best_intensities(
-            spec.get("mz") or [],
-            spec.get("intensity") or [],
-            targets,
+    try:
+        candidates = find_product_xic_ms2_scans(
+            session,
+            dataset_id,
+            run_id,
+            rt_lo,
+            rt_hi,
+            precursor_mz,
         )
-        for index, intensity in enumerate(intensities):
-            points_by_target[index].append(
-                BuProductXicPoint(rt=rt_minutes, intensity=intensity, scan=int(spec_scan))
+    except (
+        ScanIndexError,
+        RunNotFoundError,
+        MzmlFileNotFoundError,
+        MzmlMappingError,
+    ) as exc:
+        raise _scan_index_http_error(exc, dataset_id=dataset_id, run_id=run_id) from exc
+
+    with indexed_reader_scope():
+        for candidate in candidates:
+            spec = _indexed_ms2_spectrum(
+                session,
+                dataset_id,
+                run_id,
+                candidate.scan_number,
             )
+            rt_seconds = _as_float(spec.get("rt_seconds"))
+            if rt_seconds is None:
+                continue
+            rt_minutes = rt_seconds / 60.0
+            intensities = _best_intensities(
+                spec.get("mz") or [],
+                spec.get("intensity") or [],
+                targets,
+            )
+            for index, intensity in enumerate(intensities):
+                points_by_target[index].append(
+                    BuProductXicPoint(
+                        rt=rt_minutes,
+                        intensity=intensity,
+                        scan=candidate.scan_number,
+                    )
+                )
 
     for points in points_by_target:
         points.sort(key=lambda point: (point.rt, point.scan))

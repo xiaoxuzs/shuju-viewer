@@ -433,6 +433,51 @@ def find_ms2_scans_by_rt_and_isolation(
     return [_metadata_at(index, int(positions[int(item)])) for item in order]
 
 
+def find_product_xic_ms2_scans(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    rt_start: float,
+    rt_end: float,
+    precursor_mz: float,
+    *,
+    derived_root: Path | None = None,
+) -> list[ScanMetadata]:
+    """Return Product XIC candidates using the legacy isolation semantics."""
+    if rt_start > rt_end:
+        raise ValueError("rt_start must be less than or equal to rt_end")
+    index = load_scan_index(session, dataset_id, run_id, derived_root=derived_root)
+    target_present = np.isfinite(index.isolation_target_mz)
+    lower_bound = np.where(
+        np.isfinite(index.isolation_lower_mz),
+        index.isolation_lower_mz,
+        index.isolation_target_mz,
+    )
+    upper_bound = np.where(
+        np.isfinite(index.isolation_upper_mz),
+        index.isolation_upper_mz,
+        index.isolation_target_mz,
+    )
+    isolation_match = (
+        target_present
+        & (float(precursor_mz) >= lower_bound)
+        & (float(precursor_mz) <= upper_bound)
+    )
+    selected_match = (
+        ~target_present
+        & np.isfinite(index.precursor_mz)
+        & (np.abs(index.precursor_mz - float(precursor_mz)) <= 2.0)
+    )
+    positions = np.flatnonzero(
+        (index.ms_level == 2)
+        & (index.retention_time >= rt_start)
+        & (index.retention_time <= rt_end)
+        & (isolation_match | selected_match)
+    )
+    order = np.lexsort((index.scan_number[positions], index.retention_time[positions]))
+    return [_metadata_at(index, int(positions[int(item)])) for item in order]
+
+
 def find_nearest_ms2_scan(
     session: Session,
     dataset_id: int,

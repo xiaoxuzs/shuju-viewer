@@ -503,7 +503,21 @@ def test_product_xic_uses_matching_ms2_window_and_returns_zero_for_missing_peak(
             "intensity": [12000.0],
         },
     }
-    monkeypatch.setattr(product_xic_service, "get_run_spectra", lambda *_args: spectra)
+    monkeypatch.setattr(
+        product_xic_service,
+        "find_product_xic_ms2_scans",
+        lambda *_args: [
+            _scan_metadata(scan, ms_level=2, retention_time=spec["rt_seconds"] / 60.0)
+            for scan, spec in spectra.items()
+            if scan != 3
+        ],
+    )
+    monkeypatch.setattr(
+        product_xic_service,
+        "get_spectrum_by_scan",
+        lambda _session, _dataset_id, _run_id, scan: (spectra[scan], False),
+    )
+    _install_no_full_load_guards(monkeypatch)
 
     out = product_xic_service.get_match_product_xic(
         None, {"dataset_id": 39}, _match(), product_mz=product_mz, ppm=20  # type: ignore[arg-type]
@@ -526,7 +540,17 @@ def test_product_xic_ppm_tolerance_is_inclusive(monkeypatch: pytest.MonkeyPatch)
             "intensity": [7000.0, 9000.0],
         }
     }
-    monkeypatch.setattr(product_xic_service, "get_run_spectra", lambda *_args: spectra)
+    monkeypatch.setattr(
+        product_xic_service,
+        "find_product_xic_ms2_scans",
+        lambda *_args: [_scan_metadata(1, ms_level=2, retention_time=92.46)],
+    )
+    monkeypatch.setattr(
+        product_xic_service,
+        "get_spectrum_by_scan",
+        lambda *_args: (spectra[1], False),
+    )
+    _install_no_full_load_guards(monkeypatch)
 
     out = product_xic_service.get_match_product_xic(
         None, {"dataset_id": 39}, _match(), product_mz=product_mz, ppm=20  # type: ignore[arg-type]
@@ -559,7 +583,7 @@ def _batch_ion(ion_id: str, mz: float) -> BuProductXicBatchIonIn:
 def test_product_xic_batch_loads_spectra_once_and_keeps_no_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls = 0
+    calls: list[int] = []
     signal_mz = 175.119
     spectra = {
         1: {
@@ -576,12 +600,21 @@ def test_product_xic_batch_loads_spectra_once_and_keeps_no_signal(
         },
     }
 
-    def get_spectra(*_args: object) -> dict[int, dict[str, Any]]:
-        nonlocal calls
-        calls += 1
-        return spectra
+    monkeypatch.setattr(
+        product_xic_service,
+        "find_product_xic_ms2_scans",
+        lambda *_args: [
+            _scan_metadata(1, ms_level=2, retention_time=92.15),
+            _scan_metadata(2, ms_level=2, retention_time=92.46),
+        ],
+    )
 
-    monkeypatch.setattr(product_xic_service, "get_run_spectra", get_spectra)
+    def get_one(_session: Any, _dataset_id: int, _run_id: int, scan: int):
+        calls.append(scan)
+        return spectra[scan], False
+
+    monkeypatch.setattr(product_xic_service, "get_spectrum_by_scan", get_one)
+    _install_no_full_load_guards(monkeypatch)
     request = BuProductXicBatchIn(
         tolerance_ppm=20,
         ions=[
@@ -594,7 +627,7 @@ def test_product_xic_batch_loads_spectra_once_and_keeps_no_signal(
         None, {"dataset_id": 39}, _match(), request  # type: ignore[arg-type]
     )
 
-    assert calls == 1
+    assert calls == [1, 2]
     assert [trace.id for trace in out.traces] == ["y5|1|175.119", "y6|1|250"]
     assert out.traces[0].status == "ok"
     assert [point.intensity for point in out.traces[0].points] == [6100.0, 0.0]
@@ -608,7 +641,26 @@ def test_product_xic_batch_rt_window_override(monkeypatch: pytest.MonkeyPatch) -
         1: {**_ms2_spec(1), "rt_seconds": 92.15 * 60.0, "mz": [product_mz], "intensity": [100.0]},
         2: {**_ms2_spec(2), "rt_seconds": 92.46 * 60.0, "mz": [product_mz], "intensity": [200.0]},
     }
-    monkeypatch.setattr(product_xic_service, "get_run_spectra", lambda *_args: spectra)
+    find_calls: list[tuple[float, float]] = []
+
+    def find_scans(
+        _session: Any,
+        _dataset_id: int,
+        _run_id: int,
+        rt_start: float,
+        rt_end: float,
+        _precursor_mz: float,
+    ):
+        find_calls.append((rt_start, rt_end))
+        return [_scan_metadata(2, ms_level=2, retention_time=92.46)]
+
+    monkeypatch.setattr(product_xic_service, "find_product_xic_ms2_scans", find_scans)
+    monkeypatch.setattr(
+        product_xic_service,
+        "get_spectrum_by_scan",
+        lambda *_args: (spectra[2], False),
+    )
+    _install_no_full_load_guards(monkeypatch)
     request = BuProductXicBatchIn(
         ions=[_batch_ion("y5|1|175.119", product_mz)],
         rt_window=BuProductXicRtWindowIn(start=92.4, end=92.5),
@@ -619,6 +671,7 @@ def test_product_xic_batch_rt_window_override(monkeypatch: pytest.MonkeyPatch) -
     )
 
     assert [point.scan for point in out.traces[0].points] == [2]
+    assert find_calls == [(92.4, 92.5)]
 
 
 @pytest.mark.parametrize(
@@ -670,7 +723,16 @@ def test_product_xic_batch_route_matches_old_get(
     }
     monkeypatch.setattr(matches_api, "require_bu_dataset", lambda *_args: {"dataset_id": 39})
     monkeypatch.setattr(matches_api, "require_bu_match", lambda *_args: _match())
-    monkeypatch.setattr(product_xic_service, "get_run_spectra", lambda *_args: spectra)
+    monkeypatch.setattr(
+        product_xic_service,
+        "find_product_xic_ms2_scans",
+        lambda *_args: [_scan_metadata(1, ms_level=2, retention_time=92.46)],
+    )
+    monkeypatch.setattr(
+        product_xic_service,
+        "get_spectrum_by_scan",
+        lambda *_args: (spectra[1], False),
+    )
     request = BuProductXicBatchIn(
         tolerance_ppm=20,
         ions=[_batch_ion("y5|1|175.119", product_mz)],
