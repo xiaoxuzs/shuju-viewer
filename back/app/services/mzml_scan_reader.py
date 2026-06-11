@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 import re
 import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from pyteomics import mzml
 from sqlalchemy import text
@@ -56,6 +59,16 @@ _NATIVE_SCAN_RE = re.compile(r"(?:^|[\s;])(?:scan|index)=(\d+)(?=$|[\s;])")
 _INDEX_LIST_OFFSET_RE = re.compile(br"<indexListOffset>\d+</indexListOffset>")
 _INDEX_CACHE_LOCK = threading.RLock()
 _INDEX_CACHE: dict[tuple[str, int, int], dict[int, str]] = {}
+_ACTIVE_READERS: ContextVar[dict[tuple[str, int, int], "_ReaderRecord"] | None] = ContextVar(
+    "mzml_active_readers",
+    default=None,
+)
+
+
+@dataclass
+class _ReaderRecord:
+    reader: "_StrictPreIndexedMzML"
+    lock: threading.RLock
 
 
 class _StrictPreIndexedMzML(mzml.PreIndexedMzML):
@@ -192,6 +205,61 @@ def _store_scan_index(
         _INDEX_CACHE[key] = scan_index
 
 
+def _close_reader(record: _ReaderRecord) -> None:
+    try:
+        record.reader.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@contextmanager
+def indexed_reader_scope() -> Iterator[None]:
+    """Reuse indexed reader handles within one request and close them afterwards."""
+    if _ACTIVE_READERS.get() is not None:
+        yield
+        return
+    records: dict[tuple[str, int, int], _ReaderRecord] = {}
+    token = _ACTIVE_READERS.set(records)
+    try:
+        yield
+    finally:
+        for record in records.values():
+            _close_reader(record)
+        _ACTIVE_READERS.reset(token)
+
+
+def _get_reader_record(
+    key: tuple[str, int, int],
+    path: Path,
+) -> tuple[_ReaderRecord, bool]:
+    active = _ACTIVE_READERS.get()
+    if active is not None:
+        existing = active.get(key)
+        if existing is not None:
+            return existing, False
+        stale_keys = [
+            existing_key
+            for existing_key in active
+            if existing_key[0] == key[0] and existing_key != key
+        ]
+        for stale_key in stale_keys:
+            stale = active.pop(stale_key)
+            _close_reader(stale)
+        record = _ReaderRecord(
+            reader=_StrictPreIndexedMzML(str(path)),
+            lock=threading.RLock(),
+        )
+        active[key] = record
+        return record, False
+    return (
+        _ReaderRecord(
+            reader=_StrictPreIndexedMzML(str(path)),
+            lock=threading.RLock(),
+        ),
+        True,
+    )
+
+
 def _build_scan_index(native_ids: Any) -> dict[int, str]:
     scan_index: dict[int, str] = {}
     for native_id in native_ids:
@@ -220,8 +288,11 @@ def read_indexed_spectrum(path: Path, scan_number: int) -> dict[str, Any]:
     key = _cache_key(resolved)
     _require_embedded_index(resolved)
     scan_index = _get_cached_scan_index(key)
+    close_after_read = False
     try:
-        with _StrictPreIndexedMzML(str(resolved)) as reader:
+        record, close_after_read = _get_reader_record(key, resolved)
+        with record.lock:
+            reader = record.reader
             if scan_index is None:
                 scan_index = _build_scan_index(reader.default_index)
                 _store_scan_index(key, scan_index)
@@ -233,6 +304,9 @@ def read_indexed_spectrum(path: Path, scan_number: int) -> dict[str, Any]:
         raise
     except Exception as exc:  # noqa: BLE001
         raise MzmlIndexError(f"cannot read indexed mzML {resolved}: {exc}") from exc
+    finally:
+        if close_after_read:
+            _close_reader(record)
 
     if not isinstance(spec, dict) or spec.get("id") != native_id:
         raise MzmlIndexError(f"indexed mzML returned an invalid spectrum for scan {scan_number}")

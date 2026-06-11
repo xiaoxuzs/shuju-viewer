@@ -358,6 +358,27 @@ def find_nearest_ms1_scan(
     return _metadata_at(index, int(positions[int(order[0])]))
 
 
+def find_ms1_scans_in_rt_range(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    rt_start: float,
+    rt_end: float,
+    *,
+    derived_root: Path | None = None,
+) -> list[ScanMetadata]:
+    if rt_start > rt_end:
+        raise ValueError("rt_start must be less than or equal to rt_end")
+    index = load_scan_index(session, dataset_id, run_id, derived_root=derived_root)
+    positions = np.flatnonzero(
+        (index.ms_level == 1)
+        & (index.retention_time >= rt_start)
+        & (index.retention_time <= rt_end)
+    )
+    order = np.lexsort((index.scan_number[positions], index.retention_time[positions]))
+    return [_metadata_at(index, int(positions[int(item)])) for item in order]
+
+
 def find_ms2_scans_in_rt_range(
     session: Session,
     dataset_id: int,

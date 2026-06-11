@@ -446,7 +446,20 @@ def test_xic_uses_ms1_points_in_expanded_rt_window(monkeypatch: pytest.MonkeyPat
         }
         for idx, rt_min in enumerate([87.2, 92.2, 92.8, 98.0], start=1)
     }
-    monkeypatch.setattr(xic_service, "get_run_spectra", lambda *_args: spectra)
+    monkeypatch.setattr(
+        xic_service,
+        "find_ms1_scans_in_rt_range",
+        lambda *_args: [
+            _scan_metadata(scan, ms_level=1, retention_time=spec["rt_seconds"] / 60.0)
+            for scan, spec in spectra.items()
+        ],
+    )
+    monkeypatch.setattr(
+        xic_service,
+        "get_spectrum_by_scan",
+        lambda _session, _dataset_id, _run_id, scan: (spectra[scan], False),
+    )
+    _install_no_full_load_guards(monkeypatch)
 
     out = xic_service.get_match_xic(None, {"dataset_id": 39}, _match(), ppm=10)  # type: ignore[arg-type]
 

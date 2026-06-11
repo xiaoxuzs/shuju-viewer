@@ -3,9 +3,17 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from fastapi import HTTPException
 
-from app.bu.services import xic_service
+from app.bu.services import spectrum_facade, xic_service
 from app.bu.services.precursor_isotopes import NEUTRON_MASS_DIFF_DA, build_precursor_isotope_targets
+from app.services import spectrum_memory_wiring
+from app.services.mzml_scan_index import (
+    ScanIndexMissingError,
+    ScanIndexStaleError,
+    ScanMetadata,
+)
+from app.spectrum_memory.mzml_dataset_bundle import DatasetMzmlBundle
 
 
 PRECURSOR_MZ = 477.3051452636719
@@ -23,6 +31,35 @@ def _match(*, charge: int | None = 2) -> dict[str, Any]:
         "extra_metadata": {"rt_start": 92.15, "rt_stop": 93.08},
         "run_metadata": {"raw_format": "mzml"},
     }
+
+
+def _metadata(scan: int, rt: float) -> ScanMetadata:
+    return ScanMetadata(
+        scan_number=scan,
+        native_id=f"scan={scan}",
+        ms_level=1,
+        retention_time=rt,
+        tic=1000.0,
+        bpc=500.0,
+        precursor_mz=None,
+        isolation_target_mz=None,
+        isolation_lower_mz=None,
+        isolation_upper_mz=None,
+    )
+
+
+def _fail(*_args: Any, **_kwargs: Any) -> None:
+    raise AssertionError("whole-dataset mzML loading must not be called")
+
+
+def _install_no_full_load_guards(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(spectrum_facade, "get_run_spectra", _fail)
+    monkeypatch.setattr(spectrum_memory_wiring, "ensure_mzml_dataset_resident", _fail)
+    monkeypatch.setattr(DatasetMzmlBundle, "load", _fail)
+    monkeypatch.setattr(
+        "app.spectrum_memory.mzml_spectrum_extract.load_mzml_path_to_scan_map",
+        _fail,
+    )
 
 
 def test_precursor_isotope_targets_use_charge_spacing() -> None:
@@ -54,10 +91,37 @@ def test_xic_returns_m_m1_m2_traces_in_one_rt_grid(monkeypatch: pytest.MonkeyPat
             "intensity": [800.0, 280.0, 70.0, 1.0],
         },
     }
-    monkeypatch.setattr(xic_service, "get_run_spectra", lambda *_args: spectra)
+    find_calls: list[tuple[Any, int, int, float, float]] = []
+    read_calls: list[int] = []
 
-    out = xic_service.get_match_xic(None, {"dataset_id": 39}, _match(), ppm=10)  # type: ignore[arg-type]
+    def find_scans(
+        session: Any,
+        dataset_id: int,
+        run_id: int,
+        rt_start: float,
+        rt_end: float,
+    ) -> list[ScanMetadata]:
+        find_calls.append((session, dataset_id, run_id, rt_start, rt_end))
+        return [_metadata(1, 92.2), _metadata(2, 92.8)]
 
+    def get_one(_session: Any, _dataset_id: int, _run_id: int, scan: int):
+        read_calls.append(scan)
+        return spectra[scan], False
+
+    monkeypatch.setattr(xic_service, "find_ms1_scans_in_rt_range", find_scans)
+    monkeypatch.setattr(xic_service, "get_spectrum_by_scan", get_one)
+    _install_no_full_load_guards(monkeypatch)
+    session = object()
+
+    out = xic_service.get_match_xic(
+        session,  # type: ignore[arg-type]
+        {"dataset_id": 39},
+        _match(),
+        ppm=10,
+    )
+
+    assert find_calls == [(session, 39, 10, 87.15, 98.08)]
+    assert read_calls == [1, 2]
     assert out.precursor_charge == 2
     assert out.rt == [92.2, 92.8]
     assert [trace.label for trace in out.traces] == ["M", "M+1", "M+2"]
@@ -78,10 +142,143 @@ def test_xic_invalid_charge_keeps_legacy_m_trace(monkeypatch: pytest.MonkeyPatch
             "intensity": [1000.0],
         }
     }
-    monkeypatch.setattr(xic_service, "get_run_spectra", lambda *_args: spectra)
+    monkeypatch.setattr(
+        xic_service,
+        "find_ms1_scans_in_rt_range",
+        lambda *_args: [_metadata(1, 92.2)],
+    )
+    monkeypatch.setattr(
+        xic_service,
+        "get_spectrum_by_scan",
+        lambda *_args: (spectra[1], False),
+    )
+    _install_no_full_load_guards(monkeypatch)
 
     out = xic_service.get_match_xic(None, {"dataset_id": 39}, _match(charge=None), ppm=10)  # type: ignore[arg-type]
 
     assert out.precursor_charge is None
     assert [trace.label for trace in out.traces] == ["M"]
     assert out.intensity == [1000.0]
+
+
+def test_xic_uses_max_intensity_within_ppm_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    precursor_mz = 500.0
+    match = {**_match(charge=None), "precursor_mz": precursor_mz}
+    monkeypatch.setattr(
+        xic_service,
+        "find_ms1_scans_in_rt_range",
+        lambda *_args: [_metadata(1, 92.2)],
+    )
+    monkeypatch.setattr(
+        xic_service,
+        "get_spectrum_by_scan",
+        lambda *_args: (
+            {
+                "scan": 1,
+                "ms_level": 1,
+                "rt_seconds": 92.2 * 60.0,
+                "mz": [499.99, 500.01, 501.0],
+                "intensity": [10.0, 20.0, 999.0],
+            },
+            False,
+        ),
+    )
+    _install_no_full_load_guards(monkeypatch)
+
+    out = xic_service.get_match_xic(
+        None,  # type: ignore[arg-type]
+        {"dataset_id": 39},
+        match,
+        ppm=40.0,
+    )
+
+    assert out.intensity == [20.0]
+
+
+def test_xic_empty_ms1_candidates_returns_empty_traces_without_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(xic_service, "find_ms1_scans_in_rt_range", lambda *_args: [])
+    monkeypatch.setattr(xic_service, "get_spectrum_by_scan", _fail)
+    _install_no_full_load_guards(monkeypatch)
+
+    out = xic_service.get_match_xic(
+        None,  # type: ignore[arg-type]
+        {"dataset_id": 39},
+        _match(),
+    )
+
+    assert out.rt == []
+    assert out.intensity == []
+    assert [trace.label for trace in out.traces] == ["M", "M+1", "M+2"]
+    assert all(trace.intensity == [] for trace in out.traces)
+
+
+def test_xic_rejects_non_ms1_spectrum_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        xic_service,
+        "find_ms1_scans_in_rt_range",
+        lambda *_args: [_metadata(1, 92.2)],
+    )
+    monkeypatch.setattr(
+        xic_service,
+        "get_spectrum_by_scan",
+        lambda *_args: (
+            {
+                "scan": 1,
+                "ms_level": 2,
+                "rt_seconds": 92.2 * 60.0,
+                "mz": [],
+                "intensity": [],
+            },
+            False,
+        ),
+    )
+    _install_no_full_load_guards(monkeypatch)
+
+    with pytest.raises(HTTPException) as exc:
+        xic_service.get_match_xic(
+            None,  # type: ignore[arg-type]
+            {"dataset_id": 39},
+            _match(),
+        )
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "xic_ms1_scan_not_found"
+
+
+@pytest.mark.parametrize(
+    ("error", "error_name"),
+    [
+        (ScanIndexMissingError("scan_index_missing"), "scan_index_missing"),
+        (ScanIndexStaleError("scan_index_stale"), "scan_index_stale"),
+    ],
+)
+def test_xic_maps_scan_index_state_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    error_name: str,
+) -> None:
+    def raise_error(*_args: Any, **_kwargs: Any) -> list[ScanMetadata]:
+        raise error
+
+    monkeypatch.setattr(xic_service, "find_ms1_scans_in_rt_range", raise_error)
+    monkeypatch.setattr(xic_service, "get_spectrum_by_scan", _fail)
+    _install_no_full_load_guards(monkeypatch)
+
+    with pytest.raises(HTTPException) as exc:
+        xic_service.get_match_xic(
+            None,  # type: ignore[arg-type]
+            {"dataset_id": 39},
+            _match(),
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error"] == error_name
+    assert exc.value.detail["backfill_command"] == (
+        "python scripts/backfill_mzml_scan_indexes.py --dataset-id 39 --run-id 10"
+    )

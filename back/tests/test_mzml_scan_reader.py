@@ -15,6 +15,7 @@ class _FakeReader:
         self.default_index = {native_id: offset for offset, native_id in enumerate(native_ids)}
         self._spectra = spectra
         self.get_calls: list[tuple[str, str | None]] = []
+        self.close_calls = 0
 
     def __enter__(self) -> "_FakeReader":
         return self
@@ -28,6 +29,9 @@ class _FakeReader:
     def get_by_id(self, native_id: str, element_type: str | None = None) -> dict[str, Any]:
         self.get_calls.append((native_id, element_type))
         return self._spectra[native_id]
+
+    def close(self) -> None:
+        self.close_calls += 1
 
 
 def _spectrum(native_id: str, *, ms_level: int = 2) -> dict[str, Any]:
@@ -178,6 +182,42 @@ def test_index_cache_invalidates_when_file_changes(
 
     assert opened == 2
     assert len(mzml_scan_reader._INDEX_CACHE) == 1
+
+
+def test_reader_handle_is_reused_for_same_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "run.mzML"
+    _write_indexed_stub(path)
+    first_id = "scan=1"
+    second_id = "scan=2"
+    reader = _FakeReader(
+        [first_id, second_id],
+        {
+            first_id: _spectrum(first_id),
+            second_id: _spectrum(second_id),
+        },
+    )
+    opened = 0
+
+    def open_reader(_path: str) -> _FakeReader:
+        nonlocal opened
+        opened += 1
+        return reader
+
+    monkeypatch.setattr(mzml_scan_reader, "_StrictPreIndexedMzML", open_reader)
+
+    with mzml_scan_reader.indexed_reader_scope():
+        assert mzml_scan_reader.read_indexed_spectrum(path, 1)["scan"] == 1
+        assert mzml_scan_reader.read_indexed_spectrum(path, 2)["scan"] == 2
+
+    assert opened == 1
+    assert reader.get_calls == [
+        (first_id, "spectrum"),
+        (second_id, "spectrum"),
+    ]
+    assert reader.close_calls == 1
 
 
 class _NoRowResult:

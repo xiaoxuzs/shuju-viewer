@@ -393,6 +393,63 @@ def test_find_nearest_ms1_scan_orders_by_tic_distance_then_scan(
     assert result.scan_number == 10
 
 
+def test_find_ms1_scans_in_rt_range_is_closed_and_sorted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "run.mzML"
+    source_path.write_bytes(b"source")
+    index = mzml_scan_index.build_scan_index_from_spectra(
+        [
+            _spectrum(3, ms_level=1, rt_minutes=2.0, intensity=[1.0]),
+            _spectrum(2, ms_level=1, rt_minutes=1.0, intensity=[1.0]),
+            _spectrum(1, ms_level=1, rt_minutes=1.0, intensity=[1.0]),
+            _spectrum(4, ms_level=2, rt_minutes=1.5, intensity=[1.0]),
+            _spectrum(5, ms_level=1, rt_minutes=3.0, intensity=[1.0]),
+        ]
+    )
+    derived_root = tmp_path / "derived"
+    mzml_scan_index.write_scan_index(
+        dataset_id=DATASET_ID,
+        run_id=RUN_ID,
+        source_path=source_path,
+        index=index,
+        derived_root=derived_root,
+    )
+    _use_source_path(monkeypatch, source_path)
+
+    results = mzml_scan_index.find_ms1_scans_in_rt_range(
+        None,  # type: ignore[arg-type]
+        DATASET_ID,
+        RUN_ID,
+        1.0,
+        2.0,
+        derived_root=derived_root,
+    )
+
+    assert [result.scan_number for result in results] == [1, 2, 3]
+    assert all(result.ms_level == 1 for result in results)
+
+
+def test_find_ms1_scans_in_rt_range_returns_empty_list(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_path, derived_root = _write_example_index(tmp_path)
+    _use_source_path(monkeypatch, source_path)
+
+    results = mzml_scan_index.find_ms1_scans_in_rt_range(
+        None,  # type: ignore[arg-type]
+        DATASET_ID,
+        RUN_ID,
+        10.0,
+        11.0,
+        derived_root=derived_root,
+    )
+
+    assert results == []
+
+
 def test_find_ms2_scans_in_rt_range_is_closed(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
