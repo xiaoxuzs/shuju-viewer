@@ -8,7 +8,10 @@ import {
   type EvidenceDataState,
   type EvidenceSection,
 } from "@/features/bu/components/match-detail/evidenceSummaryModel";
-import { useBuPfmbEvidence } from "@/features/bu/components/match-detail/useBuPfmbEvidence";
+import {
+  useBuPfmbEvidence,
+  type BuPfmbEvidence,
+} from "@/features/bu/components/match-detail/useBuPfmbEvidence";
 import type { InspectedRtSource } from "@/features/bu/utils";
 
 interface Props {
@@ -20,9 +23,27 @@ interface Props {
   selectedXicPoint: BuXicPointSelection | null;
   xic: EvidenceDataState<BuXicOut>;
   ms2: EvidenceDataState<BuSpectrumV1>;
+  pfmbEvidence?: BuPfmbEvidence;
 }
 
-export function BuEvidenceSummary({
+export function BuEvidenceSummary(props: Props) {
+  if (props.pfmbEvidence) {
+    return <BuEvidenceSummaryInner {...props} pfmbEvidence={props.pfmbEvidence} />;
+  }
+  return <BuEvidenceSummaryWithHook {...props} />;
+}
+
+function BuEvidenceSummaryWithHook(props: Props) {
+  const pfmbEvidence = useBuPfmbEvidence({
+    slug: props.slug,
+    matchId: props.matchId,
+    hasPfmb: props.hasPfmb,
+    selectedRt: props.inspectedRt?.rt ?? null,
+  });
+  return <BuEvidenceSummaryInner {...props} pfmbEvidence={pfmbEvidence} />;
+}
+
+function BuEvidenceSummaryInner({
   slug,
   matchId,
   match,
@@ -31,13 +52,8 @@ export function BuEvidenceSummary({
   selectedXicPoint,
   xic,
   ms2,
-}: Props) {
-  const pfmb = useBuPfmbEvidence({
-    slug,
-    matchId,
-    hasPfmb,
-    selectedRt: inspectedRt?.rt ?? null,
-  });
+  pfmbEvidence: pfmb,
+}: Props & { pfmbEvidence: BuPfmbEvidence }) {
   const sections = useMemo(
     () =>
       buildBuEvidenceSummary({
@@ -74,6 +90,8 @@ export function BuEvidenceSummary({
       pfmb.slots.isError,
       pfmb.slots.isLoading,
       selectedXicPoint,
+      slug,
+      matchId,
       xic.data,
       xic.isError,
       xic.isLoading,
@@ -110,7 +128,7 @@ export function BuEvidenceSummaryView({ sections }: { sections: EvidenceSection[
                   <div key={row.label}>
                     <dt className="text-[11px] text-muted-foreground">{row.label}</dt>
                     <dd className="break-words text-sm font-medium">{row.value}</dd>
-                    {row.detail && <div className="text-[11px] text-muted-foreground">{row.detail}</div>}
+                    {row.detail && <div className="min-h-4 text-[11px] text-muted-foreground">{row.detail}</div>}
                   </div>
                 ))}
               </dl>

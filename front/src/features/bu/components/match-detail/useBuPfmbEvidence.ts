@@ -55,6 +55,7 @@ export function useBuPfmbEvidence({
     queryKey: ["bu", slug, "matches", matchId, "ms2-annotation", activePrsm],
     queryFn: () => fetchBuMatchMs2Annotation(slug, matchId, activePrsm!),
     enabled: hasPfmb && activePrsm !== null,
+    placeholderData: (previousData) => previousData,
   });
   const matrix = useQuery({
     queryKey: ["bu", slug, "matches", matchId, "ms2-annotation-matrix"],
@@ -75,3 +76,5 @@ export function useBuPfmbEvidence({
     matrix,
   };
 }
+
+export type BuPfmbEvidence = ReturnType<typeof useBuPfmbEvidence>;

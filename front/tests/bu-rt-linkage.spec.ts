@@ -213,14 +213,14 @@ test("live mzML and pre-computed PFMB evidence stay visibly distinct", async ({ 
   await mockRt(page);
   await page.goto("/datasets/demo/matches/1");
 
-  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
   await expect(page.getByText("Matched fragments are calculated from the selected mzML MS2 scan.", {
     exact: false,
   })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Live mzML matched b/y fragments (1)" })).toBeVisible();
 
   const card = page.getByTestId("pfmb-card");
-  await expect(card.getByRole("heading", { name: "Pre-computed PFMB annotation" })).toBeVisible();
+  await expect(card.getByRole("heading", { name: "PFMB evidence" })).toBeVisible();
   await expect(card).toContainText("counts and intensity sums are not directly comparable");
   await expect(card.getByRole("heading", {
     name: "Pre-computed PFMB matched fragments (1)",

@@ -85,7 +85,7 @@ function buildChromatographicEvidence(input: BuildBuEvidenceSummaryInput): Evide
   rows.push({
     label: "Current inspected RT",
     value: input.inspectedRt ? `${input.inspectedRt.rt.toFixed(4)} min` : "Not selected",
-    detail: input.inspectedRt ? `From ${inspectedRtSourceLabel(input.inspectedRt.source)}` : undefined,
+    detail: input.inspectedRt ? `From ${inspectedRtSourceLabel(input.inspectedRt.source)}` : " ",
   });
   if (input.selectedXicPoint) {
     rows.push({
@@ -94,7 +94,7 @@ function buildChromatographicEvidence(input: BuildBuEvidenceSummaryInput): Evide
       detail: `Intensity ${formatCount(input.selectedXicPoint.intensity)}`,
     });
   } else if (Number.isFinite(input.xic.data.rt_apex)) {
-    rows.push({ label: "Identification RT apex guide", value: displayRt(input.xic.data.rt_apex) });
+    rows.push({ label: "Identification RT apex guide", value: displayRt(input.xic.data.rt_apex), detail: " " });
   }
   return { key: "chromatographic", title: "Chromatographic evidence", rows };
 }
@@ -159,7 +159,7 @@ function buildPfmbEvidence(input: BuildBuEvidenceSummaryInput): EvidenceSection 
     {
       label: "PFMB slot RT",
       value: displayRt(input.activePfmbSlot.rt_minutes),
-      detail: isApex ? "PFMB apex" : undefined,
+      detail: isApex ? "PFMB apex" : " ",
     },
   ];
   return { key: "pfmb", title: "PFMB evidence", rows };

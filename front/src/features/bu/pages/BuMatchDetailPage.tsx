@@ -19,6 +19,7 @@ import { BuFragmentTable } from "@/features/bu/components/match-detail/BuFragmen
 import { BuEvidenceSummary } from "@/features/bu/components/match-detail/BuEvidenceSummary";
 import { BuPfmbAnnotationCard } from "@/features/bu/components/match-detail/BuPfmbAnnotationCard";
 import { BuProductIonXicCard } from "@/features/bu/components/match-detail/BuProductIonXicCard";
+import { useBuPfmbEvidence } from "@/features/bu/components/match-detail/useBuPfmbEvidence";
 import {
   addTopProductIons,
   clearProductIonSelections,
@@ -32,6 +33,8 @@ import type { ProductIonYAxisMode } from "@/features/bu/components/match-detail/
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import { MzMobilityScatter } from "@/features/bu/components/spectrum/MzMobilityScatter";
 import { BuSpectrumChart } from "@/features/bu/components/spectrum/BuSpectrumChart";
+import { buildPfmbSpectrumOverlay } from "@/features/bu/components/spectrum/pfmbSpectrumOverlay";
+import type { SpectrumExternalAnnotation } from "@/features/bu/components/spectrum/spectrumAnnotation";
 import { BuXicChart, type BuXicPointSelection } from "@/features/bu/components/spectrum/BuXicChart";
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
@@ -48,6 +51,7 @@ import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 
 const MS2_PPM = 20;
 const XIC_PPM = 10;
+const EMPTY_MS2_EXTERNAL_ANNOTATIONS: SpectrumExternalAnnotation[] = [];
 const PRODUCT_ION_LIMIT_WARNING =
   "Maximum 8 product ions can be compared at once. Remove one before adding another.";
 const ZOOM_HINT = "wheel to zoom (Shift = Y) · brush-drag = X";
@@ -76,6 +80,7 @@ export function BuMatchDetailPage() {
   });
   const isMzml = data?.run.raw_format === "mzml";
   const isBruker = data?.run.raw_format === "bruker_d";
+  const hasPfmb = Boolean(dataset.capabilities?.has_ms2_pfmb);
   const xic = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "xic", XIC_PPM],
     queryFn: () => fetchBuMatchXic(dataset.slug, parsedMatchId, XIC_PPM),
@@ -90,9 +95,10 @@ export function BuMatchDetailPage() {
         parsedMatchId,
         MS2_PPM,
         selectedRt !== null ? { rt: selectedRt } : {},
-      ),
+    ),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
     retry: chartQueryRetry,
+    placeholderData: (previousData) => previousData,
   });
   const ms1 = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms1"],
@@ -106,6 +112,26 @@ export function BuMatchDetailPage() {
     enabled: !!isBruker && Number.isFinite(parsedMatchId),
     retry: chartQueryRetry,
   });
+  const pfmbEvidence = useBuPfmbEvidence({
+    slug: dataset.slug,
+    matchId: parsedMatchId,
+    hasPfmb,
+    selectedRt,
+  });
+  const pfmbOverlay = useMemo(
+    () =>
+      ms2.data && pfmbEvidence.annotation.data
+        ? buildPfmbSpectrumOverlay({
+            ions: pfmbEvidence.annotation.data.matched_ions,
+            rawMz: ms2.data.mz,
+            rawIntensity: ms2.data.intensity,
+            ppmTolerance: MS2_PPM,
+          })
+        : null,
+    [ms2.data, pfmbEvidence.annotation.data],
+  );
+  const ms2ExternalAnnotations = pfmbOverlay?.mappedAnnotations ?? EMPTY_MS2_EXTERNAL_ANNOTATIONS;
+  const ms2AnnotationMode = ms2ExternalAnnotations.length > 0 ? "both" : "live";
 
   useEffect(() => {
     setXicFullOpen(false);
@@ -215,11 +241,12 @@ export function BuMatchDetailPage() {
         slug={dataset.slug}
         matchId={parsedMatchId}
         match={data}
-        hasPfmb={Boolean(dataset.capabilities?.has_ms2_pfmb)}
+        hasPfmb={hasPfmb}
         inspectedRt={inspectedRt}
         selectedXicPoint={selectedXicPoint}
         xic={{ data: xic.data, isLoading: xic.isLoading, isError: xic.isError }}
         ms2={{ data: ms2.data, isLoading: ms2.isLoading, isError: ms2.isError }}
+        pfmbEvidence={pfmbEvidence}
       />
 
       {isMzml ? (
@@ -240,15 +267,17 @@ export function BuMatchDetailPage() {
                 <p className="text-xs text-muted-foreground">
                   Click a point on the XIC to inspect the corresponding MS2 scan. {ZOOM_HINT}
                 </p>
-                {inspectedRt !== null && (
-                  <p className="text-xs font-medium text-foreground" data-testid="xic-selected-rt">
-                    Current inspected RT: {inspectedRt.rt.toFixed(4)} min from{" "}
-                    {inspectedRtSourceLabel(inspectedRt.source)}
-                    {selectedXicPoint
-                      ? `, ${selectedXicPoint.traceLabel} intensity ${formatDecimal(selectedXicPoint.intensity, 0)}`
-                      : ""}
-                  </p>
-                )}
+                <div className="min-h-4">
+                  {inspectedRt !== null && (
+                    <p className="text-xs font-medium text-foreground" data-testid="xic-selected-rt">
+                      Current inspected RT: {inspectedRt.rt.toFixed(4)} min from{" "}
+                      {inspectedRtSourceLabel(inspectedRt.source)}
+                      {selectedXicPoint
+                        ? `, ${selectedXicPoint.traceLabel} intensity ${formatDecimal(selectedXicPoint.intensity, 0)}`
+                        : ""}
+                    </p>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 <BuXicChart
@@ -294,60 +323,90 @@ export function BuMatchDetailPage() {
           ) : ms2.data && !hasSpectrumPeaks(ms2.data) ? (
             <PlotStatus kind="empty" title="No MS2 spectrum peaks are available." className="min-h-64" />
           ) : ms2.data ? (
-            <Card>
+            <Card className="[overflow-anchor:none]" data-testid="ms2-pfmb-evidence">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Live mzML MS2 matching</CardTitle>
+                <CardTitle className="text-base">MS2 / PFMB Evidence</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Matched fragments are calculated from the selected mzML MS2 scan. Click a matched b/y fragment peak to add or remove its product ion XIC.
+                  Raw mzML MS2 peaks are shown once. PFMB annotations are used as primary labels when available, with live mzML matches used as fallback evidence.
                 </p>
-                <p className="text-xs text-muted-foreground" data-testid="ms2-current-rt">
-                  MS2 scan #{ms2.data.scan}. MS2 scan RT: {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
-                </p>
-                {selectedRt !== null &&
-                  Math.abs(ms2.data.rt_minutes - selectedRt) > RT_LINK_TOLERANCE_MIN && (
-                    <p className="text-xs font-medium text-amber-600" data-testid="ms2-rt-out-of-tolerance">
-                      Nearest MS2 scan is {Math.abs(ms2.data.rt_minutes - selectedRt).toFixed(2)} min from the
-                      current inspected RT.
-                    </p>
-                  )}
               </CardHeader>
-              <CardContent>
-                <BuSpectrumChart
-                  spectrum={ms2.data}
-                  sequence={data.sequence}
-                  precursorCharge={data.precursor_charge}
-                  precursorMz={data.precursor_mz}
-                  ppm={MS2_PPM}
-                  onMatchedIonClick={toggleProductIon}
-                  selectedProductIonIds={selectedProductIonIds}
-                  onOpenFull={() => setMs2FullOpen(true)}
-                />
-                <BuProductIonXicCard
-                  datasetId={dataset.id}
+              <CardContent className="space-y-6">
+                <section data-testid="ms2-spectrum-section">
+                  <div className="mb-2">
+                    <h3 className="text-sm font-semibold">MS2 spectrum</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Matched fragments are calculated from the selected mzML MS2 scan. Click a live-primary b/y fragment peak to add or remove its product ion XIC.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground" data-testid="ms2-current-rt">
+                      MS2 scan #{ms2.data.scan}. MS2 scan RT: {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
+                    </p>
+                    {selectedRt !== null &&
+                      Math.abs(ms2.data.rt_minutes - selectedRt) > RT_LINK_TOLERANCE_MIN && (
+                        <p className="mt-1 text-xs font-medium text-amber-600" data-testid="ms2-rt-out-of-tolerance">
+                          Nearest MS2 scan is {Math.abs(ms2.data.rt_minutes - selectedRt).toFixed(2)} min from the
+                          current inspected RT.
+                        </p>
+                      )}
+                    {pfmbOverlay && pfmbOverlay.unmappedCount > 0 && (
+                      <p className="mt-1 text-xs font-medium text-amber-600" data-testid="ms2-pfmb-unmapped">
+                        Some PFMB annotations could not be mapped to raw mzML peaks within the current tolerance and are not drawn.
+                      </p>
+                    )}
+                  </div>
+                  <BuSpectrumChart
+                    spectrum={ms2.data}
+                    sequence={data.sequence}
+                    precursorCharge={data.precursor_charge}
+                    precursorMz={data.precursor_mz}
+                    ppm={MS2_PPM}
+                    onMatchedIonClick={toggleProductIon}
+                    selectedProductIonIds={selectedProductIonIds}
+                    externalAnnotations={ms2ExternalAnnotations}
+                    annotationMode={ms2AnnotationMode}
+                    onOpenFull={() => setMs2FullOpen(true)}
+                  />
+                </section>
+
+                <section className="border-t border-border/70 pt-5" data-testid="product-ion-evidence-section">
+                  <h3 className="text-sm font-semibold">Product ion evidence</h3>
+                  <BuProductIonXicCard
+                    datasetId={dataset.id}
+                    slug={dataset.slug}
+                    matchId={parsedMatchId}
+                    runId={data.run.run_id}
+                    ms2Scan={ms2.data.scan}
+                    available
+                    matchedIons={ms2.data.matched_ions}
+                    selections={selectedProductIons}
+                    mode={productIonYAxisMode}
+                    ppm={MS2_PPM}
+                    rtWindow={{ start: data.rt_window.rt_start, stop: data.rt_window.rt_stop }}
+                    identificationRt={data.identification_rt_apex ?? data.rt_window.rt_apex}
+                    inspectedRt={selectedRt}
+                    ms2ScanRt={ms2.data.rt_minutes}
+                    warning={productIonWarning}
+                    onRemove={removeProductIon}
+                    onAddTop={addTopFragments}
+                    onClear={clearProductIons}
+                    onModeChange={setProductIonYAxisMode}
+                  />
+                  <BuFragmentTable
+                    ions={ms2.data.matched_ions}
+                    selectedProductIonIds={selectedProductIonIds}
+                    selectionLimitReached={selectedProductIons.length >= MAX_PRODUCT_ION_XICS}
+                    onToggleProductIon={toggleProductIon}
+                  />
+                </section>
+
+                <BuPfmbAnnotationCard
                   slug={dataset.slug}
                   matchId={parsedMatchId}
-                  runId={data.run.run_id}
-                  ms2Scan={ms2.data.scan}
-                  available
-                  matchedIons={ms2.data.matched_ions}
-                  selections={selectedProductIons}
-                  mode={productIonYAxisMode}
-                  ppm={MS2_PPM}
-                  rtWindow={{ start: data.rt_window.rt_start, stop: data.rt_window.rt_stop }}
-                  identificationRt={data.identification_rt_apex ?? data.rt_window.rt_apex}
-                  inspectedRt={selectedRt}
-                  ms2ScanRt={ms2.data.rt_minutes}
-                  warning={productIonWarning}
-                  onRemove={removeProductIon}
-                  onAddTop={addTopFragments}
-                  onClear={clearProductIons}
-                  onModeChange={setProductIonYAxisMode}
-                />
-                <BuFragmentTable
-                  ions={ms2.data.matched_ions}
-                  selectedProductIonIds={selectedProductIonIds}
-                  selectionLimitReached={selectedProductIons.length >= MAX_PRODUCT_ION_XICS}
-                  onToggleProductIon={toggleProductIon}
+                  hasPfmb={hasPfmb}
+                  selectedRt={selectedRt}
+                  selectedRtSource={inspectedRt?.source ?? null}
+                  onSelectRt={selectRtFromPfmb}
+                  pfmbEvidence={pfmbEvidence}
+                  embedded
                 />
               </CardContent>
             </Card>
@@ -400,14 +459,17 @@ export function BuMatchDetailPage() {
         </>
       )}
 
-      <BuPfmbAnnotationCard
-        slug={dataset.slug}
-        matchId={parsedMatchId}
-        hasPfmb={Boolean(dataset.capabilities?.has_ms2_pfmb)}
-        selectedRt={selectedRt}
-        selectedRtSource={inspectedRt?.source ?? null}
-        onSelectRt={selectRtFromPfmb}
-      />
+      {!isMzml && (
+        <BuPfmbAnnotationCard
+          slug={dataset.slug}
+          matchId={parsedMatchId}
+          hasPfmb={hasPfmb}
+          selectedRt={selectedRt}
+          selectedRtSource={inspectedRt?.source ?? null}
+          onSelectRt={selectRtFromPfmb}
+          pfmbEvidence={pfmbEvidence}
+        />
+      )}
 
       {xicFullOpen && xic.data && (
         <BuChartModal
@@ -466,6 +528,8 @@ export function BuMatchDetailPage() {
             onZoomChange={setMs2ModalZoom}
             onMatchedIonClick={toggleProductIon}
             selectedProductIonIds={selectedProductIonIds}
+            externalAnnotations={ms2ExternalAnnotations}
+            annotationMode={ms2AnnotationMode}
           />
         </BuChartModal>
       )}

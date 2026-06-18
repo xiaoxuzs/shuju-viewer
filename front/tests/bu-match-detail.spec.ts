@@ -73,8 +73,18 @@ const xic = {
   ],
 };
 
-function spectrum(scan: number, rt: number, msLevel: 1 | 2) {
-  const matchedIons = [
+type MatchedIonFixture = {
+  ion_type: "b" | "y";
+  position: number;
+  charge: number;
+  theo_mz: number;
+  exp_mz: number;
+  ppm: number;
+  intensity: number;
+};
+
+function defaultMatchedIons(): MatchedIonFixture[] {
+  return [
     { ion_type: "b", position: 2, charge: 1, theo_mz: 125, exp_mz: 125, ppm: 0, intensity: 90 },
     { ion_type: "y", position: 3, charge: 1, theo_mz: 150, exp_mz: 150, ppm: 0, intensity: 80 },
     { ion_type: "y", position: 5, charge: 1, theo_mz: 175.119, exp_mz: 175.119, ppm: 0, intensity: 100 },
@@ -85,6 +95,25 @@ function spectrum(scan: number, rt: number, msLevel: 1 | 2) {
     { ion_type: "b", position: 8, charge: 1, theo_mz: 300, exp_mz: 300, ppm: 0, intensity: 30 },
     { ion_type: "y", position: 9, charge: 2, theo_mz: 325, exp_mz: 325, ppm: 0, intensity: 20 },
   ];
+}
+
+function largeMatchedIons(): MatchedIonFixture[] {
+  return Array.from({ length: 30 }, (_, index) => {
+    const position = index + 1;
+    const mz = 125 + index * 10;
+    return {
+      ion_type: index % 2 === 0 ? "b" : "y",
+      position,
+      charge: index % 5 === 0 ? 2 : 1,
+      theo_mz: mz,
+      exp_mz: mz,
+      ppm: 0,
+      intensity: 100 - index,
+    };
+  });
+}
+
+function spectrum(scan: number, rt: number, msLevel: 1 | 2, matchedIons = defaultMatchedIons()) {
   return {
     scan,
     native_id: `scan=${scan}`,
@@ -124,6 +153,7 @@ async function mockMzmlMatch(
     }>>;
     xicBody?: typeof xic;
     productNoSignal?: boolean;
+    matchedIons?: MatchedIonFixture[];
   } = {},
 ) {
   await page.route("**/api/v1/**", async (route) => {
@@ -166,7 +196,12 @@ async function mockMzmlMatch(
           body: JSON.stringify({ detail: failure.detail }),
         });
       }
-      return fulfillJson(route, url.searchParams.has("rt") ? spectrum(67727, 93.01, 2) : spectrum(67726, 92.46, 2));
+      return fulfillJson(
+        route,
+        url.searchParams.has("rt")
+          ? spectrum(67727, 93.01, 2, options.matchedIons)
+          : spectrum(67726, 92.46, 2, options.matchedIons),
+      );
     }
     if (url.pathname.endsWith("/matches/1/product-xics")) {
       const failure = options.endpointErrors?.product;
@@ -351,6 +386,29 @@ test("adds top fragments, enforces the limit, and switches raw or normalized vie
   await expect(page.locator('[data-testid="matched-spectrum-peak"][data-product-ion-selected="true"]')).toHaveCount(0);
 });
 
+test("live fragment table scrolls internally without breaking product ion checkboxes", async ({ page }) => {
+  await mockMzmlMatch(page, 0, -1, undefined, 200, { matchedIons: largeMatchedIons() });
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByRole("heading", { name: "Live mzML matched b/y fragments (30)" })).toBeVisible();
+  const scroller = page.getByTestId("live-fragment-table-scroll");
+  await expect(scroller).toBeVisible();
+  const metrics = await scroller.evaluate((node) => ({
+    clientHeight: node.clientHeight,
+    scrollHeight: node.scrollHeight,
+  }));
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+  expect(metrics.clientHeight).toBeLessThanOrEqual(380);
+  await expect(page.getByRole("columnheader", { name: "Product XIC" })).toBeVisible();
+
+  const row = page.getByTestId("live-fragment-row").filter({ hasText: "b3" });
+  const batchRequest = page.waitForRequest((request) => request.url().endsWith("/product-xics"));
+  await row.getByRole("checkbox", { name: "Add b3 to product ion XIC" }).check();
+  await batchRequest;
+  await expect(row).toHaveAttribute("data-product-ion-selected", "true");
+  await expect(row.getByRole("checkbox", { name: "Remove b3 from product ion XIC" })).toBeChecked();
+});
+
 test("keeps successful product ion traces when one query fails", async ({ page }) => {
   await mockMzmlMatch(page, 0, -1, 125);
   await page.goto("/datasets/demo/matches/1");
@@ -360,7 +418,7 @@ test("keeps successful product ion traces when one query fails", async ({ page }
 
   await expect(card.getByText("Failed to load product ion XIC for b2.")).toBeVisible();
   await expect(card.getByTestId("plot-series")).toHaveCount(2);
-  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
 });
 
 test("live fragment checkbox synchronizes table, spectrum, chips, and removal", async ({ page }) => {
@@ -398,7 +456,7 @@ test("batch request failure stays inside the product ion card", async ({ page })
   await row.getByRole("checkbox", { name: "Add y5 to product ion XIC" }).check();
 
   await expect(page.getByTestId("product-ion-xic-card")).toContainText("Failed to load product ion XIC.");
-  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
 });
 
 test("scan-index missing XIC stays local and preserves its backfill command", async ({ page }) => {
@@ -416,7 +474,7 @@ test("scan-index missing XIC stays local and preserves its backfill command", as
   await expect(page.getByText("Derived scan index is not ready.")).toBeVisible();
   await expect(page.getByText(command)).toBeVisible();
   await expect(page.getByRole("heading", { name: "MS1 spectrum from mzML" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
 });
 
 test("empty precursor XIC shows a no-signal state without hiding spectra", async ({ page }) => {
@@ -431,7 +489,7 @@ test("empty precursor XIC shows a no-signal state without hiding spectra", async
 
   await expect(page.getByText("No precursor signal in the selected range.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "MS1 spectrum from mzML" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
 });
 
 test("product XIC stale state stays inside the product card", async ({ page }) => {
@@ -452,7 +510,7 @@ test("product XIC stale state stays inside the product card", async ({ page }) =
   const card = page.getByTestId("product-ion-xic-card");
   await expect(card.getByText("Derived scan index is stale.")).toBeVisible();
   await expect(card.getByText(command)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
 });
 
 test("all no-signal product traces show one local no-signal state", async ({ page }) => {
@@ -464,7 +522,7 @@ test("all no-signal product traces show one local no-signal state", async ({ pag
 
   await expect(card.getByText("No product ion signal in the selected range.")).toBeVisible();
   await expect(card.getByTestId("plot-series")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Live mzML MS2 matching" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
 });
 
 for (const scanNumber of [-1, null, undefined]) {

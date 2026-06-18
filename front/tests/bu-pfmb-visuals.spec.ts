@@ -111,16 +111,22 @@ const xicStub = {
 };
 
 function spectrumStub(msLevel: 1 | 2) {
+  const pfmbMappedMz = [181.1073, 199.1073, 601.3073];
   return {
     scan: msLevel === 2 ? 100 : 99,
     native_id: `scan=${msLevel}`,
     ms_level: msLevel,
     rt_seconds: 94.99 * 60,
     rt_minutes: 94.99,
-    mz: [100, 200, 300],
-    intensity: [20, 100, 30],
+    mz: msLevel === 2 ? [100, ...pfmbMappedMz, 650, 700] : [100, 200, 300],
+    intensity: msLevel === 2 ? [20, 40, 100, 80, 60, 30] : [20, 100, 30],
     precursor: msLevel === 2 ? { selected_mz: 477.3051, charge: 2, isolation_target_mz: 478, isolation_lower: 6.5, isolation_upper: 6.5 } : null,
-    matched_ions: [],
+    matched_ions: msLevel === 2
+      ? [
+          { ion_type: "y", position: 5, charge: 1, theo_mz: 601.3, exp_mz: 601.3073, ppm: 0.5, intensity: 80 },
+          { ion_type: "b", position: 4, charge: 1, theo_mz: 650, exp_mz: 650, ppm: 0, intensity: 60 },
+        ]
+      : [],
     markers: [],
   };
 }
@@ -133,10 +139,14 @@ interface Counters {
   slots: number;
   matrix: number;
   annotationPrsm: number[];
+  productXics: number;
 }
 
-async function mockPfmb(page: Page): Promise<Counters> {
-  const counters: Counters = { slots: 0, matrix: 0, annotationPrsm: [] };
+async function mockPfmb(
+  page: Page,
+  opts: { ms2Spectrum?: ReturnType<typeof spectrumStub>; annotationDelayMs?: number } = {},
+): Promise<Counters> {
+  const counters: Counters = { slots: 0, matrix: 0, annotationPrsm: [], productXics: 0 };
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
@@ -154,29 +164,143 @@ async function mockPfmb(page: Page): Promise<Counters> {
     const annMatch = p.match(/\/matches\/\d+\/ms2-annotation\/(\d+)$/);
     if (annMatch) {
       counters.annotationPrsm.push(Number(annMatch[1]));
+      if (opts.annotationDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, opts.annotationDelayMs));
+      }
       return fulfillJson(route, annotationFor(Number(annMatch[1])));
     }
     if (/\/matches\/\d+\/xic$/.test(p)) return fulfillJson(route, xicStub);
     if (/\/matches\/\d+\/spectrum\/ms1$/.test(p)) return fulfillJson(route, spectrumStub(1));
-    if (/\/matches\/\d+\/spectrum\/ms2$/.test(p)) return fulfillJson(route, spectrumStub(2));
+    if (/\/matches\/\d+\/spectrum\/ms2$/.test(p)) {
+      if (opts.ms2Spectrum) return fulfillJson(route, opts.ms2Spectrum);
+      const requestedRt = Number(url.searchParams.get("rt"));
+      const spectrum = spectrumStub(2);
+      return fulfillJson(
+        route,
+        Number.isFinite(requestedRt)
+          ? { ...spectrum, rt_minutes: requestedRt, rt_seconds: requestedRt * 60 }
+          : spectrum,
+      );
+    }
+    if (/\/matches\/\d+\/product-xics$/.test(p)) {
+      counters.productXics += 1;
+      return fulfillJson(route, { traces: [] });
+    }
     await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
   });
   return counters;
 }
 
-test("spectrum draws one physical peak for duplicate peak_id annotations", async ({ page }) => {
-  await mockPfmb(page);
+function ms2Svg(page: Page) {
+  return page.locator('svg[aria-label^="MS2 scan #100"]').first();
+}
+
+async function clickMs2Mz(page: Page, mz: number) {
+  const svg = ms2Svg(page);
+  const box = await svg.boundingBox();
+  if (!box) throw new Error("MS2 SVG has no bounding box");
+  await svg.click({
+    position: {
+      x: 72 + (box.width - 92) * ((mz - 100) / 600),
+      y: 220,
+    },
+  });
+}
+
+async function hoverMs2Mz(page: Page, mz: number) {
+  const svg = ms2Svg(page);
+  const box = await svg.boundingBox();
+  if (!box) throw new Error("MS2 SVG has no bounding box");
+  await svg.hover({
+    position: {
+      x: 72 + (box.width - 92) * ((mz - 100) / 600),
+      y: 220,
+    },
+  });
+}
+
+test("PFMB Evidence removes the standalone spectrum and overlays mapped annotations on live MS2", async ({ page }) => {
+  const counters = await mockPfmb(page);
   await page.goto("/datasets/demo/matches/1");
 
-  const card = page.getByTestId("pfmb-card");
-  const peaks = card.getByTestId("pfmb-spectrum-peak");
+  const evidence = page.getByTestId("ms2-pfmb-evidence");
+  await expect(evidence.getByRole("heading", { name: "MS2 / PFMB Evidence", exact: true })).toBeVisible();
+  await expect(evidence.getByRole("heading", { name: "MS2 spectrum", exact: true })).toBeVisible();
+  await expect(evidence.getByRole("heading", { name: "Product ion evidence", exact: true })).toBeVisible();
+  await expect(evidence.getByRole("heading", { name: "PFMB evidence", exact: true })).toBeVisible();
+  await expect(evidence.getByTestId("product-ion-xic-card")).toBeVisible();
+  await expect(evidence.getByTestId("live-fragment-row")).toHaveCount(2);
+
+  const card = evidence.getByTestId("pfmb-card");
   const rows = card.getByTestId("pfmb-ion-row");
   await expect(rows).toHaveCount(4);
-  await expect(peaks).toHaveCount(3);
+  await expect(card.getByTestId("pfmb-header")).toContainText(
+    "counts and intensity sums are not directly comparable",
+  );
+  await expect(card.getByTestId("pfmb-quality-summary")).toBeVisible();
+  await expect(card.getByTestId("pfmb-heatmap")).toBeVisible();
+  await expect(card.getByTestId("pfmb-slot-panel")).toBeVisible();
+  await expect(card.getByTestId("pfmb-slot-panel").getByTestId("pfmb-slot-buttons")).toBeVisible();
+  await expect(card.getByTestId("pfmb-sequence-coverage")).toBeVisible();
+  await expect(card.getByTestId("pfmb-slot-summary")).toBeVisible();
+  await expect(card.getByText("Pre-computed PFMB annotation spectrum")).toHaveCount(0);
+  await expect(card.getByTestId("pfmb-spectrum-peak")).toHaveCount(0);
 
-  const sharedPeak = card.locator('[data-testid="pfmb-spectrum-peak"][data-peak-id="42"]');
-  await expect(sharedPeak).toHaveCount(1);
-  await expect(sharedPeak).toHaveAttribute("data-families", "y5,c3");
+  const heatmapBox = await card.getByTestId("pfmb-heatmap").boundingBox();
+  const slotPanelBox = await card.getByTestId("pfmb-slot-panel").boundingBox();
+  expect(heatmapBox).not.toBeNull();
+  expect(slotPanelBox).not.toBeNull();
+  expect(slotPanelBox!.x).toBeGreaterThan(heatmapBox!.x + 100);
+  expect(Math.abs(slotPanelBox!.y - heatmapBox!.y)).toBeLessThan(80);
+
+  await expect(page.getByTestId("spectrum-annotation-legend")).toContainText("PFMB primary");
+  await expect(page.getByTestId("spectrum-annotation-legend")).toContainText("Live fallback");
+  await expect(page.getByTestId("external-spectrum-annotation")).toHaveCount(0);
+
+  const svg = ms2Svg(page);
+  await expect(svg.locator('line[data-peak-stem="true"]')).toHaveCount(6);
+  await expect(svg.locator('line[data-primary-source="pfmb"][data-has-live="true"][data-primary-label="y5"]'))
+    .toHaveCount(1);
+  await expect(svg.locator('line[data-primary-source="pfmb"][data-primary-label="b2"]')).toHaveCount(1);
+  await expect(svg.locator('line[data-primary-source="live"][data-primary-label="b4"]')).toHaveCount(1);
+  await expect(svg.locator('line[data-primary-source="pfmb"][data-primary-label="c3"]')).toHaveCount(0);
+
+  await hoverMs2Mz(page, 601.3073);
+  await expect(page.getByText("Primary source: PFMB pre-computed")).toBeVisible();
+  await expect(page.getByText("Secondary source: Live mzML")).toBeVisible();
+  await expect(page.getByText("Live exp m/z 601.3073")).toBeVisible();
+  await expect(page.getByText("Series c; position 3; charge 1+")).toBeVisible();
+
+  await clickMs2Mz(page, 601.3073);
+  await page.waitForTimeout(250);
+  expect(counters.productXics).toBe(0);
+
+  const productResponse = page.waitForResponse((response) => response.url().endsWith("/product-xics"));
+  await clickMs2Mz(page, 650);
+  await productResponse;
+  expect(counters.productXics).toBe(1);
+
+  await svg.locator("xpath=..").getByRole("button", { name: "enlarge" }).click();
+  const dialog = page.getByRole("dialog");
+  const modalSvg = dialog.locator('svg[aria-label^="MS2 scan #100"]');
+  await expect(modalSvg.locator('line[data-peak-stem="true"]')).toHaveCount(6);
+  await expect(modalSvg.locator('line[data-primary-source="pfmb"][data-has-live="true"][data-primary-label="y5"]'))
+    .toHaveCount(1);
+  await expect(dialog.getByTestId("external-spectrum-annotation")).toHaveCount(0);
+});
+
+test("unmapped PFMB annotations are not drawn on the live MS2 spectrum", async ({ page }) => {
+  await mockPfmb(page, {
+    ms2Spectrum: {
+      ...spectrumStub(2),
+      mz: [100, 200, 300],
+      intensity: [20, 100, 30],
+    },
+  });
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(ms2Svg(page).locator('line[data-primary-source="pfmb"]')).toHaveCount(0);
+  await expect(page.getByTestId("ms2-pfmb-unmapped")).toContainText("not drawn");
 });
 
 test("heatmap loads with a single matrix request and no per-slot N+1", async ({ page }) => {
@@ -203,6 +327,11 @@ test("heatmap distinguishes detected zero from not detected when metadata exists
   const heatmap = page.getByTestId("pfmb-heatmap");
   await expect(heatmap.getByTestId("pfmb-heatmap-legend")).toContainText("Log intensity");
   await expect(heatmap.getByTestId("pfmb-heatmap-legend")).toContainText("Matched zero intensity");
+  await expect(heatmap).toContainText("Columns are PFMB slot RT values in minutes");
+  await expect(heatmap.getByTestId("pfmb-heatmap-apex")).toContainText("PFMB apex");
+  await expect(heatmap.getByTestId("pfmb-heatmap-rt-label")).toContainText(["93.99", "94.99", "95.99"]);
+  await expect(heatmap.getByTestId("pfmb-heatmap-rt-label").first()).toHaveAttribute("data-slot-index", "4");
+  await expect(heatmap.getByTestId("pfmb-heatmap-rt-label").first()).toHaveText("93.99");
   await expect(heatmap.locator('[data-family="y5"][data-col="0"]')).toHaveAttribute(
     "data-detection",
     "matched-zero",
@@ -224,6 +353,25 @@ test("clicking a heatmap cell switches RT and highlights the fragment", async ({
   await expect(card.getByTestId("pfmb-selected-rt")).toContainText("93.99");
   await expect(card.getByTestId("pfmb-ion-row").filter({ hasText: "b2" })).toHaveAttribute("data-highlighted", "true");
   await expect(card.locator('[data-testid="seq-site"][data-site="2"]')).toHaveAttribute("data-highlighted", "true");
+});
+
+test("clicking a PFMB slot updates selection without scrolling the page", async ({ page }) => {
+  await mockPfmb(page, { annotationDelayMs: 250 });
+  await page.goto("/datasets/demo/matches/1");
+
+  const card = page.getByTestId("pfmb-card");
+  const slotPanel = card.getByTestId("pfmb-slot-panel");
+  await expect(card.getByTestId("pfmb-slot-summary")).toContainText("101");
+  await slotPanel.scrollIntoViewIfNeeded();
+  const before = await page.evaluate(() => window.scrollY);
+
+  await slotPanel.getByRole("button", { name: "Slot 4 | PFMB slot RT 93.99 min", exact: true }).click();
+
+  await expect(card.getByTestId("pfmb-selected-rt")).toContainText("93.99");
+  await expect(card.getByTestId("pfmb-heatmap-current-col")).toHaveAttribute("data-col", "0");
+  await expect(card.getByTestId("pfmb-slot-summary")).toContainText("100");
+  const after = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(after - before)).toBeLessThanOrEqual(10);
 });
 
 test("heatmap tooltip reports ion, slot RT, intensity, and detection state", async ({ page }) => {
@@ -261,42 +409,12 @@ test("clicking a covered sequence site highlights the table row", async ({ page 
   await expect(card.getByTestId("pfmb-ion-row").filter({ hasText: "b2" })).toHaveAttribute("data-highlighted", "false");
 });
 
-test("clicking a spectrum peak highlights the matching table row", async ({ page }) => {
-  await mockPfmb(page);
-  await page.goto("/datasets/demo/matches/1");
-
-  const card = page.getByTestId("pfmb-card");
-  const svg = card.locator('svg[aria-label^="Pre-computed PFMB annotation spectrum"]');
-  const box = await svg.boundingBox();
-  if (!box) throw new Error("PFMB spectrum SVG has no bounding box");
-  // Neutral-mass domain [190.056, 608.344]; z_dot3 (360.2) sits at ~0.407 of the
-  // inner width (margins left=72, right=20). y is mid-plot (no vertical gate).
-  await svg.click({ position: { x: 72 + (box.width - 92) * 0.4068, y: 180 } });
-
-  await expect(card.getByTestId("pfmb-ion-row").filter({ hasText: "z.3" })).toHaveAttribute("data-highlighted", "true");
-});
-
-test("mass-mode toggle switches the spectrum axis label", async ({ page }) => {
-  await mockPfmb(page);
-  await page.goto("/datasets/demo/matches/1");
-
-  const card = page.getByTestId("pfmb-card");
-  const svg = card.locator('svg[aria-label^="Pre-computed PFMB annotation spectrum"]');
-  await expect(svg).toContainText("neutral mass (Da)");
-
-  await card.getByTestId("pfmb-mass-mode").getByRole("button", { name: "m/z" }).click();
-  await expect(svg).toContainText("m/z");
-});
-
-test("changing match resets PFMB highlight, mass mode and fullscreen state", async ({ page }) => {
+test("changing match resets PFMB highlight state", async ({ page }) => {
   await mockPfmb(page);
   await page.goto("/datasets/demo/matches/1");
 
   const card = page.getByTestId("pfmb-card");
   await card.getByTestId("pfmb-ion-row").filter({ hasText: "b2" }).click();
-  await card.getByTestId("pfmb-mass-mode").getByRole("button", { name: "m/z" }).click();
-  await card.getByRole("button", { name: "enlarge" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
 
   await page.evaluate(() => {
     window.history.pushState({}, "", "/datasets/demo/matches/2");
@@ -305,9 +423,5 @@ test("changing match resets PFMB highlight, mass mode and fullscreen state", asy
 
   await expect(page).toHaveURL(/\/datasets\/demo\/matches\/2$/);
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(card.getByTestId("pfmb-mass-mode").getByRole("button", { name: "neutral mass" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
   await expect(card.locator('[data-testid="pfmb-ion-row"][data-highlighted="true"]')).toHaveCount(0);
 });

@@ -9,21 +9,87 @@ import {
   layoutSpectrumLabels,
   type SpectrumLabelMode,
 } from "@/features/bu/components/spectrum/spectrumLabelLayout";
+import type { SpectrumExternalAnnotation } from "@/features/bu/components/spectrum/spectrumAnnotation";
 import { toProductIonSelection } from "@/features/bu/components/match-detail/productIonSelection";
 
 interface ChartPeak {
   mz: number;
   intensity: number;
   ion?: BuMatchedIon;
+  externalAnnotations: SpectrumExternalAnnotation[];
 }
+
+type PeakPrimarySource = "pfmb" | "live" | "none";
+
+const EMPTY_EXTERNAL_ANNOTATIONS: SpectrumExternalAnnotation[] = [];
 
 function ionLabel(ion: BuMatchedIon): string {
   return `${ion.ion_type}${ion.position}${ion.charge > 1 ? `^${ion.charge}+` : ""}`;
 }
 
+function colorForLiveIon(ion: BuMatchedIon): string {
+  if (ion.ion_type === "b") return BU_CHART.b;
+  if (ion.ion_type === "y") return BU_CHART.y;
+  return BU_CHART.unmatched;
+}
+
+function colorForExternal(annotation: SpectrumExternalAnnotation): string {
+  return annotation.color ?? BU_CHART.apex;
+}
+
+function externalSourceLabel(annotation: SpectrumExternalAnnotation): string {
+  if (annotation.source === "pfmb") return "PFMB pre-computed";
+  if (annotation.source === "live") return "Live mzML";
+  return "External";
+}
+
+function annotationMatchesLiveIon(annotation: SpectrumExternalAnnotation, ion: BuMatchedIon): boolean {
+  return annotation.ionType === ion.ion_type && annotation.position === ion.position && annotation.charge === ion.charge;
+}
+
+function primaryPfmbAnnotation(peak: ChartPeak): SpectrumExternalAnnotation | undefined {
+  if (peak.externalAnnotations.length === 0) return undefined;
+  if (peak.ion) {
+    const matchingLive = peak.externalAnnotations.find((annotation) => annotationMatchesLiveIon(annotation, peak.ion!));
+    if (matchingLive) return matchingLive;
+  }
+  let best = peak.externalAnnotations[0];
+  let bestIntensity = best.matchedPeakIntensity;
+  for (const annotation of peak.externalAnnotations.slice(1)) {
+    const intensity = annotation.matchedPeakIntensity;
+    if (
+      (bestIntensity == null && intensity != null) ||
+      (bestIntensity != null && intensity != null && intensity > bestIntensity)
+    ) {
+      best = annotation;
+      bestIntensity = intensity;
+    }
+  }
+  return best;
+}
+
+function orderedPfmbAnnotations(peak: ChartPeak): SpectrumExternalAnnotation[] {
+  const primary = primaryPfmbAnnotation(peak);
+  if (!primary) return [];
+  return [primary, ...peak.externalAnnotations.filter((annotation) => annotation !== primary)];
+}
+
+function primarySourceFor(peak: ChartPeak): PeakPrimarySource {
+  if (primaryPfmbAnnotation(peak)) return "pfmb";
+  if (peak.ion) return "live";
+  return "none";
+}
+
+function primaryLabelFor(peak: ChartPeak): string | undefined {
+  const pfmb = primaryPfmbAnnotation(peak);
+  if (pfmb) return pfmb.label;
+  return peak.ion ? ionLabel(peak.ion) : undefined;
+}
+
 function colorFor(peak: ChartPeak): string {
-  if (peak.ion?.ion_type === "b") return BU_CHART.b;
-  if (peak.ion?.ion_type === "y") return BU_CHART.y;
+  const pfmb = primaryPfmbAnnotation(peak);
+  if (pfmb) return colorForExternal(pfmb);
+  if (peak.ion) return colorForLiveIon(peak.ion);
   return BU_CHART.unmatched;
 }
 
@@ -55,6 +121,8 @@ export function BuSpectrumChart({
   onZoomChange,
   onMatchedIonClick,
   selectedProductIonIds,
+  externalAnnotations = EMPTY_EXTERNAL_ANNOTATIONS,
+  annotationMode = "live",
   onOpenFull,
   className,
 }: {
@@ -68,9 +136,20 @@ export function BuSpectrumChart({
   onZoomChange?: (zoom: Zoom) => void;
   onMatchedIonClick?: (ion: BuMatchedIon) => void;
   selectedProductIonIds?: ReadonlySet<string>;
+  externalAnnotations?: SpectrumExternalAnnotation[];
+  annotationMode?: "live" | "external" | "both";
   onOpenFull?: () => void;
   className?: string;
 }) {
+  const showLiveAnnotations = annotationMode === "live" || annotationMode === "both";
+  const showExternalAnnotations = annotationMode === "external" || annotationMode === "both";
+  const mappedExternalAnnotations = useMemo(
+    () =>
+      showExternalAnnotations
+        ? externalAnnotations.filter((annotation) => annotation.isMappedToRawPeak)
+        : [],
+    [externalAnnotations, showExternalAnnotations],
+  );
   const markerMz = spectrum.markers?.find((marker) => marker.label === "precursor")?.mz ?? precursorMz;
   const title =
     spectrum.ms_level === 1
@@ -84,13 +163,25 @@ export function BuSpectrumChart({
     const mapped: ChartPeak[] = spectrum.mz.map((mz, index) => ({
       mz,
       intensity: spectrum.intensity[index] ?? 0,
+      externalAnnotations: [],
     }));
-    for (const ion of spectrum.matched_ions) {
-      const idx = nearestPeakIndex(mapped, ion.exp_mz);
-      if (idx !== null) mapped[idx] = { ...mapped[idx], ion };
+    if (showLiveAnnotations) {
+      for (const ion of spectrum.matched_ions) {
+        const idx = nearestPeakIndex(mapped, ion.exp_mz);
+        if (idx !== null) mapped[idx] = { ...mapped[idx], ion };
+      }
+    }
+    for (const annotation of mappedExternalAnnotations) {
+      const idx = nearestPeakIndex(mapped, annotation.matchedPeakMz ?? annotation.expMz);
+      if (idx !== null) {
+        mapped[idx] = {
+          ...mapped[idx],
+          externalAnnotations: [...mapped[idx].externalAnnotations, annotation],
+        };
+      }
     }
     return mapped.sort((a, b) => a.mz - b.mz);
-  }, [spectrum]);
+  }, [mappedExternalAnnotations, showLiveAnnotations, spectrum]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -196,9 +287,23 @@ export function BuSpectrumChart({
         .selectAll<SVGLineElement, ChartPeak>("line")
         .data(visible)
         .join("line")
-        .attr("data-testid", (d) => (d.ion ? "matched-spectrum-peak" : null))
-        .attr("data-product-ion-id", (d) => toProductIonSelection(d.ion)?.id ?? null)
+        .attr("data-testid", (d) =>
+          primarySourceFor(d) === "live"
+            ? "matched-spectrum-peak"
+            : primarySourceFor(d) === "pfmb"
+              ? "spectrum-peak-primary-pfmb"
+              : null,
+        )
+        .attr("data-peak-stem", "true")
+        .attr("data-primary-source", (d) => primarySourceFor(d))
+        .attr("data-primary-label", (d) => primaryLabelFor(d) ?? null)
+        .attr("data-has-live", (d) => (d.ion ? "true" : "false"))
+        .attr("data-has-pfmb", (d) => (d.externalAnnotations.length > 0 ? "true" : "false"))
+        .attr("data-product-ion-id", (d) =>
+          primarySourceFor(d) === "live" ? toProductIonSelection(d.ion)?.id ?? null : null,
+        )
         .attr("data-product-ion-selected", (d) => {
+          if (primarySourceFor(d) !== "live") return "false";
           const selection = toProductIonSelection(d.ion);
           return selection && selectedProductIonIds?.has(selection.id) ? "true" : "false";
         })
@@ -208,10 +313,11 @@ export function BuSpectrumChart({
         .attr("y2", (d) => yScale(d.intensity))
         .attr("stroke", (d) => colorFor(d))
         .attr("stroke-width", (d) => {
+          if (primarySourceFor(d) === "pfmb") return 1.8;
           const selection = toProductIonSelection(d.ion);
           return selection && selectedProductIonIds?.has(selection.id) ? 3.6 : d.ion ? 1.8 : 0.7;
         })
-        .attr("opacity", (d) => (d.ion ? 1 : 0.85));
+        .attr("opacity", (d) => (primarySourceFor(d) === "none" ? 0.85 : 1));
 
       const visibleMarkers = (spectrum.markers ?? []).filter((marker) => marker.mz >= x0 && marker.mz <= x1);
       markersG
@@ -237,15 +343,16 @@ export function BuSpectrumChart({
         .attr("fill", BU_CHART.apex)
         .text((d) => `${d.label}${d.charge ? ` +${d.charge}` : ""}`);
 
-      const matched = visible.filter((p) => p.ion).sort((a, b) => b.intensity - a.intensity);
-      const candidates = matched.flatMap((peak) => {
+      const annotated = visible.filter((p) => primarySourceFor(p) !== "none").sort((a, b) => b.intensity - a.intensity);
+      const candidates = annotated.flatMap((peak) => {
         const px = xScale(peak.mz);
         const py = yScale(peak.intensity);
         if (px < 0 || px > innerW || py < 0 || py > innerH) return [];
-        const label = ionLabel(peak.ion!);
+        const label = primaryLabelFor(peak);
+        if (!label) return [];
         const labelWidth = Math.max(28, label.length * 7);
         return [{
-          id: `${peak.mz}-${label}`,
+          id: `${peak.mz}-${primarySourceFor(peak)}-${label}`,
           x: Math.max(labelWidth / 2, Math.min(innerW - labelWidth / 2, px)),
           y: Math.max(18, py - 3),
           intensity: peak.intensity,
@@ -308,7 +415,7 @@ export function BuSpectrumChart({
       const cx = event.clientX - rect.left - margin.left;
       const cy = event.clientY - rect.top - margin.top;
       if (cx < 0 || cx > innerW || cy < 0 || cy > innerH) return;
-      const matched = visible.filter((peak) => peak.ion);
+      const matched = visible.filter((peak) => primarySourceFor(peak) === "live" && peak.ion);
       const selected = matched.sort(
         (a, b) => Math.abs(xScale(a.mz) - cx) - Math.abs(xScale(b.mz) - cx),
       )[0];
@@ -385,11 +492,33 @@ export function BuSpectrumChart({
     applyZoomRef.current?.(zoom);
   }, [zoom]);
 
+  const hasExternalAnnotations = mappedExternalAnnotations.length > 0;
+
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
       <div className="mb-2">
         <div className="text-center text-base font-medium">{title}</div>
         <div className="text-center text-sm text-muted-foreground">{subtitle}</div>
+        {hasExternalAnnotations && (
+          <div
+            className="mt-1 flex justify-center gap-3 text-[11px] text-muted-foreground"
+            data-testid="spectrum-annotation-legend"
+          >
+            <span>
+              <span
+                className="mr-1 inline-block h-2 w-4 align-middle"
+                style={{ backgroundColor: colorForExternal(mappedExternalAnnotations[0]) }}
+              />
+              PFMB primary
+            </span>
+            {showLiveAnnotations && (
+              <span>
+                <span className="mr-1 inline-block h-2 w-4 align-middle" style={{ backgroundColor: BU_CHART.b }} />
+                Live fallback
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <svg ref={svgRef} aria-label={title} />
       {spectrum.ms_level === 2 && (
@@ -445,9 +574,49 @@ export function BuSpectrumChart({
         >
           <div className="font-mono">m/z {tooltip.peak.mz.toFixed(4)}</div>
           <div className="font-mono text-muted-foreground">int {formatIntensity(tooltip.peak.intensity)}</div>
-          {tooltip.peak.ion && (
+          {orderedPfmbAnnotations(tooltip.peak).length > 0 ? (
             <>
-              <div className="font-semibold" style={{ color: colorFor(tooltip.peak) }}>
+              {orderedPfmbAnnotations(tooltip.peak).map((annotation, index) => (
+                <div key={`${annotation.id}-${index}`} className="mt-1 border-t border-border/70 pt-1">
+                  <div className="font-mono text-muted-foreground">
+                    {index === 0 ? "Primary source" : "PFMB source"}: {externalSourceLabel(annotation)}
+                  </div>
+                  <div className="font-semibold" style={{ color: colorForExternal(annotation) }}>
+                    {annotation.label}
+                  </div>
+                  <div className="font-mono text-muted-foreground">
+                    Series {annotation.ionType}; position {annotation.position}; charge {annotation.charge}+
+                  </div>
+                  <div className="font-mono">Matched raw m/z {tooltip.peak.mz.toFixed(4)}</div>
+                  {annotation.theoMz !== undefined && (
+                    <div className="font-mono">Theoretical m/z {annotation.theoMz.toFixed(4)}</div>
+                  )}
+                  <div className="font-mono">PFMB observed m/z {annotation.expMz.toFixed(4)}</div>
+                  {annotation.ppm != null && <div className="font-mono">{annotation.ppm.toFixed(2)} ppm</div>}
+                  {annotation.massErrorDa != null && (
+                    <div className="font-mono">Mass error {annotation.massErrorDa.toFixed(4)} Da</div>
+                  )}
+                </div>
+              ))}
+              {tooltip.peak.ion && (
+                <div className="mt-1 border-t border-border/70 pt-1">
+                  <div className="font-mono text-muted-foreground">Secondary source: Live mzML</div>
+                  <div className="font-semibold" style={{ color: colorForLiveIon(tooltip.peak.ion) }}>
+                    {ionLabel(tooltip.peak.ion)}
+                  </div>
+                  <div className="font-mono text-muted-foreground">
+                    Series {tooltip.peak.ion.ion_type}; position {tooltip.peak.ion.position}; charge {tooltip.peak.ion.charge}+
+                  </div>
+                  <div className="font-mono">Live theoretical m/z {tooltip.peak.ion.theo_mz.toFixed(4)}</div>
+                  <div className="font-mono">Live exp m/z {tooltip.peak.ion.exp_mz.toFixed(4)}</div>
+                  <div className="font-mono">Live error {tooltip.peak.ion.ppm.toFixed(2)} ppm</div>
+                </div>
+              )}
+            </>
+          ) : tooltip.peak.ion ? (
+            <>
+              <div className="mt-1 font-mono text-muted-foreground">Source: Live mzML</div>
+              <div className="font-semibold" style={{ color: colorForLiveIon(tooltip.peak.ion) }}>
                 {ionLabel(tooltip.peak.ion)}
               </div>
               <div className="font-mono text-muted-foreground">
@@ -464,7 +633,7 @@ export function BuSpectrumChart({
                 </div>
               )}
             </>
-          )}
+          ) : null}
         </div>
       )}
     </div>

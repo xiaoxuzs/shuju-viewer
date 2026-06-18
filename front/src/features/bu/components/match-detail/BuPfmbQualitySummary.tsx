@@ -29,11 +29,13 @@ export function BuPfmbQualitySummary({
   matrix,
   selectedRt,
   onSelectRt,
+  compact = false,
 }: {
   annotation: BuMs2AnnotationOut;
   matrix?: BuMs2AnnotationMatrixOut;
   selectedRt: number | null;
   onSelectRt: (rt: number) => void;
+  compact?: boolean;
 }) {
   const ions = annotation.matched_ions;
   const coverage = useMemo(
@@ -100,7 +102,7 @@ export function BuPfmbQualitySummary({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className={cn("grid grid-cols-1 gap-3", !compact && "sm:grid-cols-3")}>
         {/* Fragment coverage (theoretical cleavage-site coverage, not a peak match rate) */}
         <div className="rounded-md border border-border p-2" data-testid="pfmb-quality-coverage">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Fragment coverage</div>

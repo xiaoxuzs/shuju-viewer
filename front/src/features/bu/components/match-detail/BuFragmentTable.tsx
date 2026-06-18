@@ -30,9 +30,9 @@ export function BuFragmentTable({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="max-h-[360px] overflow-auto" data-testid="live-fragment-table-scroll">
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+            <thead className="sticky top-0 z-10 border-b border-border bg-background text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="py-2 text-left">Product XIC</th>
                 <th className="py-2 text-left">Ion</th>

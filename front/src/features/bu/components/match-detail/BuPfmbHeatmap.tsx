@@ -10,7 +10,7 @@ const MIN_CELL_W = 24;
 const MAX_CELL_W = 52;
 const CELL_H = 24;
 const LABEL_W = 76;
-const HEADER_H = 34;
+const HEADER_H = 44;
 
 type DetectionState = "detected" | "matched-zero" | "not-detected" | "legacy-zero";
 
@@ -95,6 +95,7 @@ export function BuPfmbHeatmap({
     });
     return best;
   }, [apexCol, selectedRt, slots]);
+  const labelEvery = slots.length <= 12 ? 1 : Math.ceil(slots.length / 12);
 
   if (slots.length === 0 || fragments.length === 0) {
     return (
@@ -116,7 +117,7 @@ export function BuPfmbHeatmap({
           <div className="text-xs uppercase tracking-wider text-muted-foreground">
             PFMB slot RT x fragment intensity
           </div>
-          <div className="text-[11px] text-muted-foreground">Color represents log intensity.</div>
+          <div className="text-[11px] text-muted-foreground">Columns are PFMB slot RT values in minutes.</div>
         </div>
         {fragments.length > maxRows && (
           <button
@@ -167,20 +168,27 @@ export function BuPfmbHeatmap({
             </text>
           )}
 
-          {slots.map((slot, column) => (
-            <text
-              key={`header-${slot.prsm_index}`}
-              x={LABEL_W + column * cellWidth + cellWidth / 2}
-              y={HEADER_H - 6}
-              textAnchor="middle"
-              fontSize={11}
-              fontWeight={column === currentCol ? 700 : 500}
-              className="cursor-pointer fill-muted-foreground hover:fill-foreground"
-              onClick={() => onSelectRt(slot.rt_minutes)}
-            >
-              {slot.slot_index}
-            </text>
-          ))}
+          {slots.map((slot, column) => {
+            const showLabel = column === currentCol || column === apexCol || column % labelEvery === 0;
+            if (!showLabel) return null;
+            return (
+              <text
+                key={`header-${slot.prsm_index}`}
+                data-testid="pfmb-heatmap-rt-label"
+                data-slot-index={slot.slot_index}
+                data-rt-minutes={Number.isFinite(slot.rt_minutes) ? slot.rt_minutes.toFixed(4) : ""}
+                x={LABEL_W + column * cellWidth + cellWidth / 2}
+                y={HEADER_H - 8}
+                textAnchor="middle"
+                fontSize={10}
+                fontWeight={column === currentCol ? 700 : 500}
+                className="cursor-pointer fill-muted-foreground hover:fill-foreground"
+                onClick={() => onSelectRt(slot.rt_minutes)}
+              >
+                {formatSlotRtLabel(slot)}
+              </text>
+            );
+          })}
 
           {rows.map(({ fragment, index: fragmentIndex }, rowIndex) => {
             const rowHighlighted = highlight?.has(fragment.key) ?? false;
@@ -233,8 +241,8 @@ export function BuPfmbHeatmap({
                       strokeWidth={rowHighlighted ? 2 : 0.5}
                       className="cursor-pointer"
                       onClick={() => {
-                        onSelectRt(slot.rt_minutes);
                         onHighlight(fragment.key);
+                        onSelectRt(slot.rt_minutes);
                       }}
                       onMouseMove={(event) => {
                         const bounds = event.currentTarget.ownerSVGElement!.getBoundingClientRect();
@@ -278,10 +286,16 @@ export function BuPfmbHeatmap({
         )}
       </div>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        Columns are PFMB slots; click a cell to select its PFMB slot RT and highlight the fragment across PFMB views.
+        Columns are PFMB slot RT values in minutes; click a cell to select its PFMB slot RT and highlight the fragment across PFMB views.
       </p>
     </div>
   );
+}
+
+function formatSlotRtLabel(slot: { slot_index: number; rt_minutes?: number | null }): string {
+  if (Number.isFinite(slot.rt_minutes)) return slot.rt_minutes!.toFixed(2);
+  if (Number.isFinite(slot.slot_index)) return `Slot ${slot.slot_index}`;
+  return "N/A";
 }
 
 function HeatmapLegend({ hasDetected }: { hasDetected: boolean }) {

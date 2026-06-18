@@ -251,8 +251,7 @@ test("table headers use neutral mass, not m/z", async ({ page }) => {
   await expect(card.getByText("Observed neutral mass")).toBeVisible();
   await expect(card.getByText("Mass error (ppm)")).toBeVisible();
   await expect(card.getByText("Mass error (Da)")).toBeVisible();
-  // The fragment table itself must stay neutral-mass based (the m/z mention
-  // elsewhere is the spectrum chart's mass-mode toggle, which is expected).
+  // The PFMB fragment table itself must stay neutral-mass based.
   await expect(card.locator("table").getByText("m/z")).toHaveCount(0);
   await expect(card.getByRole("columnheader", { name: "Product XIC" })).toHaveCount(0);
 });
