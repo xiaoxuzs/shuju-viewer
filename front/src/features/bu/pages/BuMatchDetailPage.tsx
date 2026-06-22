@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
@@ -17,8 +17,14 @@ import {
 } from "@/features/bu/api/buClient";
 import { BuFragmentTable } from "@/features/bu/components/match-detail/BuFragmentTable";
 import { BuEvidenceSummary } from "@/features/bu/components/match-detail/BuEvidenceSummary";
+import { EvidenceJumpControls } from "@/features/bu/components/match-detail/EvidenceJumpControls";
+import { EvidenceUpdateNotice } from "@/features/bu/components/match-detail/EvidenceUpdateNotice";
 import { BuPfmbAnnotationCard } from "@/features/bu/components/match-detail/BuPfmbAnnotationCard";
 import { BuProductIonXicCard } from "@/features/bu/components/match-detail/BuProductIonXicCard";
+import {
+  SelectedEvidenceBar,
+  type SelectedEvidenceSourceMode,
+} from "@/features/bu/components/match-detail/SelectedEvidenceBar";
 import { useBuPfmbEvidence } from "@/features/bu/components/match-detail/useBuPfmbEvidence";
 import {
   addTopProductIons,
@@ -38,7 +44,7 @@ import type { SpectrumExternalAnnotation } from "@/features/bu/components/spectr
 import { BuXicChart, type BuXicPointSelection } from "@/features/bu/components/spectrum/BuXicChart";
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
-import type { BuSpectrumV1, BuXicOut } from "@/features/bu/types";
+import type { BuMs2SlotItem, BuSpectrumV1, BuXicOut } from "@/features/bu/types";
 import {
   RT_LINK_TOLERANCE_MIN,
   SCAN_UNAVAILABLE_REASON,
@@ -47,6 +53,7 @@ import {
   inspectedRtSourceLabel,
   type InspectedRtSource,
 } from "@/features/bu/utils";
+import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 
 const MS2_PPM = 20;
@@ -55,6 +62,18 @@ const EMPTY_MS2_EXTERNAL_ANNOTATIONS: SpectrumExternalAnnotation[] = [];
 const PRODUCT_ION_LIMIT_WARNING =
   "Maximum 8 product ions can be compared at once. Remove one before adding another.";
 const ZOOM_HINT = "wheel to zoom (Shift = Y) · brush-drag = X";
+type EvidenceSource = "xic" | "pfmb" | "manual" | "default";
+
+type EvidenceRtSelection = {
+  rt: number;
+  source: EvidenceSource;
+  slotIndex?: number | null;
+};
+
+type EvidenceNotice = {
+  message: string;
+  pendingFollow?: { rt: number; slotIndex: number };
+};
 
 export function BuMatchDetailPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
@@ -70,9 +89,16 @@ export function BuMatchDetailPage() {
   const [selectedProductIons, setSelectedProductIons] = useState<ProductIonSelection[]>([]);
   const [productIonYAxisMode, setProductIonYAxisMode] = useState<ProductIonYAxisMode>("normalized");
   const [productIonWarning, setProductIonWarning] = useState<string | null>(null);
-  // Single source of truth linking the XIC, live MS2 and PFMB cards.
-  const [inspectedRt, setInspectedRt] = useState<{ rt: number; source: InspectedRtSource } | null>(null);
-  const selectedRt = inspectedRt?.rt ?? null;
+  const [followPfmbSlot, setFollowPfmbSlot] = useState(true);
+  const [pfmbSelection, setPfmbSelection] = useState<EvidenceRtSelection | null>(null);
+  const [ms2Selection, setMs2Selection] = useState<EvidenceRtSelection | null>(null);
+  const [evidenceNotice, setEvidenceNotice] = useState<EvidenceNotice | null>(null);
+  const liveMs2SectionRef = useRef<HTMLDivElement | null>(null);
+  const pfmbHeatmapSectionRef = useRef<HTMLDivElement | null>(null);
+  const selectedMs2Rt = ms2Selection?.rt ?? null;
+  const selectedPfmbRt = pfmbSelection?.rt ?? null;
+  const inspectedRt = toInspectedRt(ms2Selection);
+  const pfmbInspectedRt = toInspectedRt(pfmbSelection);
   const { data, isLoading, error } = useQuery({
     queryKey: ["bu", dataset.slug, "matches", parsedMatchId],
     queryFn: () => fetchBuMatch(dataset.slug, parsedMatchId),
@@ -88,13 +114,13 @@ export function BuMatchDetailPage() {
     retry: chartQueryRetry,
   });
   const ms2 = useQuery({
-    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms2", MS2_PPM, selectedRt ?? "default"],
+    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms2", MS2_PPM, selectedMs2Rt ?? "default"],
     queryFn: () =>
       fetchBuMatchMs2(
         dataset.slug,
         parsedMatchId,
         MS2_PPM,
-        selectedRt !== null ? { rt: selectedRt } : {},
+        selectedMs2Rt !== null ? { rt: selectedMs2Rt } : {},
     ),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
     retry: chartQueryRetry,
@@ -116,7 +142,7 @@ export function BuMatchDetailPage() {
     slug: dataset.slug,
     matchId: parsedMatchId,
     hasPfmb,
-    selectedRt,
+    pfmbSelectedRt: selectedPfmbRt,
   });
   const pfmbOverlay = useMemo(
     () =>
@@ -144,7 +170,10 @@ export function BuMatchDetailPage() {
     setSelectedProductIons([]);
     setProductIonYAxisMode("normalized");
     setProductIonWarning(null);
-    setInspectedRt(null);
+    setFollowPfmbSlot(true);
+    setPfmbSelection(null);
+    setMs2Selection(null);
+    setEvidenceNotice(null);
   }, [parsedMatchId]);
 
   useEffect(() => {
@@ -155,23 +184,99 @@ export function BuMatchDetailPage() {
     data?.precursor_mz,
     data?.precursor_charge,
     ms2.data?.scan,
-    selectedRt,
+    selectedMs2Rt,
   ]);
 
   const selectXicPoint = (selection: BuXicPointSelection) => {
+    const next: EvidenceRtSelection = { rt: selection.rt, source: "xic" };
     setSelectedXicPoint(selection);
-    setInspectedRt({ rt: selection.rt, source: "xic" });
+    setMs2Selection(next);
+    setPfmbSelection(next);
     setSelectedProductIons([]);
     setProductIonWarning(null);
   };
 
-  // Driven by a PFMB slot click: RT becomes canonical, the XIC marker is cleared.
-  const selectRtFromPfmb = (rt: number) => {
-    setInspectedRt({ rt, source: "pfmb" });
-    setSelectedXicPoint(null);
-    setSelectedProductIons([]);
-    setProductIonWarning(null);
+  const selectPfmbSlot = (slot: BuMs2SlotItem) => {
+    const next: EvidenceRtSelection = { rt: slot.rt_minutes, source: "pfmb", slotIndex: slot.slot_index };
+    setPfmbSelection(next);
+    if (followPfmbSlot) {
+      setMs2Selection(next);
+      setSelectedXicPoint(null);
+      setSelectedProductIons([]);
+      setProductIonWarning(null);
+      setEvidenceNotice({
+        message: `Fragment Match slot ${slot.slot_index} selected at RT ${slot.rt_minutes.toFixed(2)} min; updating MS2 scan.`,
+        pendingFollow: { rt: slot.rt_minutes, slotIndex: slot.slot_index },
+      });
+      return;
+    }
+    setEvidenceNotice({
+      message: `Fragment Match slot changed to ${slot.slot_index} at RT ${slot.rt_minutes.toFixed(2)} min; MS2 scan remains locked.`,
+    });
   };
+
+  // Fallback for legacy RT-only PFMB controls.
+  const selectRtFromPfmb = (rt: number) => {
+    const slot = pfmbEvidence.slotData?.slots.find((item) => Math.abs(item.rt_minutes - rt) < 1e-6);
+    if (slot) {
+      selectPfmbSlot(slot);
+      return;
+    }
+    const next: EvidenceRtSelection = { rt, source: "pfmb", slotIndex: null };
+    setPfmbSelection(next);
+    if (followPfmbSlot) {
+      setMs2Selection(next);
+      setSelectedXicPoint(null);
+      setSelectedProductIons([]);
+      setProductIonWarning(null);
+      setEvidenceNotice({
+        message: `Fragment Match RT ${rt.toFixed(2)} min selected; updating MS2 scan.`,
+      });
+      return;
+    }
+    setEvidenceNotice({ message: `Fragment Match RT changed to ${rt.toFixed(2)} min; MS2 scan remains locked.` });
+  };
+
+  const changeFollowPfmbSlot = (next: boolean) => {
+    setFollowPfmbSlot(next);
+    if (next) {
+      if (pfmbSelection) {
+        setMs2Selection(pfmbSelection);
+        setSelectedXicPoint(null);
+        setSelectedProductIons([]);
+        setProductIonWarning(null);
+      }
+      setEvidenceNotice({ message: "MS2 now follows Fragment Match slot selection." });
+      return;
+    }
+    setEvidenceNotice({ message: "Fragment Match slot selection no longer updates the live MS2 scan." });
+  };
+
+  const lockMs2Scan = () => {
+    setFollowPfmbSlot(false);
+    setEvidenceNotice({ message: "MS2 scan is locked; Fragment Match slot changes will not update the live scan." });
+  };
+
+  const scrollToLiveMs2 = () => {
+    liveMs2SectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const scrollToPfmbHeatmap = () => {
+    pfmbHeatmapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  useEffect(() => {
+    if (!evidenceNotice?.pendingFollow || ms2.isFetching || !ms2.data) return;
+    setEvidenceNotice({
+      message: `MS2 updated to scan ${formatEvidenceScan(ms2.data.scan)} at RT ${formatEvidenceRt(
+        ms2.data.rt_minutes,
+      )} from Fragment Match slot ${evidenceNotice.pendingFollow.slotIndex}.`,
+    });
+  }, [
+    evidenceNotice?.pendingFollow,
+    ms2.data,
+    ms2.isFetching,
+  ]);
 
   const selectedProductIonIds = useMemo(
     () => new Set(selectedProductIons.map((ion) => ion.id)),
@@ -205,11 +310,17 @@ export function BuMatchDetailPage() {
   if (error && !data) return <DataLoadError />;
   if (!data) return <DataEmptyState />;
 
+  const identificationRt = data.identification_rt_apex ?? data.rt_window.rt_apex;
+  const activePfmbSlot = pfmbEvidence.activeSlot;
+  const evidenceSourceMode = selectedEvidenceSourceMode(followPfmbSlot, ms2Selection);
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>{data.modified_sequence ?? data.sequence}</CardTitle>
+          <CardTitle title={data.modified_sequence ?? data.sequence}>
+            {formatModifiedSequenceForDisplay(data.modified_sequence ?? data.sequence)}
+          </CardTitle>
         </CardHeader>
         <CardContent
           className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4"
@@ -323,35 +434,62 @@ export function BuMatchDetailPage() {
           ) : ms2.data && !hasSpectrumPeaks(ms2.data) ? (
             <PlotStatus kind="empty" title="No MS2 spectrum peaks are available." className="min-h-64" />
           ) : ms2.data ? (
-            <Card className="[overflow-anchor:none]" data-testid="ms2-pfmb-evidence">
+            <Card className="[overflow-anchor:none]" data-testid="live-ms2-evidence-section">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">MS2 / PFMB Evidence</CardTitle>
+                <CardTitle className="text-base">Live mzML MS2 Evidence</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Raw mzML MS2 peaks are shown once. PFMB annotations are used as primary labels when available, with live mzML matches used as fallback evidence.
+                  Raw mzML MS2 peaks and live b/y fragment matches from the selected scan.
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
-                <section data-testid="ms2-spectrum-section">
+                <SelectedEvidenceBar
+                  identificationRt={identificationRt}
+                  selectedMs2Rt={ms2.data?.rt_minutes ?? selectedMs2Rt}
+                  liveScan={ms2.data?.scan}
+                  pfmbSlotIndex={activePfmbSlot?.slot_index ?? pfmbSelection?.slotIndex ?? null}
+                  pfmbSlotRt={activePfmbSlot?.rt_minutes ?? selectedPfmbRt}
+                  isPfmbApex={Boolean(
+                    activePfmbSlot
+                    && pfmbEvidence.slotData
+                    && activePfmbSlot.slot_index === pfmbEvidence.slotData.apex_slot,
+                  )}
+                  sourceMode={evidenceSourceMode}
+                  matchedIonCount={ms2.data?.matched_ions.length ?? null}
+                />
+                <EvidenceUpdateNotice message={evidenceNotice?.message} />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <EvidenceJumpControls
+                    onJumpToMs2={scrollToLiveMs2}
+                    onJumpToPfmb={scrollToPfmbHeatmap}
+                  />
+                </div>
+
+                <section
+                  ref={liveMs2SectionRef}
+                  className="scroll-mt-20"
+                  data-testid="live-ms2-spectrum-section"
+                >
+                  <div data-testid="ms2-spectrum-section">
                   <div className="mb-2">
                     <h3 className="text-sm font-semibold">MS2 spectrum</h3>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Matched fragments are calculated from the selected mzML MS2 scan. Click a live-primary b/y fragment peak to add or remove its product ion XIC.
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground" data-testid="ms2-current-rt">
-                      MS2 scan #{ms2.data.scan}. MS2 scan RT: {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
+                      MS2 scan {formatEvidenceScan(ms2.data.scan)}. MS2 scan RT: {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
                     </p>
-                    {selectedRt !== null &&
-                      Math.abs(ms2.data.rt_minutes - selectedRt) > RT_LINK_TOLERANCE_MIN && (
+                    {selectedMs2Rt !== null &&
+                      Math.abs(ms2.data.rt_minutes - selectedMs2Rt) > RT_LINK_TOLERANCE_MIN && (
                         <p className="mt-1 text-xs font-medium text-amber-600" data-testid="ms2-rt-out-of-tolerance">
-                          Nearest MS2 scan is {Math.abs(ms2.data.rt_minutes - selectedRt).toFixed(2)} min from the
+                          Nearest MS2 scan is {Math.abs(ms2.data.rt_minutes - selectedMs2Rt).toFixed(2)} min from the
                           current inspected RT.
                         </p>
                       )}
                     {pfmbOverlay && pfmbOverlay.unmappedCount > 0 && (
                       <p className="mt-1 text-xs font-medium text-amber-600" data-testid="ms2-pfmb-unmapped">
-                        Some PFMB annotations could not be mapped to raw mzML peaks within the current tolerance and are not drawn.
+                        Some Fragment Match annotations could not be mapped to raw mzML peaks within the current tolerance and are not drawn.
                       </p>
-                    )}
+                      )}
                   </div>
                   <BuSpectrumChart
                     spectrum={ms2.data}
@@ -365,52 +503,73 @@ export function BuMatchDetailPage() {
                     annotationMode={ms2AnnotationMode}
                     onOpenFull={() => setMs2FullOpen(true)}
                   />
+                  </div>
                 </section>
 
                 <section className="border-t border-border/70 pt-5" data-testid="product-ion-evidence-section">
                   <h3 className="text-sm font-semibold">Product ion evidence</h3>
-                  <BuProductIonXicCard
-                    datasetId={dataset.id}
-                    slug={dataset.slug}
-                    matchId={parsedMatchId}
-                    runId={data.run.run_id}
-                    ms2Scan={ms2.data.scan}
-                    available
-                    matchedIons={ms2.data.matched_ions}
-                    selections={selectedProductIons}
-                    mode={productIonYAxisMode}
-                    ppm={MS2_PPM}
-                    rtWindow={{ start: data.rt_window.rt_start, stop: data.rt_window.rt_stop }}
-                    identificationRt={data.identification_rt_apex ?? data.rt_window.rt_apex}
-                    inspectedRt={selectedRt}
-                    ms2ScanRt={ms2.data.rt_minutes}
-                    warning={productIonWarning}
-                    onRemove={removeProductIon}
-                    onAddTop={addTopFragments}
-                    onClear={clearProductIons}
-                    onModeChange={setProductIonYAxisMode}
-                  />
-                  <BuFragmentTable
-                    ions={ms2.data.matched_ions}
-                    selectedProductIonIds={selectedProductIonIds}
-                    selectionLimitReached={selectedProductIons.length >= MAX_PRODUCT_ION_XICS}
-                    onToggleProductIon={toggleProductIon}
-                  />
+                  <div
+                    className="mt-3 grid gap-3 xl:grid-cols-[minmax(520px,1.25fr)_minmax(420px,1fr)]"
+                    data-testid="product-ion-evidence-layout"
+                  >
+                    <BuFragmentTable
+                      ions={ms2.data.matched_ions}
+                      selectedProductIonIds={selectedProductIonIds}
+                      selectionLimitReached={selectedProductIons.length >= MAX_PRODUCT_ION_XICS}
+                      onToggleProductIon={toggleProductIon}
+                    />
+                    <div className="min-w-0" data-testid="product-ion-xic-panel">
+                      <BuProductIonXicCard
+                        datasetId={dataset.id}
+                        slug={dataset.slug}
+                        matchId={parsedMatchId}
+                        runId={data.run.run_id}
+                        ms2Scan={ms2.data.scan}
+                        available
+                        matchedIons={ms2.data.matched_ions}
+                        selections={selectedProductIons}
+                        mode={productIonYAxisMode}
+                        ppm={MS2_PPM}
+                        rtWindow={{ start: data.rt_window.rt_start, stop: data.rt_window.rt_stop }}
+                        identificationRt={data.identification_rt_apex ?? data.rt_window.rt_apex}
+                        inspectedRt={selectedMs2Rt}
+                        ms2ScanRt={ms2.data.rt_minutes}
+                        warning={productIonWarning}
+                        onRemove={removeProductIon}
+                        onAddTop={addTopFragments}
+                        onClear={clearProductIons}
+                        onModeChange={setProductIonYAxisMode}
+                      />
+                    </div>
+                  </div>
                 </section>
-
+              </CardContent>
+            </Card>
+          ) : null}
+          {hasPfmb && (
+            <Card className="[overflow-anchor:none]" data-testid="fragment-match-evidence-section">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-base">Fragment Match Evidence</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <BuPfmbAnnotationCard
                   slug={dataset.slug}
                   matchId={parsedMatchId}
                   hasPfmb={hasPfmb}
-                  selectedRt={selectedRt}
-                  selectedRtSource={inspectedRt?.source ?? null}
+                  selectedRt={selectedPfmbRt}
+                  selectedRtSource={pfmbInspectedRt?.source ?? null}
                   onSelectRt={selectRtFromPfmb}
+                  onSelectSlot={selectPfmbSlot}
+                  followPfmbSlot={followPfmbSlot}
+                  onFollowPfmbSlotChange={changeFollowPfmbSlot}
+                  onLockMs2Scan={lockMs2Scan}
+                  heatmapSectionRef={pfmbHeatmapSectionRef}
                   pfmbEvidence={pfmbEvidence}
                   embedded
                 />
               </CardContent>
             </Card>
-          ) : null}
+          )}
         </>
       ) : (
         <>
@@ -432,7 +591,7 @@ export function BuMatchDetailPage() {
                 ppm={MS2_PPM}
                 rtWindow={{ start: data.rt_window.rt_start, stop: data.rt_window.rt_stop }}
                 identificationRt={data.identification_rt_apex ?? data.rt_window.rt_apex}
-                inspectedRt={selectedRt}
+                inspectedRt={selectedMs2Rt}
                 ms2ScanRt={null}
                 onRemove={() => {}}
                 onAddTop={() => {}}
@@ -464,9 +623,10 @@ export function BuMatchDetailPage() {
           slug={dataset.slug}
           matchId={parsedMatchId}
           hasPfmb={hasPfmb}
-          selectedRt={selectedRt}
-          selectedRtSource={inspectedRt?.source ?? null}
+          selectedRt={selectedPfmbRt}
+          selectedRtSource={pfmbInspectedRt?.source ?? null}
           onSelectRt={selectRtFromPfmb}
+          onSelectSlot={selectPfmbSlot}
           pfmbEvidence={pfmbEvidence}
         />
       )}
@@ -535,6 +695,31 @@ export function BuMatchDetailPage() {
       )}
     </div>
   );
+}
+
+function toInspectedRt(selection: EvidenceRtSelection | null): { rt: number; source: InspectedRtSource } | null {
+  if (!selection) return null;
+  if (selection.source === "pfmb") return { rt: selection.rt, source: "pfmb" };
+  if (selection.source === "xic") return { rt: selection.rt, source: "xic" };
+  return null;
+}
+
+function selectedEvidenceSourceMode(
+  followPfmbSlot: boolean,
+  ms2Selection: EvidenceRtSelection | null,
+): SelectedEvidenceSourceMode {
+  if (ms2Selection?.source === "xic") return "live-ms2";
+  if (!followPfmbSlot) return "locked-ms2-scan";
+  if (ms2Selection?.source === "pfmb") return "follow-pfmb-slot";
+  return "unknown";
+}
+
+function formatEvidenceRt(value: number | null | undefined): string {
+  return Number.isFinite(value) ? `${value!.toFixed(4)} min` : "N/A";
+}
+
+function formatEvidenceScan(value: number | null | undefined): string {
+  return Number.isFinite(value) && value! > 0 ? `#${value}` : "N/A";
 }
 
 function hasXicSignal(xic: BuXicOut): boolean {

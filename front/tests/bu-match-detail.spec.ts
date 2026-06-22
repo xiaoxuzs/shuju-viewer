@@ -350,6 +350,34 @@ test("precursor XIC selects MS2 and matched ion toggles product XIC comparison",
   await expect(productCard).toContainText("Select product ions to display product XIC.");
 });
 
+test("product ion evidence uses a compact table and XIC split layout", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const section = page.getByTestId("product-ion-evidence-section");
+  await expect(section.getByRole("heading", { name: "Product ion evidence" })).toBeVisible();
+  const layout = section.getByTestId("product-ion-evidence-layout");
+  const tablePanel = layout.getByTestId("product-ion-fragment-table-panel");
+  const xicPanel = layout.getByTestId("product-ion-xic-panel");
+  await expect(tablePanel.getByRole("heading", { name: "Live mzML matched b/y fragments (9)" })).toBeVisible();
+  await expect(xicPanel.getByRole("heading", { name: "Product ion XIC comparison" })).toBeVisible();
+  await expect(xicPanel.getByTestId("product-ion-xic-controls")).toBeVisible();
+
+  const tableBox = await tablePanel.boundingBox();
+  const xicBox = await xicPanel.boundingBox();
+  expect(tableBox).not.toBeNull();
+  expect(xicBox).not.toBeNull();
+  expect(xicBox!.x).toBeGreaterThan(tableBox!.x + 200);
+  expect(Math.abs(xicBox!.y - tableBox!.y)).toBeLessThan(80);
+
+  const empty = xicPanel.getByTestId("product-ion-xic-empty-state");
+  await expect(empty).toContainText("Select product ions to display product XIC.");
+  const emptyBox = await empty.boundingBox();
+  expect(emptyBox).not.toBeNull();
+  expect(emptyBox!.height).toBeGreaterThanOrEqual(150);
+  expect(emptyBox!.height).toBeLessThanOrEqual(230);
+});
+
 test("adds top fragments, enforces the limit, and switches raw or normalized views", async ({ page }) => {
   await mockMzmlMatch(page);
   await page.goto("/datasets/demo/matches/1");
@@ -400,6 +428,7 @@ test("live fragment table scrolls internally without breaking product ion checkb
   expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
   expect(metrics.clientHeight).toBeLessThanOrEqual(380);
   await expect(page.getByRole("columnheader", { name: "Product XIC" })).toBeVisible();
+  await expect(scroller.locator("thead")).toHaveCSS("position", "sticky");
 
   const row = page.getByTestId("live-fragment-row").filter({ hasText: "b3" });
   const batchRequest = page.waitForRequest((request) => request.url().endsWith("/product-xics"));
@@ -418,7 +447,9 @@ test("keeps successful product ion traces when one query fails", async ({ page }
 
   await expect(card.getByText("Failed to load product ion XIC for b2.")).toBeVisible();
   await expect(card.getByTestId("plot-series")).toHaveCount(2);
-  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
+  await expect(
+    page.getByTestId("live-ms2-evidence-section").getByRole("heading", { name: "Live mzML MS2 Evidence" }),
+  ).toBeVisible();
 });
 
 test("live fragment checkbox synchronizes table, spectrum, chips, and removal", async ({ page }) => {
@@ -456,7 +487,9 @@ test("batch request failure stays inside the product ion card", async ({ page })
   await row.getByRole("checkbox", { name: "Add y5 to product ion XIC" }).check();
 
   await expect(page.getByTestId("product-ion-xic-card")).toContainText("Failed to load product ion XIC.");
-  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
+  await expect(
+    page.getByTestId("live-ms2-evidence-section").getByRole("heading", { name: "Live mzML MS2 Evidence" }),
+  ).toBeVisible();
 });
 
 test("scan-index missing XIC stays local and preserves its backfill command", async ({ page }) => {
@@ -474,7 +507,9 @@ test("scan-index missing XIC stays local and preserves its backfill command", as
   await expect(page.getByText("Derived scan index is not ready.")).toBeVisible();
   await expect(page.getByText(command)).toBeVisible();
   await expect(page.getByRole("heading", { name: "MS1 spectrum from mzML" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
+  await expect(
+    page.getByTestId("live-ms2-evidence-section").getByRole("heading", { name: "Live mzML MS2 Evidence" }),
+  ).toBeVisible();
 });
 
 test("empty precursor XIC shows a no-signal state without hiding spectra", async ({ page }) => {
@@ -489,7 +524,9 @@ test("empty precursor XIC shows a no-signal state without hiding spectra", async
 
   await expect(page.getByText("No precursor signal in the selected range.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "MS1 spectrum from mzML" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
+  await expect(
+    page.getByTestId("live-ms2-evidence-section").getByRole("heading", { name: "Live mzML MS2 Evidence" }),
+  ).toBeVisible();
 });
 
 test("product XIC stale state stays inside the product card", async ({ page }) => {
@@ -510,7 +547,9 @@ test("product XIC stale state stays inside the product card", async ({ page }) =
   const card = page.getByTestId("product-ion-xic-card");
   await expect(card.getByText("Derived scan index is stale.")).toBeVisible();
   await expect(card.getByText(command)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
+  await expect(
+    page.getByTestId("live-ms2-evidence-section").getByRole("heading", { name: "Live mzML MS2 Evidence" }),
+  ).toBeVisible();
 });
 
 test("all no-signal product traces show one local no-signal state", async ({ page }) => {
@@ -522,7 +561,9 @@ test("all no-signal product traces show one local no-signal state", async ({ pag
 
   await expect(card.getByText("No product ion signal in the selected range.")).toBeVisible();
   await expect(card.getByTestId("plot-series")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
+  await expect(
+    page.getByTestId("live-ms2-evidence-section").getByRole("heading", { name: "Live mzML MS2 Evidence" }),
+  ).toBeVisible();
 });
 
 for (const scanNumber of [-1, null, undefined]) {
@@ -560,7 +601,7 @@ test("Evidence Summary shows PFMB fallback without hiding live evidence", async 
 
   const summary = page.getByTestId("bu-evidence-summary");
   await expect(summary.getByTestId("evidence-live-ms2")).toContainText("Live matched b/y ions");
-  await expect(summary.getByTestId("evidence-pfmb")).toContainText("PFMB annotation not available");
+  await expect(summary.getByTestId("evidence-pfmb")).toContainText("Fragment Match annotation not available");
 });
 
 test("MS2 label modes hide only text and keep tooltip and peak click active", async ({ page }) => {

@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 
-import type { BuMs2AnnotationMatrixOut } from "@/features/bu/types";
+import type { BuMs2AnnotationMatrixOut, BuMs2SlotItem } from "@/features/bu/types";
 import { PFMB_SERIES_COLOR, seriesLabel } from "@/features/bu/components/match-detail/pfmbSeries";
 import { formatIntensity } from "@/features/bu/components/spectrum/chartTheme";
 
@@ -30,13 +30,15 @@ export function BuPfmbHeatmap({
   selectedRt,
   highlight,
   onSelectRt,
+  onSelectSlot,
   onHighlight,
   maxRows = DEFAULT_MAX_ROWS,
 }: {
   matrix: BuMs2AnnotationMatrixOut;
   selectedRt: number | null;
   highlight?: ReadonlySet<string>;
-  onSelectRt: (rt: number) => void;
+  onSelectRt?: (rt: number) => void;
+  onSelectSlot?: (slot: BuMs2SlotItem) => void;
   onHighlight: (familyKey: string) => void;
   maxRows?: number;
 }) {
@@ -100,7 +102,7 @@ export function BuPfmbHeatmap({
   if (slots.length === 0 || fragments.length === 0) {
     return (
       <p className="py-6 text-sm text-muted-foreground" data-testid="pfmb-heatmap-empty">
-        No PFMB fragment matrix is available for this match.
+        No Fragment Match matrix is available for this match.
       </p>
     );
   }
@@ -115,9 +117,9 @@ export function BuPfmbHeatmap({
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-xs uppercase tracking-wider text-muted-foreground">
-            PFMB slot RT x fragment intensity
+            Fragment Match slot RT x fragment intensity
           </div>
-          <div className="text-[11px] text-muted-foreground">Columns are PFMB slot RT values in minutes.</div>
+          <div className="text-[11px] text-muted-foreground">Columns are Fragment Match slot RT values in minutes.</div>
         </div>
         {fragments.length > maxRows && (
           <button
@@ -134,7 +136,7 @@ export function BuPfmbHeatmap({
       <HeatmapLegend hasDetected={hasDetected} />
 
       <div className="relative overflow-x-auto rounded-md border border-border/70 bg-background">
-        <svg width={width} height={height} role="img" aria-label="PFMB slot RT by fragment intensity heatmap">
+        <svg width={width} height={height} role="img" aria-label="Fragment Match slot RT by fragment intensity heatmap">
           <defs>
             <pattern id={patternId} width="6" height="6" patternUnits="userSpaceOnUse">
               <rect width="6" height="6" fill="hsl(var(--muted))" />
@@ -164,7 +166,7 @@ export function BuPfmbHeatmap({
               fill="currentColor"
               data-testid="pfmb-heatmap-apex"
             >
-              PFMB apex
+              Fragment Match apex
             </text>
           )}
 
@@ -183,7 +185,7 @@ export function BuPfmbHeatmap({
                 fontSize={10}
                 fontWeight={column === currentCol ? 700 : 500}
                 className="cursor-pointer fill-muted-foreground hover:fill-foreground"
-                onClick={() => onSelectRt(slot.rt_minutes)}
+                onClick={() => selectSlot(slot, onSelectSlot, onSelectRt)}
               >
                 {formatSlotRtLabel(slot)}
               </text>
@@ -242,7 +244,7 @@ export function BuPfmbHeatmap({
                       className="cursor-pointer"
                       onClick={() => {
                         onHighlight(fragment.key);
-                        onSelectRt(slot.rt_minutes);
+                        selectSlot(slot, onSelectSlot, onSelectRt);
                       }}
                       onMouseMove={(event) => {
                         const bounds = event.currentTarget.ownerSVGElement!.getBoundingClientRect();
@@ -286,10 +288,22 @@ export function BuPfmbHeatmap({
         )}
       </div>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        Columns are PFMB slot RT values in minutes; click a cell to select its PFMB slot RT and highlight the fragment across PFMB views.
+        Columns are Fragment Match slot RT values in minutes; click a cell to select its Fragment Match slot RT and highlight the fragment across Fragment Match views.
       </p>
     </div>
   );
+}
+
+function selectSlot(
+  slot: BuMs2SlotItem,
+  onSelectSlot: ((slot: BuMs2SlotItem) => void) | undefined,
+  onSelectRt: ((rt: number) => void) | undefined,
+) {
+  if (onSelectSlot) {
+    onSelectSlot(slot);
+    return;
+  }
+  onSelectRt?.(slot.rt_minutes);
 }
 
 function formatSlotRtLabel(slot: { slot_index: number; rt_minutes?: number | null }): string {
@@ -348,7 +362,7 @@ function HeatmapTooltip({ tooltip }: { tooltip: HeatmapTooltip }) {
     >
       <div className="font-semibold">{tooltip.ion}</div>
       <div>Slot {tooltip.slotIndex}</div>
-      <div>PFMB slot RT {tooltip.rt.toFixed(4)} min</div>
+      <div>Fragment Match slot RT {tooltip.rt.toFixed(4)} min</div>
       <div>Intensity {formatIntensity(tooltip.intensity)}</div>
       <div>
         Log intensity {tooltip.normalizedLog == null ? "N/A" : tooltip.normalizedLog.toFixed(3)} normalized

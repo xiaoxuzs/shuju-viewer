@@ -223,27 +223,37 @@ test("PFMB Evidence removes the standalone spectrum and overlays mapped annotati
   const counters = await mockPfmb(page);
   await page.goto("/datasets/demo/matches/1");
 
-  const evidence = page.getByTestId("ms2-pfmb-evidence");
-  await expect(evidence.getByRole("heading", { name: "MS2 / PFMB Evidence", exact: true })).toBeVisible();
-  await expect(evidence.getByRole("heading", { name: "MS2 spectrum", exact: true })).toBeVisible();
-  await expect(evidence.getByRole("heading", { name: "Product ion evidence", exact: true })).toBeVisible();
-  await expect(evidence.getByRole("heading", { name: "PFMB evidence", exact: true })).toBeVisible();
-  await expect(evidence.getByTestId("product-ion-xic-card")).toBeVisible();
-  await expect(evidence.getByTestId("live-fragment-row")).toHaveCount(2);
+  const liveEvidence = page.getByTestId("live-ms2-evidence-section");
+  await expect(liveEvidence.getByRole("heading", { name: "Live mzML MS2 Evidence", exact: true })).toBeVisible();
+  await expect(liveEvidence.getByRole("heading", { name: /PFMB/ })).toHaveCount(0);
+  await expect(liveEvidence.getByRole("heading", { name: "MS2 spectrum", exact: true })).toBeVisible();
+  await expect(liveEvidence.getByRole("heading", { name: "Product ion evidence", exact: true })).toBeVisible();
+  await expect(liveEvidence.getByTestId("product-ion-xic-card")).toBeVisible();
+  await expect(liveEvidence.getByTestId("live-fragment-row")).toHaveCount(2);
+  await expect(liveEvidence.getByTestId("pfmb-card")).toHaveCount(0);
+  await expect(liveEvidence.getByTestId("fragment-match-slot-detail")).toHaveCount(0);
 
-  const card = evidence.getByTestId("pfmb-card");
+  const fragmentEvidence = page.getByTestId("fragment-match-evidence-section");
+  await expect(fragmentEvidence.getByRole("heading", { name: "Fragment Match Evidence", exact: true })).toBeVisible();
+  const card = fragmentEvidence.getByTestId("pfmb-card");
+  await expect(card.getByRole("heading", { name: "Fragment Match Slot Detail", exact: true })).toHaveCount(0);
+  const compactHeader = card.getByTestId("fragment-match-evidence-header");
+  await expect(compactHeader).toContainText("Slot RT: 94.9900 min");
+  await expect(compactHeader).toContainText("Pre-computed slot-level matches");
+  await expect(compactHeader).toContainText("not live mzML MS2 peaks");
+  await expect(card.getByText("Pre-computed, deconvoluted peak-to-fragment matches")).not.toBeVisible();
+  await card.getByTestId("fragment-match-source-details").locator("summary").click();
+  await expect(card.getByText("Pre-computed, deconvoluted peak-to-fragment matches")).toBeVisible();
   const rows = card.getByTestId("pfmb-ion-row");
   await expect(rows).toHaveCount(4);
-  await expect(card.getByTestId("pfmb-header")).toContainText(
-    "counts and intensity sums are not directly comparable",
-  );
+  await expect(card.getByTestId("pfmb-quality-disclaimer")).toContainText("not a true TIC");
   await expect(card.getByTestId("pfmb-quality-summary")).toBeVisible();
   await expect(card.getByTestId("pfmb-heatmap")).toBeVisible();
   await expect(card.getByTestId("pfmb-slot-panel")).toBeVisible();
   await expect(card.getByTestId("pfmb-slot-panel").getByTestId("pfmb-slot-buttons")).toBeVisible();
   await expect(card.getByTestId("pfmb-sequence-coverage")).toBeVisible();
   await expect(card.getByTestId("pfmb-slot-summary")).toBeVisible();
-  await expect(card.getByText("Pre-computed PFMB annotation spectrum")).toHaveCount(0);
+  await expect(card.getByText("Pre-computed Fragment Match annotation spectrum")).toHaveCount(0);
   await expect(card.getByTestId("pfmb-spectrum-peak")).toHaveCount(0);
 
   const heatmapBox = await card.getByTestId("pfmb-heatmap").boundingBox();
@@ -253,7 +263,7 @@ test("PFMB Evidence removes the standalone spectrum and overlays mapped annotati
   expect(slotPanelBox!.x).toBeGreaterThan(heatmapBox!.x + 100);
   expect(Math.abs(slotPanelBox!.y - heatmapBox!.y)).toBeLessThan(80);
 
-  await expect(page.getByTestId("spectrum-annotation-legend")).toContainText("PFMB primary");
+  await expect(page.getByTestId("spectrum-annotation-legend")).toContainText("Fragment Match primary");
   await expect(page.getByTestId("spectrum-annotation-legend")).toContainText("Live fallback");
   await expect(page.getByTestId("external-spectrum-annotation")).toHaveCount(0);
 
@@ -266,7 +276,7 @@ test("PFMB Evidence removes the standalone spectrum and overlays mapped annotati
   await expect(svg.locator('line[data-primary-source="pfmb"][data-primary-label="c3"]')).toHaveCount(0);
 
   await hoverMs2Mz(page, 601.3073);
-  await expect(page.getByText("Primary source: PFMB pre-computed")).toBeVisible();
+  await expect(page.getByText("Primary source: Pre-computed Fragment Match")).toBeVisible();
   await expect(page.getByText("Secondary source: Live mzML")).toBeVisible();
   await expect(page.getByText("Live exp m/z 601.3073")).toBeVisible();
   await expect(page.getByText("Series c; position 3; charge 1+")).toBeVisible();
@@ -303,6 +313,19 @@ test("unmapped PFMB annotations are not drawn on the live MS2 spectrum", async (
   await expect(page.getByTestId("ms2-pfmb-unmapped")).toContainText("not drawn");
 });
 
+test("selected evidence bar renders unavailable live scan as N/A", async ({ page }) => {
+  await mockPfmb(page, {
+    ms2Spectrum: {
+      ...spectrumStub(2),
+      scan: 0,
+    },
+  });
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByTestId("selected-evidence-bar")).toBeVisible();
+  await expect(page.getByTestId("selected-evidence-live-scan")).toContainText("N/A");
+});
+
 test("heatmap loads with a single matrix request and no per-slot N+1", async ({ page }) => {
   const counters = await mockPfmb(page);
   await page.goto("/datasets/demo/matches/1");
@@ -327,8 +350,8 @@ test("heatmap distinguishes detected zero from not detected when metadata exists
   const heatmap = page.getByTestId("pfmb-heatmap");
   await expect(heatmap.getByTestId("pfmb-heatmap-legend")).toContainText("Log intensity");
   await expect(heatmap.getByTestId("pfmb-heatmap-legend")).toContainText("Matched zero intensity");
-  await expect(heatmap).toContainText("Columns are PFMB slot RT values in minutes");
-  await expect(heatmap.getByTestId("pfmb-heatmap-apex")).toContainText("PFMB apex");
+  await expect(heatmap).toContainText("Columns are Fragment Match slot RT values in minutes");
+  await expect(heatmap.getByTestId("pfmb-heatmap-apex")).toContainText("Fragment Match apex");
   await expect(heatmap.getByTestId("pfmb-heatmap-rt-label")).toContainText(["93.99", "94.99", "95.99"]);
   await expect(heatmap.getByTestId("pfmb-heatmap-rt-label").first()).toHaveAttribute("data-slot-index", "4");
   await expect(heatmap.getByTestId("pfmb-heatmap-rt-label").first()).toHaveText("93.99");
@@ -365,7 +388,7 @@ test("clicking a PFMB slot updates selection without scrolling the page", async 
   await slotPanel.scrollIntoViewIfNeeded();
   const before = await page.evaluate(() => window.scrollY);
 
-  await slotPanel.getByRole("button", { name: "Slot 4 | PFMB slot RT 93.99 min", exact: true }).click();
+  await slotPanel.getByRole("button", { name: "Slot 4 | Fragment Match slot RT 93.99 min", exact: true }).click();
 
   await expect(card.getByTestId("pfmb-selected-rt")).toContainText("93.99");
   await expect(card.getByTestId("pfmb-heatmap-current-col")).toHaveAttribute("data-col", "0");
@@ -382,7 +405,7 @@ test("heatmap tooltip reports ion, slot RT, intensity, and detection state", asy
   await cell.hover();
   const tooltip = page.getByTestId("pfmb-heatmap-tooltip");
   await expect(tooltip).toContainText("y5");
-  await expect(tooltip).toContainText("PFMB slot RT 93.9900 min");
+  await expect(tooltip).toContainText("Fragment Match slot RT 93.9900 min");
   await expect(tooltip).toContainText("Matched peak with zero intensity");
 });
 

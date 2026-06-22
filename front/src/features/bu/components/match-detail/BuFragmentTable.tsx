@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { BuMatchedIon } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
@@ -23,25 +22,27 @@ export function BuFragmentTable({
   const sorted = [...ions].sort((a, b) => a.ion_type.localeCompare(b.ion_type) || a.position - b.position || a.charge - b.charge);
 
   return (
-    <Card className="mt-4 border-border/70">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">
+    <section
+      className="min-w-0 rounded-lg border border-border/70 bg-background/70 p-3"
+      data-testid="product-ion-fragment-table-panel"
+    >
+      <div className="mb-2">
+        <h4 className="text-sm font-semibold">
           Live mzML matched b/y fragments ({formatCount(ions.length)})
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="max-h-[360px] overflow-auto" data-testid="live-fragment-table-scroll">
-          <table className="w-full min-w-[720px] text-sm">
+        </h4>
+      </div>
+      <div className="max-h-[340px] overflow-auto" data-testid="live-fragment-table-scroll">
+        <table className="w-full min-w-[720px] text-xs">
             <thead className="sticky top-0 z-10 border-b border-border bg-background text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="py-2 text-left">Product XIC</th>
-                <th className="py-2 text-left">Ion</th>
-                <th className="py-2 text-right">Position</th>
-                <th className="py-2 text-right">Charge</th>
-                <th className="py-2 text-right">Theo m/z</th>
-                <th className="py-2 text-right">Exp m/z</th>
-                <th className="py-2 text-right">ppm</th>
-                <th className="py-2 text-right">Intensity</th>
+                <th className="py-1.5 text-left">Product XIC</th>
+                <th className="py-1.5 text-left">Ion</th>
+                <th className="py-1.5 text-right">Position</th>
+                <th className="py-1.5 text-right">Charge</th>
+                <th className="py-1.5 text-right">Theo m/z</th>
+                <th className="py-1.5 text-right">Exp m/z</th>
+                <th className="py-1.5 text-right">ppm</th>
+                <th className="py-1.5 text-right">Intensity</th>
               </tr>
             </thead>
             <tbody>
@@ -60,7 +61,7 @@ export function BuFragmentTable({
                     data-product-ion-id={selection.id}
                     data-product-ion-selected={selected ? "true" : "false"}
                   >
-                    <td className="py-2 pl-2 text-left">
+                    <td className="py-1.5 pl-2 text-left">
                       <input
                         type="checkbox"
                         checked={selected}
@@ -71,21 +72,20 @@ export function BuFragmentTable({
                         className="h-4 w-4 accent-primary"
                       />
                     </td>
-                    <td className="py-2 font-mono font-medium">{ionLabel(ion)}</td>
-                    <td className="py-2 text-right">{ion.position}</td>
-                    <td className="py-2 text-right">{ion.charge}+</td>
-                    <td className="py-2 text-right font-mono text-xs">{formatDecimal(ion.theo_mz)}</td>
-                    <td className="py-2 text-right font-mono text-xs">{formatDecimal(ion.exp_mz)}</td>
-                    <td className="py-2 text-right font-mono text-xs">{formatDecimal(ion.ppm, 2)}</td>
-                    <td className="py-2 text-right font-mono text-xs">{formatCount(ion.intensity)}</td>
+                    <td className="py-1.5 font-mono font-medium">{ionLabel(ion)}</td>
+                    <td className="py-1.5 text-right">{ion.position}</td>
+                    <td className="py-1.5 text-right">{ion.charge}+</td>
+                    <td className="py-1.5 text-right font-mono">{formatDecimal(ion.theo_mz)}</td>
+                    <td className="py-1.5 text-right font-mono">{formatDecimal(ion.exp_mz)}</td>
+                    <td className="py-1.5 text-right font-mono">{formatDecimal(ion.ppm, 2)}</td>
+                    <td className="py-1.5 text-right font-mono">{formatCount(ion.intensity)}</td>
                   </tr>
                 );
               })}
             </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+        </table>
+      </div>
+    </section>
   );
 }
 

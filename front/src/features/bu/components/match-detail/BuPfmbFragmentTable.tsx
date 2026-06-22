@@ -58,7 +58,7 @@ export function BuPfmbFragmentTable({
           className="py-6 text-center text-sm text-muted-foreground"
           data-testid="pfmb-empty-ions"
         >
-          This PFMB record has no matched fragment ions.
+          This Fragment Match record has no matched fragment ions.
         </CardContent>
       </Card>
     );
@@ -77,7 +77,7 @@ export function BuPfmbFragmentTable({
     <Card className="mt-4 border-border/70">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm">
-          Pre-computed PFMB matched fragments ({formatCount(ions.length)})
+          Pre-computed Fragment Match matched fragments ({formatCount(ions.length)})
         </CardTitle>
       </CardHeader>
       <CardContent>

@@ -1,5 +1,5 @@
-import type { MappedCoverageSegment } from "./coverageLayout";
-import { formatSegmentTooltip } from "./coverageLayout";
+import type { MappedCoverageSegment, PeptideColorMap } from "./coverageLayout";
+import { formatSegmentTooltip, getSegmentColor } from "./coverageLayout";
 
 export function CoverageBar({
   sequenceLength,
@@ -9,7 +9,7 @@ export function CoverageBar({
 }: {
   sequenceLength: number;
   segments: MappedCoverageSegment[];
-  colorMap: Map<number, string>;
+  colorMap: PeptideColorMap;
   chunkSize?: number;
 }) {
   const safeLength = Number.isFinite(sequenceLength) ? sequenceLength : 0;
@@ -27,7 +27,7 @@ export function CoverageBar({
       className="relative h-4 w-full overflow-hidden rounded-sm bg-[#f3f3f3]"
     >
       {segments.map((segment) => {
-        const color = colorMap.get(segment.peptide_id);
+        const color = getSegmentColor(segment, colorMap);
         if (!color) return null;
 
         return (

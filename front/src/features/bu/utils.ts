@@ -32,5 +32,5 @@ export function formatScanValue(value: unknown): string {
 }
 
 export function inspectedRtSourceLabel(source: InspectedRtSource): string {
-  return source === "xic" ? "XIC selection" : "PFMB slot";
+  return source === "xic" ? "XIC selection" : "Fragment Match slot";
 }

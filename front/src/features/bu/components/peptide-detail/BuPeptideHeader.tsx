@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BuPeptideDetailOut } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
+import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 
 export function BuPeptideHeader({ peptide }: { peptide: BuPeptideDetailOut }) {
   return (
@@ -10,8 +11,13 @@ export function BuPeptideHeader({ peptide }: { peptide: BuPeptideDetailOut }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="font-mono text-xl">{peptide.sequence}</CardTitle>
-            <p className="mt-1 max-w-3xl break-all font-mono text-sm text-muted-foreground">
-              {peptide.example_modified ?? "No modified sequence example"}
+            <p
+              className="mt-1 max-w-3xl break-all font-mono text-sm text-muted-foreground"
+              title={peptide.example_modified ?? undefined}
+            >
+              {peptide.example_modified
+                ? formatModifiedSequenceForDisplay(peptide.example_modified)
+                : "No modified sequence example"}
             </p>
           </div>
           {peptide.best_charge && <Badge variant="secondary">best z {peptide.best_charge}+</Badge>}

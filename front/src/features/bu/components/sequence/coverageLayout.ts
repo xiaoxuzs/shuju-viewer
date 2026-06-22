@@ -14,6 +14,7 @@ export type MappedCoverageSegment = Omit<BuCoverageSegment, "start" | "end"> & {
 };
 
 export interface PeptideLegendItem {
+  key: string;
   peptideId: number;
   sequence: string;
   color: string;
@@ -23,7 +24,10 @@ export interface PeptideLegendItem {
 export interface ResidueCoverage {
   color: string;
   segment: MappedCoverageSegment;
+  selected: boolean;
 }
+
+export type PeptideColorMap = Map<string, string>;
 
 export function splitSequenceRows(seq: string, chunkSize = 50): SequenceRow[] {
   const requestedSize = Number.isFinite(chunkSize) ? Math.floor(chunkSize) : 50;
@@ -59,13 +63,26 @@ export function getMappedSegments(
   );
 }
 
-export function buildPeptideColorMap(mapped: MappedCoverageSegment[]): Map<number, string> {
-  const colorMap = new Map<number, string>();
+export function buildPeptideSelectionKey(segment: MappedCoverageSegment): string {
+  if (Number.isFinite(segment.peptide_id)) return `peptide:${segment.peptide_id}`;
+
+  return [
+    "segment",
+    segment.sequence,
+    segment.start,
+    segment.end,
+    segment.occurrence_index,
+  ].join(":");
+}
+
+export function buildPeptideColorMap(mapped: MappedCoverageSegment[]): PeptideColorMap {
+  const colorMap: PeptideColorMap = new Map();
 
   for (const segment of mapped) {
-    if (colorMap.has(segment.peptide_id)) continue;
+    const key = buildPeptideSelectionKey(segment);
+    if (colorMap.has(key)) continue;
     const colorIndex = colorMap.size % COVERAGE_PEPTIDE_COLORS.length;
-    colorMap.set(segment.peptide_id, COVERAGE_PEPTIDE_COLORS[colorIndex]);
+    colorMap.set(key, COVERAGE_PEPTIDE_COLORS[colorIndex]);
   }
 
   return colorMap;
@@ -73,21 +90,23 @@ export function buildPeptideColorMap(mapped: MappedCoverageSegment[]): Map<numbe
 
 export function buildPeptideLegend(
   mapped: MappedCoverageSegment[],
-  colorMap: Map<number, string>,
+  colorMap: PeptideColorMap,
 ): PeptideLegendItem[] {
-  const items = new Map<number, PeptideLegendItem>();
+  const items = new Map<string, PeptideLegendItem>();
 
   for (const segment of mapped) {
-    const color = colorMap.get(segment.peptide_id);
+    const key = buildPeptideSelectionKey(segment);
+    const color = colorMap.get(key);
     if (!color) continue;
 
-    const existing = items.get(segment.peptide_id);
+    const existing = items.get(key);
     if (existing) {
       if (segment.is_ambiguous) existing.ambiguous = true;
       continue;
     }
 
-    items.set(segment.peptide_id, {
+    items.set(key, {
+      key,
       peptideId: segment.peptide_id,
       sequence: segment.sequence,
       color,
@@ -101,18 +120,35 @@ export function buildPeptideLegend(
 export function resolveResidueColor(
   pos: number,
   mapped: MappedCoverageSegment[],
-  colorMap: Map<number, string>,
+  colorMap: PeptideColorMap,
+  selectedPeptideKey: string | null = null,
 ): ResidueCoverage | null {
+  let fallback: ResidueCoverage | null = null;
+
   for (const segment of mapped) {
     if (segment.start <= pos && pos < segment.end) {
-      const color = colorMap.get(segment.peptide_id);
-      return color ? { color, segment } : null;
+      const key = buildPeptideSelectionKey(segment);
+      const color = colorMap.get(key);
+      if (!color) continue;
+
+      if (selectedPeptideKey === key) {
+        return { color, segment, selected: true };
+      }
+
+      if (!fallback) fallback = { color, segment, selected: false };
     }
   }
 
-  return null;
+  return fallback;
+}
+
+export function getSegmentColor(
+  segment: MappedCoverageSegment,
+  colorMap: PeptideColorMap,
+): string | undefined {
+  return colorMap.get(buildPeptideSelectionKey(segment));
 }
 
 export function formatSegmentTooltip(segment: MappedCoverageSegment): string {
-  return `${segment.sequence} [${segment.start}, ${segment.end}) · peptide #${segment.peptide_id}`;
+  return `${segment.sequence} [${segment.start}, ${segment.end}) - peptide #${segment.peptide_id}`;
 }

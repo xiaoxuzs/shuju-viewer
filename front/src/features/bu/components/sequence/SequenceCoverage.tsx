@@ -1,4 +1,4 @@
-import type React from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,19 +7,30 @@ import type { BuProteinDetailOut } from "@/features/bu/types";
 import { CoverageBar } from "./CoverageBar";
 import { PeptideLegend } from "./PeptideLegend";
 import {
+  SELECTED_PEPTIDE_HIGHLIGHT,
+  coverageMarkerBackground,
+} from "./coverageColors";
+import {
   buildPeptideColorMap,
   buildPeptideLegend,
+  buildPeptideSelectionKey,
   formatSegmentTooltip,
   getMappedSegments,
   resolveResidueColor,
   splitSequenceRows,
   type MappedCoverageSegment,
+  type PeptideColorMap,
 } from "./coverageLayout";
 
 const CHUNK = 50;
 const UNCOVERED_COLOR = "#111111";
+const SELECTED_TEXT_COLOR = "#111827";
+const SIDEBAR_MIN_HEIGHT = 224;
 
 export function SequenceCoverage({ protein }: { protein: BuProteinDetailOut }) {
+  const [selectedPeptideKey, setSelectedPeptideKey] = useState<string | null>(null);
+  const [leftPanelHeight, setLeftPanelHeight] = useState(SIDEBAR_MIN_HEIGHT);
+  const leftPanelRef = useRef<HTMLDivElement | null>(null);
   const sequence = protein.base_sequence ?? "";
   const mappedSegments = getMappedSegments(protein.coverage_segments, sequence.length);
   const colorMap = buildPeptideColorMap(mappedSegments);
@@ -31,9 +42,37 @@ export function SequenceCoverage({ protein }: { protein: BuProteinDetailOut }) {
   const showCoverage =
     Boolean(sequence) && protein.coverage_mode !== "decoy" && protein.coverage_mode !== "list_only";
   const proteinName = resolveProteinName(protein);
-  const title = `Sequence coverage — ${protein.accession}${proteinName ? ` (${proteinName})` : ""}`;
+  const title = `Sequence coverage - ${protein.accession}${proteinName ? ` (${proteinName})` : ""}`;
   const coverageLabel =
     protein.coverage_percent === null ? "-" : `${Math.round(protein.coverage_percent * 100)}%`;
+
+  useEffect(() => {
+    setSelectedPeptideKey(null);
+  }, [protein.id]);
+
+  useEffect(() => {
+    const node = leftPanelRef.current;
+    if (!showCoverage || !node) return;
+
+    const measure = () => {
+      setLeftPanelHeight(Math.max(SIDEBAR_MIN_HEIGHT, Math.ceil(node.getBoundingClientRect().height)));
+    };
+
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height ?? node.getBoundingClientRect().height;
+      setLeftPanelHeight(Math.max(SIDEBAR_MIN_HEIGHT, Math.ceil(height)));
+    });
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [showCoverage]);
+
+  const sidebarStyle = {
+    "--coverage-sidebar-height": `${leftPanelHeight}px`,
+  } as CSSProperties;
 
   return (
     <Card>
@@ -42,7 +81,7 @@ export function SequenceCoverage({ protein }: { protein: BuProteinDetailOut }) {
           <div className="min-w-0">
             <CardTitle className="text-base">{title}</CardTitle>
             <CardDescription className="mt-1">
-              Coverage: {coverageLabel} · {legendItems.length} peptides
+              Coverage: {coverageLabel} - {legendItems.length} peptides
             </CardDescription>
           </div>
           <CoverageBadge protein={protein} />
@@ -59,18 +98,50 @@ export function SequenceCoverage({ protein }: { protein: BuProteinDetailOut }) {
           <Notice tone="warning">{unmappedCount.toLocaleString()} peptides could not be mapped to the sequence.</Notice>
         )}
         {showCoverage && (
-          <>
-            <SequenceRows sequence={sequence} segments={mappedSegments} colorMap={colorMap} />
-            <div className="pl-14">
-              <CoverageBar
-                sequenceLength={sequence.length}
+          <div
+            className={
+              legendItems.length > 0
+                ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(17.5rem,22rem)] lg:items-stretch"
+                : "space-y-4"
+            }
+          >
+            <div ref={leftPanelRef} className="min-w-0 space-y-4">
+              <SequenceRows
+                sequence={sequence}
                 segments={mappedSegments}
                 colorMap={colorMap}
-                chunkSize={CHUNK}
+                selectedPeptideKey={selectedPeptideKey}
               />
+              <div className="pl-14">
+                <CoverageBar
+                  sequenceLength={sequence.length}
+                  segments={mappedSegments}
+                  colorMap={colorMap}
+                  chunkSize={CHUNK}
+                />
+              </div>
             </div>
-            <PeptideLegend items={legendItems} />
-          </>
+            {legendItems.length > 0 && (
+              <aside
+                className="min-h-0 min-w-0 self-start overflow-hidden border-t border-border/70 pt-4 lg:flex lg:h-[var(--coverage-sidebar-height)] lg:max-h-[var(--coverage-sidebar-height)] lg:flex-col lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"
+                style={sidebarStyle}
+              >
+                <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Peptides
+                  </h4>
+                  <span className="text-xs text-muted-foreground">
+                    {legendItems.length.toLocaleString()}
+                  </span>
+                </div>
+                <PeptideLegend
+                  items={legendItems}
+                  selectedPeptideKey={selectedPeptideKey}
+                  onSelect={setSelectedPeptideKey}
+                />
+              </aside>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -91,10 +162,12 @@ function SequenceRows({
   sequence,
   segments,
   colorMap,
+  selectedPeptideKey,
 }: {
   sequence: string;
   segments: MappedCoverageSegment[];
-  colorMap: Map<number, string>;
+  colorMap: PeptideColorMap;
+  selectedPeptideKey: string | null;
 }) {
   const rows = splitSequenceRows(sequence, CHUNK);
 
@@ -107,16 +180,32 @@ function SequenceRows({
             <div className="whitespace-nowrap">
               {Array.from(row.text).map((aa, offset) => {
                 const index = row.start + offset;
-                const residue = resolveResidueColor(index, segments, colorMap);
+                const residue = resolveResidueColor(index, segments, colorMap, selectedPeptideKey);
+                const selected = Boolean(residue?.selected);
 
                 return (
                   <span
                     key={index}
-                    title={residue ? formatSegmentTooltip(residue.segment) : undefined}
-                    className={`inline-block w-[1.15rem] text-center ${
+                    className={`inline-block w-[1.15rem] rounded-[2px] text-center ${
                       residue ? "font-bold" : "font-normal"
                     }`}
-                    style={{ color: residue?.color ?? UNCOVERED_COLOR }}
+                    data-peptide-key={residue ? buildPeptideSelectionKey(residue.segment) : undefined}
+                    data-selected={selected ? "true" : undefined}
+                    data-testid={residue ? "covered-residue" : undefined}
+                    style={{
+                      backgroundColor: residue
+                        ? selected
+                          ? SELECTED_PEPTIDE_HIGHLIGHT
+                          : coverageMarkerBackground(residue.color, 0.18)
+                        : undefined,
+                      boxShadow: selected ? "0 0 0 1px rgba(250, 204, 21, 0.65)" : undefined,
+                      color: residue
+                        ? selected
+                          ? SELECTED_TEXT_COLOR
+                          : residue.color
+                        : UNCOVERED_COLOR,
+                    }}
+                    title={residue ? formatSegmentTooltip(residue.segment) : undefined}
                   >
                     {aa}
                   </span>
@@ -130,7 +219,7 @@ function SequenceRows({
   );
 }
 
-function Notice({ tone, children }: { tone: "muted" | "warning"; children: React.ReactNode }) {
+function Notice({ tone, children }: { tone: "muted" | "warning"; children: ReactNode }) {
   return (
     <div
       className={

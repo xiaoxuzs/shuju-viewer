@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BuProteinDetailOut } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
+import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 
 export function BuPeptideLinksTable({ slug, protein }: { slug: string; protein: BuProteinDetailOut }) {
   const mappedIds = new Set(
@@ -41,8 +42,13 @@ export function BuPeptideLinksTable({ slug, protein }: { slug: string; protein: 
                       {peptide.sequence}
                     </Link>
                   </td>
-                  <td className="max-w-[260px] truncate py-2 text-muted-foreground">
-                    {peptide.modified_sequence ?? "-"}
+                  <td
+                    className="max-w-[260px] truncate py-2 text-muted-foreground"
+                    title={peptide.modified_sequence ?? undefined}
+                  >
+                    {peptide.modified_sequence
+                      ? formatModifiedSequenceForDisplay(peptide.modified_sequence)
+                      : "-"}
                   </td>
                   <td className="py-2 text-right">{formatCount(peptide.match_count)}</td>
                   <td className="py-2 text-right font-mono text-xs">{formatDecimal(peptide.best_q_value)}</td>

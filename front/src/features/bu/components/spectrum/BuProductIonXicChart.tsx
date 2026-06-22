@@ -24,11 +24,13 @@ export function BuProductIonXicChart({
   mode,
   rtMarkers,
   rtWindow,
+  height = BU_CHART.chromatogramHeight,
 }: {
   traces: ProductIonXicTrace[];
   mode: ProductIonYAxisMode;
   rtMarkers: ProductIonRtMarker[];
   rtWindow: { start: number | null; stop: number | null };
+  height?: number;
 }) {
   const [fullOpen, setFullOpen] = useState(false);
   const [modalZoom, setModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
@@ -79,7 +81,7 @@ export function BuProductIonXicChart({
         xLabel="Retention Time (min)"
         yLabel={yLabel}
         lineColor={BU_CHART.y}
-        height={BU_CHART.chromatogramHeight}
+        height={height}
         bands={bands}
         guides={guides}
         legend={legend}

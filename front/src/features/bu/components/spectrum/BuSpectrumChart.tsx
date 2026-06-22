@@ -38,7 +38,7 @@ function colorForExternal(annotation: SpectrumExternalAnnotation): string {
 }
 
 function externalSourceLabel(annotation: SpectrumExternalAnnotation): string {
-  if (annotation.source === "pfmb") return "PFMB pre-computed";
+  if (annotation.source === "pfmb") return "Pre-computed Fragment Match";
   if (annotation.source === "live") return "Live mzML";
   return "External";
 }
@@ -509,7 +509,7 @@ export function BuSpectrumChart({
                 className="mr-1 inline-block h-2 w-4 align-middle"
                 style={{ backgroundColor: colorForExternal(mappedExternalAnnotations[0]) }}
               />
-              PFMB primary
+              Fragment Match primary
             </span>
             {showLiveAnnotations && (
               <span>
@@ -579,7 +579,7 @@ export function BuSpectrumChart({
               {orderedPfmbAnnotations(tooltip.peak).map((annotation, index) => (
                 <div key={`${annotation.id}-${index}`} className="mt-1 border-t border-border/70 pt-1">
                   <div className="font-mono text-muted-foreground">
-                    {index === 0 ? "Primary source" : "PFMB source"}: {externalSourceLabel(annotation)}
+                    {index === 0 ? "Primary source" : "Fragment Match source"}: {externalSourceLabel(annotation)}
                   </div>
                   <div className="font-semibold" style={{ color: colorForExternal(annotation) }}>
                     {annotation.label}
@@ -591,7 +591,7 @@ export function BuSpectrumChart({
                   {annotation.theoMz !== undefined && (
                     <div className="font-mono">Theoretical m/z {annotation.theoMz.toFixed(4)}</div>
                   )}
-                  <div className="font-mono">PFMB observed m/z {annotation.expMz.toFixed(4)}</div>
+                  <div className="font-mono">Fragment Match observed m/z {annotation.expMz.toFixed(4)}</div>
                   {annotation.ppm != null && <div className="font-mono">{annotation.ppm.toFixed(2)} ppm</div>}
                   {annotation.massErrorDa != null && (
                     <div className="font-mono">Mass error {annotation.massErrorDa.toFixed(4)} Da</div>

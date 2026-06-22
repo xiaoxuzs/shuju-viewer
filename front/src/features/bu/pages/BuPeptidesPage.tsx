@@ -11,6 +11,7 @@ import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import type { BuPeptideListItemOut } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
 import { clearListParams, setListParam } from "@/features/bu/utils/listParams";
+import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 
 export function BuPeptidesPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
@@ -36,7 +37,18 @@ export function BuPeptidesPage() {
 
   const columns: BuColumn<BuPeptideListItemOut>[] = [
     { key: "sequence", header: "Sequence", render: (row) => row.sequence },
-    { key: "modified", header: "Example modified", render: (row) => row.example_modified ?? "-" },
+    {
+      key: "modified",
+      header: "Example modified",
+      render: (row) =>
+        row.example_modified ? (
+          <span title={row.example_modified}>
+            {formatModifiedSequenceForDisplay(row.example_modified)}
+          </span>
+        ) : (
+          "-"
+        ),
+    },
     { key: "genes", header: "Genes", render: (row) => row.genes ?? "-" },
     {
       key: "proteins",

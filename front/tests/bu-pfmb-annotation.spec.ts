@@ -197,7 +197,7 @@ test("defaults to the apex slot", async ({ page }) => {
   const card = page.getByTestId("pfmb-card");
   await expect(card).toBeVisible();
   const apex = card.getByRole("button", {
-    name: "Slot 5 | PFMB slot RT 94.99 min | PFMB apex",
+    name: "Slot 5 | Fragment Match slot RT 94.99 min | Fragment Match apex",
     exact: true,
   });
   await expect(apex).toHaveAttribute("aria-pressed", "true");
@@ -211,15 +211,15 @@ test("slot buttons show index, PFMB slot RT and PFMB apex state", async ({ page 
 
   const card = page.getByTestId("pfmb-card");
   await expect(card.getByRole("button", {
-    name: "Slot 5 | PFMB slot RT 94.99 min | PFMB apex",
+    name: "Slot 5 | Fragment Match slot RT 94.99 min | Fragment Match apex",
     exact: true,
   })).toBeVisible();
   const nonApex = card.getByRole("button", {
-    name: "Slot 4 | PFMB slot RT 93.99 min",
+    name: "Slot 4 | Fragment Match slot RT 93.99 min",
     exact: true,
   });
   await expect(nonApex).toBeVisible();
-  await expect(nonApex).not.toContainText("PFMB apex");
+  await expect(nonApex).not.toContainText("Fragment Match apex");
 });
 
 test("summary distinguishes matched peaks from matched ion rows", async ({ page }) => {
@@ -227,9 +227,9 @@ test("summary distinguishes matched peaks from matched ion rows", async ({ page 
   await page.goto("/datasets/demo/matches/1");
 
   const summary = page.getByTestId("pfmb-card").getByTestId("pfmb-slot-summary");
-  await expect(summary.locator("div", { hasText: "PFMB matched peak rows" })).toContainText("2");
+  await expect(summary.locator("div", { hasText: "Fragment Match matched peak rows" })).toContainText("2");
   await expect(summary.locator("div", { hasText: "Pre-computed matched rows" })).toContainText("3");
-  await expect(summary.locator("div", { hasText: "PFMB zero-intensity rows" })).toContainText("1");
+  await expect(summary.locator("div", { hasText: "Fragment Match zero-intensity rows" })).toContainText("1");
 });
 
 test("zero-intensity ion row stays visible (not filtered)", async ({ page }) => {
@@ -289,7 +289,7 @@ test("empty matched_ions shows an explicit empty state", async ({ page }) => {
   await page.goto("/datasets/demo/matches/1");
 
   const card = page.getByTestId("pfmb-card");
-  await card.getByRole("button", { name: "Slot 6 | PFMB slot RT 95.99 min", exact: true }).click();
+  await card.getByRole("button", { name: "Slot 6 | Fragment Match slot RT 95.99 min", exact: true }).click();
   await expect(card.getByTestId("pfmb-empty-ions")).toBeVisible();
   await expect(card.getByTestId("pfmb-empty-ions")).toContainText("no matched fragment ions");
 });

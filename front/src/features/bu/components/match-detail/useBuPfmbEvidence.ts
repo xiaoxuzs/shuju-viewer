@@ -13,12 +13,12 @@ export function useBuPfmbEvidence({
   slug,
   matchId,
   hasPfmb,
-  selectedRt,
+  pfmbSelectedRt,
 }: {
   slug: string;
   matchId: number;
   hasPfmb: boolean;
-  selectedRt: number | null;
+  pfmbSelectedRt: number | null;
 }) {
   const slots = useQuery({
     queryKey: ["bu", slug, "matches", matchId, "ms2-slots"],
@@ -34,12 +34,12 @@ export function useBuPfmbEvidence({
     }
     const list = slotData!.slots;
     const apexSlot = list.find((slot) => slot.slot_index === slotData!.apex_slot) ?? list[0];
-    if (selectedRt == null) return { activeSlot: apexSlot, nearestDistance: null as number | null };
+    if (pfmbSelectedRt == null) return { activeSlot: apexSlot, nearestDistance: null as number | null };
 
     let nearest = list[0];
     let best = Infinity;
     for (const slot of list) {
-      const distance = Math.abs(slot.rt_minutes - selectedRt);
+      const distance = Math.abs(slot.rt_minutes - pfmbSelectedRt);
       if (distance < best) {
         best = distance;
         nearest = slot;
@@ -48,7 +48,7 @@ export function useBuPfmbEvidence({
     return best > RT_LINK_TOLERANCE_MIN
       ? { activeSlot: apexSlot, nearestDistance: best }
       : { activeSlot: nearest, nearestDistance: best };
-  }, [hasSlots, selectedRt, slotData]);
+  }, [hasSlots, pfmbSelectedRt, slotData]);
 
   const activePrsm = activeSlot?.prsm_index ?? null;
   const annotation = useQuery({
@@ -71,7 +71,7 @@ export function useBuPfmbEvidence({
     activePrsm,
     nearestDistance,
     outOfTolerance:
-      selectedRt != null && nearestDistance != null && nearestDistance > RT_LINK_TOLERANCE_MIN,
+      pfmbSelectedRt != null && nearestDistance != null && nearestDistance > RT_LINK_TOLERANCE_MIN,
     annotation,
     matrix,
   };

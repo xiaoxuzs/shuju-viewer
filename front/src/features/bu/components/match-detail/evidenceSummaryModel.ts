@@ -126,10 +126,10 @@ function buildLiveMs2Evidence(
 
 function buildPfmbEvidence(input: BuildBuEvidenceSummaryInput): EvidenceSection {
   if (!input.hasPfmb) {
-    return { key: "pfmb", title: "PFMB evidence", rows: [], empty: "PFMB annotation not available" };
+    return { key: "pfmb", title: "Fragment Match evidence", rows: [], empty: "Fragment Match annotation not available" };
   }
   if (input.pfmbSlots.isLoading || input.pfmbAnnotation.isLoading) {
-    return { key: "pfmb", title: "PFMB evidence", rows: [], empty: "Loading PFMB evidence..." };
+    return { key: "pfmb", title: "Fragment Match evidence", rows: [], empty: "Loading Fragment Match evidence..." };
   }
   if (
     input.pfmbSlots.isError
@@ -138,7 +138,7 @@ function buildPfmbEvidence(input: BuildBuEvidenceSummaryInput): EvidenceSection 
     || !input.pfmbAnnotation.data
     || !input.activePfmbSlot
   ) {
-    return { key: "pfmb", title: "PFMB evidence", rows: [], empty: "PFMB annotation not available" };
+    return { key: "pfmb", title: "Fragment Match evidence", rows: [], empty: "Fragment Match annotation not available" };
   }
 
   const coverage = calculatePfmbCoverage(
@@ -148,21 +148,21 @@ function buildPfmbEvidence(input: BuildBuEvidenceSummaryInput): EvidenceSection 
   const isApex = input.activePfmbSlot.slot_index === input.pfmbSlots.data.apex_slot;
   const rows: EvidenceRow[] = [
     {
-      label: "PFMB fragment coverage",
+      label: "Fragment Match coverage",
       value: coverage ? `${(coverage.ratio * 100).toFixed(0)}%` : "Not available",
       detail: coverage ? `${coverage.covered} / ${coverage.total} cleavage sites` : undefined,
     },
     {
-      label: "PFMB matched peak rows",
+      label: "Fragment Match matched peak rows",
       value: formatCount(input.pfmbAnnotation.data.matched_peak_count),
     },
     {
-      label: "PFMB slot RT",
+      label: "Fragment Match slot RT",
       value: displayRt(input.activePfmbSlot.rt_minutes),
-      detail: isApex ? "PFMB apex" : " ",
+      detail: isApex ? "Fragment Match apex" : " ",
     },
   ];
-  return { key: "pfmb", title: "PFMB evidence", rows };
+  return { key: "pfmb", title: "Fragment Match evidence", rows };
 }
 
 function buildMassAccuracy(
@@ -176,7 +176,7 @@ function buildMassAccuracy(
   }
   if (pfmbAnnotation.data) {
     const pfmb = summarizePpm(pfmbAnnotation.data.matched_ions.map((ion) => ion.mass_error_ppm));
-    if (pfmb) rows.push({ label: "PFMB mass accuracy", value: ppmText(pfmb) });
+    if (pfmb) rows.push({ label: "Fragment Match mass accuracy", value: ppmText(pfmb) });
   }
   const loading = liveMs2.isLoading || pfmbAnnotation.isLoading;
   return {

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type RefObject } from "react";
 import { DataLoadError } from "@/components/common/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { FollowPfmbSlotControls } from "@/features/bu/components/match-detail/FollowPfmbSlotControls";
 import { BuPfmbFragmentTable } from "@/features/bu/components/match-detail/BuPfmbFragmentTable";
 import { BuPfmbHeatmap } from "@/features/bu/components/match-detail/BuPfmbHeatmap";
 import { BuPfmbQualitySummary } from "@/features/bu/components/match-detail/BuPfmbQualitySummary";
@@ -26,6 +27,11 @@ interface Props {
   selectedRt: number | null;
   selectedRtSource: InspectedRtSource | null;
   onSelectRt: (rt: number) => void;
+  onSelectSlot?: (slot: BuMs2SlotItem) => void;
+  followPfmbSlot?: boolean;
+  onFollowPfmbSlotChange?: (next: boolean) => void;
+  onLockMs2Scan?: () => void;
+  heatmapSectionRef?: RefObject<HTMLDivElement>;
   pfmbEvidence?: BuPfmbEvidence;
   embedded?: boolean;
 }
@@ -42,7 +48,7 @@ function BuPfmbAnnotationCardWithHook(props: Props) {
     slug: props.slug,
     matchId: props.matchId,
     hasPfmb: props.hasPfmb,
-    selectedRt: props.selectedRt,
+    pfmbSelectedRt: props.selectedRt,
   });
   return <BuPfmbAnnotationCardInner {...props} pfmbEvidence={pfmbEvidence} />;
 }
@@ -54,6 +60,11 @@ function BuPfmbAnnotationCardInner({
   selectedRt,
   selectedRtSource,
   onSelectRt,
+  onSelectSlot,
+  followPfmbSlot = true,
+  onFollowPfmbSlotChange,
+  onLockMs2Scan,
+  heatmapSectionRef,
   pfmbEvidence,
   embedded = false,
 }: Props & { pfmbEvidence: BuPfmbEvidence }) {
@@ -83,6 +94,28 @@ function BuPfmbAnnotationCardInner({
     setHighlight(new Set(keys));
   }, []);
 
+  const selectSlot = useCallback(
+    (slot: BuMs2SlotItem) => {
+      if (onSelectSlot) {
+        onSelectSlot(slot);
+        return;
+      }
+      onSelectRt(slot.rt_minutes);
+    },
+    [onSelectRt, onSelectSlot],
+  );
+  const selectRt = useCallback(
+    (rt: number) => {
+      const slot = slotData?.slots.find((item) => Math.abs(item.rt_minutes - rt) < 1e-6);
+      if (slot) {
+        selectSlot(slot);
+        return;
+      }
+      onSelectRt(rt);
+    },
+    [onSelectRt, selectSlot, slotData?.slots],
+  );
+
   if (!hasPfmb) return null;
 
   const header = (
@@ -95,7 +128,7 @@ function BuPfmbAnnotationCardInner({
       annotation={annotation.data}
       matrix={matrix.data}
       selectedSlotRt={activeSlot?.rt_minutes ?? null}
-      onSelectRt={onSelectRt}
+      onSelectRt={selectRt}
     />
   );
   const slotPanel = (
@@ -106,7 +139,10 @@ function BuPfmbAnnotationCardInner({
       activePrsm={activePrsm}
       activeSlot={activeSlot}
       annotation={annotation.data}
-      onSelectRt={onSelectRt}
+      followPfmbSlot={followPfmbSlot}
+      onFollowPfmbSlotChange={onFollowPfmbSlotChange}
+      onLockMs2Scan={onLockMs2Scan}
+      onSelectSlot={selectSlot}
       isUpdating={annotation.isFetching && !annotation.isLoading}
     />
   );
@@ -114,22 +150,25 @@ function BuPfmbAnnotationCardInner({
     <>
       {header}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(260px,0.8fr)]" data-testid="pfmb-body-grid">
-        <div className="min-w-0" data-testid="pfmb-heatmap-column">
-          {matrix.isLoading && <Skeleton className="mb-4 h-40" data-testid="pfmb-matrix-loading" />}
-          {matrix.error && (
-            <div className="mb-4" data-testid="pfmb-matrix-error">
-              <DataLoadError compact />
-            </div>
-          )}
-          {matrix.data && (
-            <BuPfmbHeatmap
-              matrix={matrix.data}
-              selectedRt={activeSlot?.rt_minutes ?? null}
-              highlight={highlight}
-              onSelectRt={onSelectRt}
-              onHighlight={toggleFamily}
-            />
-          )}
+        <div ref={heatmapSectionRef} className="min-w-0 scroll-mt-20" data-testid="pfmb-heatmap-section">
+          <div data-testid="pfmb-heatmap-column">
+            {matrix.isLoading && <Skeleton className="mb-4 h-40" data-testid="pfmb-matrix-loading" />}
+            {matrix.error && (
+              <div className="mb-4" data-testid="pfmb-matrix-error">
+                <DataLoadError compact />
+              </div>
+            )}
+            {matrix.data && (
+              <BuPfmbHeatmap
+                matrix={matrix.data}
+                selectedRt={activeSlot?.rt_minutes ?? null}
+                highlight={highlight}
+                onSelectRt={selectRt}
+                onSelectSlot={selectSlot}
+                onHighlight={toggleFamily}
+              />
+            )}
+          </div>
         </div>
         {slotPanel}
       </div>
@@ -161,8 +200,10 @@ function BuPfmbAnnotationCardInner({
 
   if (embedded) {
     return (
-      <section className="border-t border-border/70 pt-5" data-testid="pfmb-card">
-        {content}
+      <section data-testid="pfmb-card">
+        <div data-testid="fragment-match-slot-detail">
+          {content}
+        </div>
       </section>
     );
   }
@@ -170,9 +211,13 @@ function BuPfmbAnnotationCardInner({
   return (
     <Card data-testid="pfmb-card">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Pre-computed PFMB annotation</CardTitle>
+        <CardTitle className="text-base">Fragment Match Slot Detail</CardTitle>
       </CardHeader>
-      <CardContent>{content}</CardContent>
+      <CardContent>
+        <div data-testid="fragment-match-slot-detail">
+          {content}
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -199,29 +244,54 @@ function PfmbHeader({
   onSelectRt: (rt: number) => void;
 }) {
   return (
-    <div className="mb-4 space-y-3" data-testid="pfmb-header">
-      {showTitle && <h3 className="text-sm font-semibold">PFMB evidence</h3>}
-      <div data-testid="pfmb-source-note">
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Annotation source</div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          PFMB uses pre-computed, deconvoluted peak-to-fragment matches per retention-time
-          slot. These peaks are not the same as the live mzML MS2 matched peaks, so counts
-          and intensity sums are not directly comparable.
-        </p>
-      </div>
-      <div className="min-h-4">
-        {selectedRt != null && selectedRtSource != null && (
-          <p className="text-xs font-medium text-foreground" data-testid="pfmb-selected-rt">
-            Current inspected RT: {selectedRt.toFixed(4)} min from{" "}
-            {inspectedRtSourceLabel(selectedRtSource)}
-          </p>
+    <div className="mb-3 space-y-3" data-testid="pfmb-header">
+      <div
+        className="flex flex-wrap items-center gap-2 text-xs"
+        data-testid="fragment-match-evidence-header"
+      >
+        {showTitle && (
+          <span className="font-medium text-muted-foreground">Selected slot detail</span>
         )}
+        <span
+          className="rounded-md border border-border bg-background px-2 py-1 font-medium text-foreground"
+          data-testid="pfmb-selected-rt"
+        >
+          Slot RT: {formatSlotRt(selectedSlotRt)}
+        </span>
+        <span
+          className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-muted-foreground"
+          data-testid="fragment-match-slot-meta"
+        >
+          Pre-computed slot-level matches
+        </span>
+        <span className="rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-muted-foreground">
+          not live mzML MS2 peaks
+        </span>
       </div>
+
+      <details className="text-xs text-muted-foreground" data-testid="fragment-match-source-details">
+        <summary className="cursor-pointer font-medium text-muted-foreground hover:text-foreground">
+          Details
+        </summary>
+        <div className="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2" data-testid="pfmb-source-note">
+          <div className="font-semibold uppercase tracking-wider">Annotation source</div>
+          <p className="mt-1">
+            Pre-computed, deconvoluted peak-to-fragment matches for the selected retention-time slot.
+            These peaks are not the same as live mzML MS2 matched peaks.
+          </p>
+          {selectedRt != null && selectedRtSource != null && (
+            <p className="mt-1">
+              Inspected RT: {selectedRt.toFixed(4)} min from {inspectedRtSourceLabel(selectedRtSource)}.
+            </p>
+          )}
+        </div>
+      </details>
+
       <div className="min-h-4">
         {outOfTolerance && (
           <p className="text-xs font-medium text-amber-600" data-testid="pfmb-rt-out-of-tolerance">
-            Nearest PFMB slot is {nearestDistance!.toFixed(2)} min from the current inspected RT (over
-            {" "}{RT_LINK_TOLERANCE_MIN.toFixed(1)} min); showing the PFMB apex slot instead.
+            Nearest Fragment Match slot is {nearestDistance!.toFixed(2)} min from the current inspected RT (over
+            {" "}{RT_LINK_TOLERANCE_MIN.toFixed(1)} min); showing the Fragment Match apex slot instead.
           </p>
         )}
       </div>
@@ -237,6 +307,10 @@ function PfmbHeader({
   );
 }
 
+function formatSlotRt(value: number | null | undefined): string {
+  return Number.isFinite(value) ? `${value!.toFixed(4)} min` : "N/A";
+}
+
 function PfmbSlotPanel({
   slots,
   slotData,
@@ -244,7 +318,10 @@ function PfmbSlotPanel({
   activePrsm,
   activeSlot,
   annotation,
-  onSelectRt,
+  followPfmbSlot,
+  onFollowPfmbSlotChange,
+  onLockMs2Scan,
+  onSelectSlot,
   isUpdating,
 }: {
   slots: BuPfmbEvidence["slots"];
@@ -253,7 +330,10 @@ function PfmbSlotPanel({
   activePrsm: number | null;
   activeSlot: BuMs2SlotItem | null;
   annotation?: BuMs2AnnotationOut;
-  onSelectRt: (rt: number) => void;
+  followPfmbSlot: boolean;
+  onFollowPfmbSlotChange?: (next: boolean) => void;
+  onLockMs2Scan?: () => void;
+  onSelectSlot: (slot: BuMs2SlotItem) => void;
   isUpdating: boolean;
 }) {
   return (
@@ -262,8 +342,15 @@ function PfmbSlotPanel({
       data-testid="pfmb-slot-panel"
     >
       <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        PFMB slot selection
+        Fragment Match slot selection
       </div>
+      {onFollowPfmbSlotChange && onLockMs2Scan && (
+        <FollowPfmbSlotControls
+          followPfmbSlot={followPfmbSlot}
+          onFollowChange={onFollowPfmbSlotChange}
+          onLockMs2Scan={onLockMs2Scan}
+        />
+      )}
       {slots.isLoading && <Skeleton className="h-7 w-full" data-testid="pfmb-slots-loading" />}
       {slots.error && (
         <div data-testid="pfmb-slots-error">
@@ -272,7 +359,7 @@ function PfmbSlotPanel({
       )}
       {!slots.isLoading && !slots.error && !hasSlots && (
         <p className="text-xs text-muted-foreground" data-testid="pfmb-no-slots">
-          PFMB is enabled for this dataset, but no retention-time slot is available for this match.
+          Fragment Match evidence is enabled for this dataset, but no retention-time slot is available for this match.
         </p>
       )}
       {hasSlots && slotData && (
@@ -284,7 +371,7 @@ function PfmbSlotPanel({
                 slot={slot}
                 isApex={slot.slot_index === slotData.apex_slot}
                 isSelected={slot.prsm_index === activePrsm}
-                onSelect={() => onSelectRt(slot.rt_minutes)}
+                onSelect={() => onSelectSlot(slot)}
               />
             ))}
           </div>
@@ -319,10 +406,10 @@ function SlotSummary({
       data-testid="pfmb-slot-summary"
     >
       <SummaryItem label="Slot" value={slot ? String(slot.slot_index) : "N/A"} />
-      <SummaryItem label="PFMB slot RT" value={slot ? `${slot.rt_minutes.toFixed(2)} min` : "N/A"} />
+      <SummaryItem label="Fragment Match slot RT" value={slot ? `${slot.rt_minutes.toFixed(2)} min` : "N/A"} />
       <SummaryItem label="PRSM index" value={annotation ? String(annotation.prsm_index) : "N/A"} />
       <SummaryItem
-        label="PFMB matched peak rows"
+        label="Fragment Match matched peak rows"
         value={annotation ? formatCount(annotation.matched_peak_count) : "N/A"}
       />
       <SummaryItem
@@ -330,7 +417,7 @@ function SlotSummary({
         value={annotation ? formatCount(annotation.matched_ions.length) : "N/A"}
       />
       <SummaryItem
-        label="PFMB zero-intensity rows"
+        label="Fragment Match zero-intensity rows"
         value={zeroRows == null ? "N/A" : formatCount(zeroRows)}
       />
     </dl>
@@ -370,7 +457,7 @@ function SlotButton({
           : "border-border text-muted-foreground hover:text-foreground",
       )}
     >
-      {`Slot ${slot.slot_index} | PFMB slot RT ${slot.rt_minutes.toFixed(2)} min${isApex ? " | PFMB apex" : ""}`}
+      {`Slot ${slot.slot_index} | Fragment Match slot RT ${slot.rt_minutes.toFixed(2)} min${isApex ? " | Fragment Match apex" : ""}`}
     </button>
   );
 }

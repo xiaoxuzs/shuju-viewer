@@ -328,14 +328,14 @@ export function BuPfmbSpectrumChart({
   if (peaks.length === 0) {
     return (
       <div className={cn("py-6 text-center text-sm text-muted-foreground", className)} data-testid="pfmb-spectrum-empty">
-        No PFMB peaks to plot for this slot.
+        No Fragment Match peaks to plot for this slot.
       </div>
     );
   }
 
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
-      <svg ref={svgRef} aria-label={`Pre-computed PFMB annotation spectrum (${xLabel})`} />
+      <svg ref={svgRef} aria-label={`Pre-computed Fragment Match annotation spectrum (${xLabel})`} />
       <div className="absolute right-2 top-1 flex items-center gap-1">
         <button
           type="button"

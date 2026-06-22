@@ -105,11 +105,11 @@ test("evidence summary keeps live and PFMB metrics source-specific", () => {
   const pfmb = sections.find((section) => section.key === "pfmb")!;
   const accuracy = sections.find((section) => section.key === "mass-accuracy")!;
   expect(live.rows.map((row) => row.label)).toContain("Live matched b/y ions");
-  expect(pfmb.rows.map((row) => row.label)).toContain("PFMB matched peak rows");
-  expect(pfmb.rows.find((row) => row.label === "PFMB fragment coverage")?.value).toBe("17%");
+  expect(pfmb.rows.map((row) => row.label)).toContain("Fragment Match matched peak rows");
+  expect(pfmb.rows.find((row) => row.label === "Fragment Match coverage")?.value).toBe("17%");
   expect(accuracy.rows.map((row) => row.label)).toEqual([
     "Live MS2 mass accuracy",
-    "PFMB mass accuracy",
+    "Fragment Match mass accuracy",
   ]);
 });
 
@@ -128,6 +128,6 @@ test("evidence summary provides explicit missing-source fallbacks", () => {
 
   expect(sections.find((section) => section.key === "chromatographic")?.empty).toBe("XIC not available");
   expect(sections.find((section) => section.key === "live-ms2")?.empty).toBe("MS2 scan not available");
-  expect(sections.find((section) => section.key === "pfmb")?.empty).toBe("PFMB annotation not available");
+  expect(sections.find((section) => section.key === "pfmb")?.empty).toBe("Fragment Match annotation not available");
   expect(sections.find((section) => section.key === "mass-accuracy")?.empty).toBe("Mass accuracy not available");
 });

@@ -126,23 +126,29 @@ export function BuProductIonXicCard({
 
   return (
     <section
-      className="mt-5 rounded-lg border border-border/80 bg-muted/15 p-4"
+      className="min-w-0 rounded-lg border border-border/70 bg-background/70 p-3"
       data-testid="product-ion-xic-card"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold">Product ion XIC comparison</h3>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold">Product ion XIC comparison</h4>
           <p className="mt-1 text-xs text-muted-foreground">
-            Compare chromatographic traces of selected matched fragment ions from the current mzML MS2 spectrum.
+            Compare XIC traces for selected matched fragment ions.
           </p>
+          <div className="mt-1 text-xs font-medium">
+            Selected product ions: {selections.length} / {MAX_PRODUCT_ION_XICS}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="flex flex-wrap items-center justify-end gap-1.5"
+          data-testid="product-ion-xic-controls"
+        >
           <button
             type="button"
             onClick={onAddTop}
             disabled={addTopDisabled}
             title="Add the top 3 live matched fragments by intensity."
-            className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors enabled:hover:text-foreground disabled:opacity-40"
+            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground transition-colors enabled:hover:text-foreground disabled:opacity-40"
           >
             Add top 3 fragments
           </button>
@@ -150,38 +156,32 @@ export function BuProductIonXicCard({
             type="button"
             onClick={onClear}
             disabled={selections.length === 0}
-            className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors enabled:hover:text-foreground disabled:opacity-40"
+            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground transition-colors enabled:hover:text-foreground disabled:opacity-40"
           >
             Clear all
           </button>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-xs font-medium">
-          Selected product ions: {selections.length} / {MAX_PRODUCT_ION_XICS}
-        </div>
-        <div
-          className="inline-flex overflow-hidden rounded-md border border-border bg-background text-xs"
-          data-testid="product-ion-y-axis-mode"
-        >
-          {([
-            ["raw", "Raw intensity"],
-            ["normalized", "Normalized"],
-          ] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => onModeChange(value)}
-              aria-pressed={mode === value}
-              className={cn(
-                "px-2.5 py-1 transition-colors",
-                mode === value ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
+          <div
+            className="inline-flex overflow-hidden rounded-md border border-border bg-background text-xs"
+            data-testid="product-ion-y-axis-mode"
+          >
+            {([
+              ["raw", "Raw intensity"],
+              ["normalized", "Normalized"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => onModeChange(value)}
+                aria-pressed={mode === value}
+                className={cn(
+                  "px-2 py-1 transition-colors",
+                  mode === value ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -228,23 +228,24 @@ export function BuProductIonXicCard({
       ) : (
         <>
           {(batchQuery.isPending || batchQuery.isFetching) && traces.length === 0 && (
-            <PlotStatus kind="loading" title="Loading product XIC..." className="mt-4 min-h-48" />
+            <PlotStatus kind="loading" title="Loading product XIC..." className="mt-3 min-h-[180px]" />
           )}
           {batchQuery.isError && <ProductXicErrorState error={batchQuery.error} />}
           {!batchQuery.isError && allFailed && (
-            <PlotStatus kind="error" title="Failed to load product ion XIC." className="mt-4 min-h-48" />
+            <PlotStatus kind="error" title="Failed to load product ion XIC." className="mt-3 min-h-[180px]" />
           )}
           {!batchQuery.isError && !allFailed && allNoSignal && (
             <PlotStatus
               kind="no_signal"
               title="No product ion signal in the selected range."
-              className="mt-4 min-h-48"
+              className="mt-3 min-h-[180px]"
             />
           )}
           {!batchQuery.isError && !allFailed && !allNoSignal && traces.length > 0 && (
             <BuProductIonXicChart
               traces={traces}
               mode={mode}
+              height={280}
               rtWindow={rtWindow}
               rtMarkers={[
                 ...(inspectedRt !== null
@@ -295,7 +296,7 @@ function ProductXicErrorState({ error }: { error: unknown }) {
         kind="derived_missing"
         title="Derived scan index is not ready."
         command={parsed.backfillCommand}
-        className="mt-4 min-h-48"
+        className="mt-3 min-h-[180px]"
       />
     );
   }
@@ -305,23 +306,24 @@ function ProductXicErrorState({ error }: { error: unknown }) {
         kind="derived_stale"
         title="Derived scan index is stale."
         command={parsed.backfillCommand}
-        className="mt-4 min-h-48"
+        className="mt-3 min-h-[180px]"
       />
     );
   }
   if (parsed.kind === "unsupported_raw_format" || parsed.kind === "indexed_mzml_unsupported") {
-    return <PlotStatus kind="unsupported" className="mt-4 min-h-48" />;
+    return <PlotStatus kind="unsupported" className="mt-3 min-h-[180px]" />;
   }
-  return <PlotStatus kind="error" title="Failed to load product ion XIC." className="mt-4 min-h-48" />;
+  return <PlotStatus kind="error" title="Failed to load product ion XIC." className="mt-3 min-h-[180px]" />;
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
     <div
       className={cn(
-        "mt-4 rounded-md border border-dashed px-4 py-8 text-center text-sm",
+        "mt-3 flex min-h-[170px] items-center justify-center rounded-md border border-dashed px-4 py-4 text-center text-sm",
         "text-muted-foreground",
       )}
+      data-testid="product-ion-xic-empty-state"
     >
       {text}
     </div>

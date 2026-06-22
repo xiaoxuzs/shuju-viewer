@@ -11,6 +11,7 @@ import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import type { BuMatchListItemOut } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
 import { clearListParams, numberParam, setListParam } from "@/features/bu/utils/listParams";
+import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 
 export function BuMatchesPage() {
   const { dataset, defaultQMax } = useOutletContext<BuDatasetContext>();
@@ -48,7 +49,14 @@ export function BuMatchesPage() {
   });
 
   const columns: BuColumn<BuMatchListItemOut>[] = [
-    { key: "sequence", header: "Sequence", render: (row) => row.modified_sequence ?? row.sequence },
+    {
+      key: "sequence",
+      header: "Sequence",
+      render: (row) => {
+        const raw = row.modified_sequence ?? row.sequence;
+        return <span title={raw}>{formatModifiedSequenceForDisplay(raw)}</span>;
+      },
+    },
     { key: "run", header: "Run", render: (row) => row.run_name },
     {
       key: "group",

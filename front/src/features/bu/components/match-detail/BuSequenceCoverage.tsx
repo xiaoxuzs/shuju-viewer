@@ -57,7 +57,7 @@ export function BuSequenceCoverage({
   if (len === 0 || sites.size === 0) {
     return (
       <div className="mb-6 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground" data-testid="pfmb-sequence-coverage-empty">
-        PFMB sequence coverage not available
+        Fragment Match sequence coverage not available
       </div>
     );
   }
@@ -65,7 +65,7 @@ export function BuSequenceCoverage({
   return (
     <div className="mb-6 rounded-md border border-border/70 bg-muted/10 p-4" data-testid="pfmb-sequence-coverage">
       <div className="mb-3">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">PFMB sequence coverage</div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">Fragment Match sequence coverage</div>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>N-terminal fragments: b/c (top markers)</span>
           <span>C-terminal fragments: y/z. (bottom markers)</span>

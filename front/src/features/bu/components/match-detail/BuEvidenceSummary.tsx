@@ -38,7 +38,7 @@ function BuEvidenceSummaryWithHook(props: Props) {
     slug: props.slug,
     matchId: props.matchId,
     hasPfmb: props.hasPfmb,
-    selectedRt: props.inspectedRt?.rt ?? null,
+    pfmbSelectedRt: props.inspectedRt?.rt ?? null,
   });
   return <BuEvidenceSummaryInner {...props} pfmbEvidence={pfmbEvidence} />;
 }

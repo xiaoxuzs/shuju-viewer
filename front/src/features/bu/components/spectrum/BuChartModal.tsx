@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 export function BuChartModal({
@@ -27,7 +28,11 @@ export function BuChartModal({
     };
   }, [onClose]);
 
-  return (
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const modal = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
       role="dialog"
@@ -55,8 +60,10 @@ export function BuChartModal({
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden p-4">{children}</div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4">{children}</div>
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

@@ -190,7 +190,7 @@ test("clicking a PFMB slot drives the live MS2 scan and shows the RT everywhere"
   await expect(card.getByTestId("pfmb-slot-summary")).toContainText("101");
 
   const ms2Request = page.waitForRequest(ms2HasRt("93.99"));
-  await card.getByRole("button", { name: "Slot 4 | PFMB slot RT 93.99 min", exact: true }).click();
+  await card.getByRole("button", { name: "Slot 4 | Fragment Match slot RT 93.99 min", exact: true }).click();
   await ms2Request;
 
   // Live MS2 header reflects the requested RT.
@@ -198,32 +198,125 @@ test("clicking a PFMB slot drives the live MS2 scan and shows the RT everywhere"
   // XIC card shows the same RT, marked as coming from the PFMB slot.
   await expect(page.getByTestId("xic-selected-rt")).toContainText("93.9900");
   await expect(page.getByTestId("xic-selected-rt")).toContainText("Current inspected RT");
-  await expect(page.getByTestId("xic-selected-rt")).toContainText("from PFMB slot");
+  await expect(page.getByTestId("xic-selected-rt")).toContainText("from Fragment Match slot");
   // PFMB selection moved to slot 4 / prsm 100.
   await expect(card.getByTestId("pfmb-slot-summary")).toContainText("100");
-  await expect(card.getByRole("button", { name: "Slot 4 | PFMB slot RT 93.99 min", exact: true })).toHaveAttribute(
+  await expect(card.getByRole("button", { name: "Slot 4 | Fragment Match slot RT 93.99 min", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
-  await expect(card.getByTestId("pfmb-slot-summary")).toContainText("PFMB slot RT");
-  await expect(card.getByRole("button", { name: /PFMB slot RT 94.99 min \| PFMB apex/ })).toBeVisible();
+  await expect(card.getByTestId("pfmb-slot-summary")).toContainText("Fragment Match slot RT");
+  await expect(card.getByRole("button", { name: /Fragment Match slot RT 94.99 min \| Fragment Match apex/ })).toBeVisible();
+});
+
+test("selected evidence bar summarizes follow state and current scan", async ({ page }) => {
+  await mockRt(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const bar = page.getByTestId("selected-evidence-bar");
+  await expect(bar).toBeVisible();
+  await expect(bar.getByTestId("selected-evidence-identification-rt")).toContainText("94.9900 min");
+  await expect(bar.getByTestId("selected-evidence-selected-rt")).toContainText("94.9900 min");
+  await expect(bar.getByTestId("selected-evidence-live-scan")).toContainText("#9499");
+  await expect(bar.getByTestId("selected-evidence-pfmb-slot")).toContainText("Fragment Match slot");
+  await expect(bar.getByTestId("selected-evidence-pfmb-slot")).toContainText("5 / apex");
+  await expect(bar.getByTestId("selected-evidence-source")).toContainText("Default match RT");
+  await expect(page.getByTestId("follow-pfmb-slot-toggle")).toBeChecked();
+});
+
+test("locking MS2 scan lets PFMB slot change without changing selected MS2", async ({ page }) => {
+  await mockRt(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const card = page.getByTestId("pfmb-card");
+  const slot4Request = page.waitForRequest(ms2HasRt("93.99"));
+  await card.getByRole("button", { name: "Slot 4 | Fragment Match slot RT 93.99 min", exact: true }).click();
+  await slot4Request;
+
+  const selectedRt = page.getByTestId("selected-evidence-selected-rt");
+  const liveScan = page.getByTestId("selected-evidence-live-scan");
+  await expect(selectedRt).toContainText("93.9900 min");
+  await expect(liveScan).toContainText("#9399");
+  await expect(page.getByTestId("selected-evidence-source")).toContainText("Follow Fragment Match slot");
+  await expect(page.getByTestId("evidence-update-notice")).toContainText(/Fragment Match slot 4|MS2 updated/);
+
+  await page.getByTestId("lock-ms2-scan-button").click();
+  await expect(page.getByTestId("follow-pfmb-slot-toggle")).not.toBeChecked();
+  const beforeRt = await selectedRt.textContent();
+  const beforeScan = await liveScan.textContent();
+
+  await card.getByRole("button", { name: "Slot 6 | Fragment Match slot RT 95.99 min", exact: true }).click();
+
+  await expect(page.getByTestId("selected-evidence-pfmb-slot")).toContainText("6");
+  await expect(page.getByTestId("selected-evidence-source")).toContainText("Locked MS2 scan");
+  await expect(page.getByTestId("evidence-update-notice")).toContainText("MS2 scan remains locked");
+  expect(await selectedRt.textContent()).toBe(beforeRt);
+  expect(await liveScan.textContent()).toBe(beforeScan);
+
+  const slot6Request = page.waitForRequest(ms2HasRt("95.99"));
+  await page.getByTestId("follow-pfmb-slot-toggle").check();
+  await slot6Request;
+  await expect(page.getByTestId("evidence-update-notice")).toContainText(
+    "MS2 now follows Fragment Match slot selection.",
+  );
+  await expect(page.getByTestId("selected-evidence-source")).toContainText("Follow Fragment Match slot");
+});
+
+test("jump controls stay available without duplicate MS2 or PFMB evidence", async ({ page }) => {
+  await mockRt(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  await expect(page.getByTestId("open-compare-mode")).toHaveCount(0);
+  await expect(page.getByTestId("ms2-pfmb-compare-mode")).toHaveCount(0);
+  await expect(page.getByTestId("live-ms2-spectrum-section")).toHaveCount(1);
+  await expect(page.getByTestId("pfmb-heatmap-section")).toHaveCount(1);
+  await expect(page.getByTestId("selected-evidence-bar")).toBeVisible();
+  await expect(page.getByTestId("follow-pfmb-slot-toggle")).toBeVisible();
+  await expect(page.getByTestId("lock-ms2-scan-button")).toBeVisible();
+  await expect(page.getByTestId("jump-to-ms2-spectrum")).toBeVisible();
+  await expect(page.getByTestId("jump-to-pfmb-heatmap")).toBeVisible();
+  await expect(page.getByTestId("jump-to-pfmb-heatmap")).toHaveText("Back to Fragment Match heatmap");
+  await page.getByTestId("jump-to-pfmb-heatmap").click();
+  await expect(page.getByTestId("pfmb-heatmap-section")).toBeInViewport({ ratio: 0.1 });
+  await page.getByTestId("jump-to-ms2-spectrum").click();
+  await expect(page.getByTestId("live-ms2-spectrum-section")).toBeInViewport({ ratio: 0.1 });
+
+  const slot6Request = page.waitForRequest(ms2HasRt("95.99"));
+  await page
+    .getByTestId("pfmb-card")
+    .getByRole("button", { name: "Slot 6 | Fragment Match slot RT 95.99 min", exact: true })
+    .click();
+  await slot6Request;
+  await expect(page.getByTestId("selected-evidence-pfmb-slot")).toContainText("6");
+  await expect(page.getByTestId("evidence-update-notice")).toContainText(/Fragment Match slot 6|MS2 updated/);
+  await expect(page.getByTestId("selected-evidence-pfmb-slot")).toContainText("6");
 });
 
 test("live mzML and pre-computed PFMB evidence stay visibly distinct", async ({ page }) => {
   await mockRt(page);
   await page.goto("/datasets/demo/matches/1");
 
-  await expect(page.getByRole("heading", { name: "MS2 / PFMB Evidence" })).toBeVisible();
+  await expect(
+    page.getByTestId("live-ms2-evidence-section").getByRole("heading", { name: "Live mzML MS2 Evidence" }),
+  ).toBeVisible();
   await expect(page.getByText("Matched fragments are calculated from the selected mzML MS2 scan.", {
     exact: false,
   })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Live mzML matched b/y fragments (1)" })).toBeVisible();
+  await expect(page.getByTestId("live-ms2-evidence-section").getByTestId("pfmb-card")).toHaveCount(0);
 
-  const card = page.getByTestId("pfmb-card");
-  await expect(card.getByRole("heading", { name: "PFMB evidence" })).toBeVisible();
-  await expect(card).toContainText("counts and intensity sums are not directly comparable");
+  const fragmentSection = page.getByTestId("fragment-match-evidence-section");
+  await expect(fragmentSection.getByRole("heading", { name: "Fragment Match Evidence" })).toBeVisible();
+  const card = fragmentSection.getByTestId("pfmb-card");
+  await expect(card.getByRole("heading", { name: "Fragment Match Slot Detail" })).toHaveCount(0);
+  await expect(card.getByTestId("fragment-match-evidence-header")).toContainText("Slot RT: 94.9900 min");
+  await expect(card.getByTestId("fragment-match-evidence-header")).toContainText("Pre-computed slot-level matches");
+  await expect(card.getByText("Pre-computed, deconvoluted peak-to-fragment matches")).not.toBeVisible();
+  await card.getByTestId("fragment-match-source-details").locator("summary").click();
+  await expect(card.getByText("Pre-computed, deconvoluted peak-to-fragment matches")).toBeVisible();
+  await expect(card.getByTestId("pfmb-quality-disclaimer")).toContainText("not a true TIC");
   await expect(card.getByRole("heading", {
-    name: "Pre-computed PFMB matched fragments (1)",
+    name: "Pre-computed Fragment Match matched fragments (1)",
   })).toBeVisible();
 });
 
@@ -236,10 +329,10 @@ test("Evidence Summary shows complete source-specific evidence", async ({ page }
   await expect(summary.getByTestId("evidence-identification")).toContainText("Identification RT apex");
   await expect(summary.getByTestId("evidence-chromatographic")).toContainText("Precursor XIC");
   await expect(summary.getByTestId("evidence-live-ms2")).toContainText("Live matched b/y ions");
-  await expect(summary.getByTestId("evidence-pfmb")).toContainText("PFMB fragment coverage");
-  await expect(summary.getByTestId("evidence-pfmb")).toContainText("PFMB matched peak rows");
+  await expect(summary.getByTestId("evidence-pfmb")).toContainText("Fragment Match coverage");
+  await expect(summary.getByTestId("evidence-pfmb")).toContainText("Fragment Match matched peak rows");
   await expect(summary.getByTestId("evidence-mass-accuracy")).toContainText("Live MS2 mass accuracy");
-  await expect(summary.getByTestId("evidence-mass-accuracy")).toContainText("PFMB mass accuracy");
+  await expect(summary.getByTestId("evidence-mass-accuracy")).toContainText("Fragment Match mass accuracy");
   await expect(summary).not.toContainText(/confidence|High|Medium|Low/);
 });
 
@@ -278,12 +371,10 @@ test("clicking an XIC point selects the nearest PFMB slot", async ({ page }) => 
 
   // 94.0 is within tolerance of slot 4 (93.99) => PFMB jumps to prsm 100, no hint.
   await expect(card.getByTestId("pfmb-selected-rt")).toBeVisible();
-  await expect(card.getByTestId("pfmb-selected-rt")).toContainText(
-    "Current inspected RT: 94.0000 min from XIC selection",
-  );
+  await expect(card.getByTestId("pfmb-selected-rt")).toContainText("Slot RT: 93.9900 min");
   await expect(card.getByTestId("pfmb-rt-out-of-tolerance")).toHaveCount(0);
   await expect(card.getByTestId("pfmb-slot-summary")).toContainText("100");
-  await expect(card.getByRole("button", { name: "Slot 4 | PFMB slot RT 93.99 min", exact: true })).toHaveAttribute(
+  await expect(card.getByRole("button", { name: "Slot 4 | Fragment Match slot RT 93.99 min", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
