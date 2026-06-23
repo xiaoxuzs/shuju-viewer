@@ -264,14 +264,14 @@ _PHASE_RANGES: dict[str, tuple[float, float]] = {
 }
 
 _PHASE_LABELS: dict[str, str] = {
-    "queued":      "排队中…",
-    "fingerprint": "正在计算数据集元数据指纹…",
-    "init":        "正在创建数据集记录…",
-    "proteins":    "正在导入蛋白与形态…",
-    "matches":     "正在导入鉴定结果（PrSM 详情）…",
-    "finalize":    "正在收尾索引…",
-    "success":     "导入完成",
-    "failed":      "导入失败",
+    "queued":      "Queued…",
+    "fingerprint": "Computing dataset metadata fingerprint…",
+    "init":        "Creating dataset record…",
+    "proteins":    "Importing proteins and proteoforms…",
+    "matches":     "Importing identifications (PrSM details)…",
+    "finalize":    "Finalizing indexes…",
+    "success":     "Import complete",
+    "failed":      "Import failed",
 }
 
 _BU_PHASE_RANGES: dict[str, tuple[float, float]] = {
@@ -286,16 +286,16 @@ _BU_PHASE_RANGES: dict[str, tuple[float, float]] = {
 }
 
 _BU_PHASE_LABELS: dict[str, str] = {
-    "queued":      "排队中",
-    "fingerprint": "计算指纹",
-    "init":        "初始化数据集",
-    "runs":        "登记谱图文件",
-    "proteins":    "导入蛋白",
-    "peptides":    "导入肽段",
-    "matches":     "导入鉴定",
-    "finalize":    "收尾",
-    "success":     "导入完成",
-    "failed":      "导入失败",
+    "queued":      "Queued",
+    "fingerprint": "Computing fingerprint",
+    "init":        "Initializing dataset",
+    "runs":        "Registering spectrum files",
+    "proteins":    "Importing proteins",
+    "peptides":    "Importing peptides",
+    "matches":     "Importing identifications",
+    "finalize":    "Finalizing",
+    "success":     "Import complete",
+    "failed":      "Import failed",
 }
 
 
@@ -606,8 +606,8 @@ def _fingerprint_progress_handler(job_id: str) -> Callable[[int], None]:
             progress=min(end - 0.02, pct),
             stage="fingerprint",
             stage_label=_PHASE_LABELS["fingerprint"],
-            stage_detail=f"已扫描 {done_files} 个文件…",
-            message=f"元数据指纹（{done_files} 个文件）…",
+            stage_detail=f"Scanned {done_files} files…",
+            message=f"Metadata fingerprint ({done_files} files)…",
         )
 
     return handle
@@ -646,8 +646,8 @@ def run_path_import_job(
             status="running",
             stage="fingerprint",
             stage_label=_PHASE_LABELS["fingerprint"],
-            stage_detail="解析数据集根路径…",
-            message="解析数据集根路径…",
+            stage_detail="Resolving dataset root path…",
+            message="Resolving dataset root path…",
             progress=_PHASE_RANGES["fingerprint"][0],
         )
         _slice("fingerprint_job_updates_s")
@@ -660,12 +660,12 @@ def run_path_import_job(
         _t = time.perf_counter()
 
         if fp.file_count == 0:
-            raise RuntimeError("所选路径下没有可统计文件，拒绝导入。")
+            raise RuntimeError("No countable files found under the selected path; import rejected.")
         _update_job(
             job_id,
             progress=_PHASE_RANGES["fingerprint"][1],
             stage_detail=(
-                f"指纹完成：{fp.file_count} 个文件，耗时 {fp.elapsed_seconds:.3f}s，digest={fp.fingerprint}"
+                f"Fingerprint complete: {fp.file_count} files, {fp.elapsed_seconds:.3f}s, digest={fp.fingerprint}"
             ),
         )
         _slice("fingerprint_job_updates_s")
@@ -927,7 +927,8 @@ def run_path_import_job(
             except Exception:  # noqa: BLE001
                 log.exception("rollback after duplicate fingerprint failed for slug=%s", slug)
             raise RuntimeError(
-                "该数据集指纹与已有记录冲突（并发导入已回滚）。请稍后重试或删除冲突数据集。"
+                "This dataset's fingerprint conflicts with an existing record "
+                "(concurrent import was rolled back). Please retry later or delete the conflicting dataset."
             ) from exc
         except Exception as exc:  # noqa: BLE001
             log.exception(

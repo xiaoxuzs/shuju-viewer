@@ -144,7 +144,7 @@ def ingest_universal_diann(
             f"--pfmb-sidecar-dir given but results.pfmb + index.json not found under {pfmb_sidecar_dir}"
         )
 
-    _emit(progress_callback, ProgressEvent("init", None, 0, 1, "初始化 Bottom-Up 数据集"))
+    _emit(progress_callback, ProgressEvent("init", None, 0, 1, "Initializing Bottom-Up dataset"))
     engine = create_engine(database_url, future=True)
     with engine.begin() as conn:
         if replace:
@@ -163,7 +163,7 @@ def ingest_universal_diann(
             parquet_total_rows=report_info.total_rows,
             pfmb_sidecar=pfmb_sidecar,
         )
-        _emit(progress_callback, ProgressEvent("init", None, 1, 1, "数据集记录已创建"))
+        _emit(progress_callback, ProgressEvent("init", None, 1, 1, "Dataset record created"))
 
         run_id_by_path = _insert_runs(conn, dataset_id=dataset_id, run_files=run_files)
         run_id_by_diann = {
@@ -171,7 +171,7 @@ def ingest_universal_diann(
             for run_name, run_file in run_file_by_diann.items()
         }
         first_run_id = next(iter(run_id_by_path.values()))
-        _emit(progress_callback, ProgressEvent("runs", None, len(run_files), len(run_files), "谱图文件已登记"))
+        _emit(progress_callback, ProgressEvent("runs", None, len(run_files), len(run_files), "Spectrum files registered"))
 
         description_by_accession = read_protein_descriptions(descriptions_path)
         rows = list(iter_filtered_rows(report_path, q_value_cutoff=q_value_cutoff))
@@ -184,7 +184,7 @@ def ingest_universal_diann(
             description_by_accession=description_by_accession,
             index_reader=index_reader,
         )
-        _emit(progress_callback, ProgressEvent("proteins", None, 0, max(len(proteins), 1), "导入蛋白"))
+        _emit(progress_callback, ProgressEvent("proteins", None, 0, max(len(proteins), 1), "Importing proteins"))
         protein_id_by_accession = _insert_proteins(
             conn,
             dataset_id=dataset_id,
@@ -192,13 +192,13 @@ def ingest_universal_diann(
             descriptions=description_by_accession,
         )
         sequence_backfill_stats = backfill_protein_sequences_from_fasta(conn, dataset_id=dataset_id, source_root=root)
-        _emit(progress_callback, ProgressEvent("proteins", None, len(proteins), max(len(proteins), 1), "蛋白完成"))
+        _emit(progress_callback, ProgressEvent("proteins", None, len(proteins), max(len(proteins), 1), "Proteins complete"))
 
-        _emit(progress_callback, ProgressEvent("peptides", None, 0, max(len(peptides), 1), "导入肽段"))
+        _emit(progress_callback, ProgressEvent("peptides", None, 0, max(len(peptides), 1), "Importing peptides"))
         peptide_id_by_sequence = _insert_peptides(conn, dataset_id=dataset_id, peptides=peptides)
-        _emit(progress_callback, ProgressEvent("peptides", None, len(peptides), max(len(peptides), 1), "肽段完成"))
+        _emit(progress_callback, ProgressEvent("peptides", None, len(peptides), max(len(peptides), 1), "Peptides complete"))
 
-        _emit(progress_callback, ProgressEvent("matches", None, 0, max(imported_total, 1), "导入鉴定"))
+        _emit(progress_callback, ProgressEvent("matches", None, 0, max(imported_total, 1), "Importing identifications"))
         _insert_matches(
             conn,
             dataset_id=dataset_id,
@@ -216,7 +216,7 @@ def ingest_universal_diann(
             peptide_id_by_sequence=peptide_id_by_sequence,
         )
 
-        _emit(progress_callback, ProgressEvent("finalize", None, 0, 1, "收尾"))
+        _emit(progress_callback, ProgressEvent("finalize", None, 0, 1, "Finalizing"))
         conn.execute(
             text(
                 """
@@ -244,7 +244,7 @@ def ingest_universal_diann(
             },
         )
         conn.execute(text("UPDATE runs SET status = 'READY' WHERE dataset_id = :dataset_id"), {"dataset_id": dataset_id})
-        _emit(progress_callback, ProgressEvent("finalize", None, 1, 1, "导入完成"))
+        _emit(progress_callback, ProgressEvent("finalize", None, 1, 1, "Import complete"))
 
         return UniversalDiannImportStats(
             dataset_id=dataset_id,
@@ -598,14 +598,14 @@ def _insert_matches(
             batch.clear()
             _emit(
                 progress_callback,
-                ProgressEvent("matches", None, done, max(imported_total, 1), f"导入鉴定 {done}/{imported_total}"),
+                ProgressEvent("matches", None, done, max(imported_total, 1), f"Importing identifications {done}/{imported_total}"),
             )
     if batch:
         conn.execute(_MATCH_INSERT_SQL, batch)
         done += len(batch)
     _emit(
         progress_callback,
-        ProgressEvent("matches", None, done, max(imported_total, 1), f"导入鉴定 {done}/{imported_total}"),
+        ProgressEvent("matches", None, done, max(imported_total, 1), f"Importing identifications {done}/{imported_total}"),
     )
 
 
