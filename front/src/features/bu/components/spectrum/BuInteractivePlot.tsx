@@ -25,6 +25,8 @@ export interface BuPlotGuide {
   dashed?: boolean;
 }
 
+export type BuPlotReferenceYMax = number | "visible-max";
+
 export interface BuPlotSeries {
   label: string;
   points: BuPlotPoint[];
@@ -65,6 +67,9 @@ export function BuInteractivePlot({
   guides = [],
   legend = [],
   emptyHint = "No points",
+  yDomain,
+  yTicks,
+  referenceYMax,
   zoom: zoomProp,
   onZoomChange,
   onPointClick,
@@ -83,6 +88,9 @@ export function BuInteractivePlot({
   guides?: BuPlotGuide[];
   legend?: { label: string; color: string; kind: "line" | "band" }[];
   emptyHint?: string;
+  yDomain?: [number, number] | ((visibleMax: number) => [number, number]);
+  yTicks?: number[];
+  referenceYMax?: BuPlotReferenceYMax;
   zoom?: Zoom;
   onZoomChange?: (zoom: Zoom) => void;
   onPointClick?: (selection: BuPlotPointClick) => void;
@@ -210,7 +218,19 @@ export function BuInteractivePlot({
       visible = (normalizedSeries[0]?.points ?? []).filter((p) => p.x >= x0 && p.x <= x1);
       const visibleValues = normalizedSeries.flatMap((item) => item.points.filter((p) => p.x >= x0 && p.x <= x1));
       const autoMax = Math.max(...visibleValues.map((p) => p.y), 1);
-      yScale = d3.scaleLinear().domain(nextZoom.y ?? [0, autoMax]).range([innerH, 0]);
+      const resolvedYDomain =
+        typeof yDomain === "function"
+          ? yDomain(autoMax)
+          : yDomain;
+      yScale = d3.scaleLinear().domain(nextZoom.y ?? resolvedYDomain ?? [0, autoMax]).range([innerH, 0]);
+      const resolvedReferenceYMax =
+        referenceYMax === "visible-max"
+          ? autoMax
+          : referenceYMax;
+      const referenceTop =
+        resolvedReferenceYMax === undefined
+          ? 0
+          : Math.max(0, Math.min(innerH, yScale(resolvedReferenceYMax)));
 
       xAxisG
         .call(d3.axisBottom(xScale).ticks(Math.max(5, Math.floor(innerW / 95))) as any)
@@ -218,14 +238,21 @@ export function BuInteractivePlot({
           sel.selectAll("text").attr("fill", BU_CHART.text).attr("font-size", 11);
           sel.selectAll("line, path").attr("stroke", BU_CHART.axis);
         });
+      const [y0, y1] = yScale.domain() as [number, number];
+      const visibleYTicks = yTicks?.filter((tick) => tick >= y0 && tick <= y1);
+      const yAxis = d3.axisLeft(yScale).tickFormat((d) => formatIntensity(Number(d)));
+      if (visibleYTicks) yAxis.tickValues(visibleYTicks);
+      else yAxis.ticks(5);
       yAxisG
-        .call(d3.axisLeft(yScale).ticks(5).tickFormat((d) => formatIntensity(Number(d))) as any)
+        .call(yAxis as any)
         .call((sel) => {
           sel.selectAll("text").attr("fill", BU_CHART.text).attr("font-size", 11);
           sel.selectAll("line, path").attr("stroke", BU_CHART.axis);
         });
+      const yGrid = d3.axisLeft(yScale).tickSize(-innerW).tickFormat(() => "");
+      if (visibleYTicks) yGrid.tickValues(visibleYTicks);
       gridG
-        .call(d3.axisLeft(yScale).tickSize(-innerW).tickFormat(() => "") as any)
+        .call(yGrid as any)
         .call((sel) => {
           sel.selectAll("line").attr("stroke", BU_CHART.grid).attr("stroke-dasharray", "2,3").attr("opacity", 0.7);
           sel.selectAll(".domain").remove();
@@ -257,8 +284,8 @@ export function BuInteractivePlot({
         .join("rect")
         .attr("x", (d) => xScale(d.start))
         .attr("width", (d) => Math.max(0, xScale(d.stop) - xScale(d.start)))
-        .attr("y", 0)
-        .attr("height", innerH)
+        .attr("y", referenceTop)
+        .attr("height", innerH - referenceTop)
         .attr("fill", (d) => d.color)
         .attr("opacity", (d) => d.opacity);
 
@@ -268,7 +295,7 @@ export function BuInteractivePlot({
         .join("line")
         .attr("x1", (d) => xScale(d.x))
         .attr("x2", (d) => xScale(d.x))
-        .attr("y1", 0)
+        .attr("y1", referenceTop)
         .attr("y2", innerH)
         .attr("stroke", (d) => d.color)
         .attr("stroke-width", 1.5)
@@ -394,7 +421,7 @@ export function BuInteractivePlot({
       if (clickTimer) clearTimeout(clickTimer);
       applyZoomRef.current = null;
     };
-  }, [bands, fullX, guides, height, normalizedSeries, width, xLabel, yLabel]);
+  }, [bands, fullX, guides, height, normalizedSeries, referenceYMax, width, xLabel, yDomain, yLabel, yTicks]);
 
   useEffect(() => {
     applyZoomRef.current?.(zoom);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { BuChartModal } from "@/features/bu/components/spectrum/BuChartModal";
 import {
@@ -19,6 +19,17 @@ export interface ProductIonRtMarker {
   dashed?: boolean;
 }
 
+const NORMALIZED_Y_MAX = 115;
+const NORMALIZED_REFERENCE_MAX = 100;
+const NORMALIZED_Y_DOMAIN: [number, number] = [0, NORMALIZED_Y_MAX];
+const NORMALIZED_Y_TICKS = [0, 20, 40, 60, 80, NORMALIZED_REFERENCE_MAX];
+const RAW_Y_HEADROOM_FACTOR = 1.12;
+
+function buildRawYDomain(visibleMax: number): [number, number] {
+  const max = Number.isFinite(visibleMax) && visibleMax > 0 ? visibleMax : 1;
+  return [0, max * RAW_Y_HEADROOM_FACTOR];
+}
+
 export function BuProductIonXicChart({
   traces,
   mode,
@@ -34,6 +45,9 @@ export function BuProductIonXicChart({
 }) {
   const [fullOpen, setFullOpen] = useState(false);
   const [modalZoom, setModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
+  const yDomain = mode === "normalized" ? NORMALIZED_Y_DOMAIN : buildRawYDomain;
+  const yTicks = mode === "normalized" ? NORMALIZED_Y_TICKS : undefined;
+  const referenceYMax = mode === "normalized" ? NORMALIZED_REFERENCE_MAX : "visible-max";
   const series = traces.map((trace) => ({
     label: `${trace.ion}${trace.charge > 1 ? `^${trace.charge}+` : ""} · ${trace.mz.toFixed(4)} m/z · ${trace.charge}+`,
     color: trace.color,
@@ -73,6 +87,10 @@ export function BuProductIonXicChart({
   ];
   const yLabel = mode === "normalized" ? "Normalized intensity (%)" : "Intensity";
 
+  useEffect(() => {
+    setModalZoom(DEFAULT_ZOOM);
+  }, [mode]);
+
   return (
     <>
       <BuInteractivePlot
@@ -85,6 +103,9 @@ export function BuProductIonXicChart({
         bands={bands}
         guides={guides}
         legend={legend}
+        yDomain={yDomain}
+        yTicks={yTicks}
+        referenceYMax={referenceYMax}
         onOpenFull={() => {
           setModalZoom(DEFAULT_ZOOM);
           setFullOpen(true);
@@ -108,6 +129,9 @@ export function BuProductIonXicChart({
             bands={bands}
             guides={guides}
             legend={legend}
+            yDomain={yDomain}
+            yTicks={yTicks}
+            referenceYMax={referenceYMax}
             zoom={modalZoom}
             onZoomChange={setModalZoom}
           />
