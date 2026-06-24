@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { Input } from "@/components/ui/input";
+import { parseApiError } from "@/lib/apiError";
 import { clampImportProgress, formatImportStageLabel } from "@/lib/importStages";
 import { basenamePath, slugifyFolderName } from "@/lib/serverPathFromDirectoryInput";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,10 @@ function statusVariant(status: string | null): "outline" | "secondary" | "succes
   if (normalized === "failed") return "destructive";
   if (normalized === "importing") return "secondary";
   return "outline";
+}
+
+function importFailureMessage(detail: string | null | undefined): string {
+  return detail ? `Failed to import dataset: ${detail}` : "Failed to import dataset.";
 }
 
 function metadataNumber(ds: DatasetOut, key: string): number | null {
@@ -152,14 +157,14 @@ export function DatasetsPage() {
           return;
         }
         if (job.status === "failed") {
-          setImportError("Failed to import dataset.");
+          setImportError(importFailureMessage(job.error ?? job.stage_detail));
           setImportBusy(false);
           return;
         }
         await sleep(900);
       }
-    } catch {
-      setImportError("Failed to import dataset.");
+    } catch (error) {
+      setImportError(importFailureMessage(parseApiError(error).message));
       setImportBusy(false);
     }
   }, [description, dsName, queryClient, resetImportForm, slug, sourcePath]);

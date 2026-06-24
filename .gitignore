@@ -19,6 +19,7 @@ back/**/*.egg-info/
 
 # ---- Node 前端 `front/` ----
 front/node_modules/
+front/.pnpm-store/
 front/dist/
 front/.vite/
 front/.env
