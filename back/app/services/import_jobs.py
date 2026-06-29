@@ -42,6 +42,7 @@ from app.ingest.bu.diann_parquet_reader import find_diann_report, inspect_report
 from app.ingest.bu.run_discovery import discover_bu_runs, match_diann_runs_to_files
 from app.ingest.bu.universal_diann_adapter import ingest_universal_diann
 from app.ingest.universal_prsm_js_adapter import ingest_universal_prsm_js
+from app.pfmb.sidecar_prepare import prepare_bu_pfmb_sidecar
 from app.services.import_planner import ImportLayoutError, plan_zip_ingest
 from app.services.import_planner.types import DatasetShape
 from app.services.incoming_path_relocate import relocate_incoming_root
@@ -63,6 +64,7 @@ _PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
     "plan_zip_ingest_s",
     "mzml_mapping_validate_s",
     "bu_mzml_mapping_validate_s",
+    "bu_pfmb_prepare_s",
     "job_stage_init_update_s",
     "ingest_universal_toppic_s",
     "ingest_universal_prsm_js_s",
@@ -400,6 +402,35 @@ def get_job(job_id: str) -> ImportJob | None:
     return _row_to_job(dict(row)) if row is not None else None
 
 
+def cancel_active_import_jobs_for_slug(slug: str) -> int:
+    """Mark all queued/running import jobs for ``slug`` as failed.
+
+    Returns the number of jobs cancelled. Safe to call when none are active.
+    """
+    cancelled_message = "Import cancelled by user before dataset delete."
+    with _db_engine.begin() as conn:
+        result = conn.execute(
+            text(
+                """
+                UPDATE import_jobs
+                SET status = 'failed',
+                    stage = 'failed',
+                    stage_label = 'Import cancelled',
+                    message = 'Import cancelled.',
+                    error = :error,
+                    updated_at = NOW()
+                WHERE dataset_slug = :slug
+                  AND status IN ('queued', 'running')
+                """
+            ),
+            {"slug": slug, "error": cancelled_message},
+        )
+    count = int(result.rowcount or 0)
+    if count:
+        log.info("cancelled %s active import job(s) for slug=%s", count, slug)
+    return count
+
+
 def has_active_job_for_slug(slug: str) -> bool:
     """``True`` if a non-stale queued/running job currently targets this slug.
 
@@ -688,6 +719,8 @@ def run_path_import_job(
         mzml_mapping: dict[str, Path] | None = None
         spectra_source = plan.spectra_source
         is_bu_diann = plan.shape == DatasetShape.DIANN_DIA
+        pfmb_sidecar_dir: Path | None = None
+        pfmb_prepare_message: str | None = None
         if is_bu_diann and spectra_source in {"mzml_memory", "mixed"}:
             _update_job(
                 job_id,
@@ -772,6 +805,29 @@ def run_path_import_job(
             timing["ingest_universal_toppic_s"] = 0.0
             timing["ingest_universal_prsm_js_s"] = 0.0
             timing["assign_toppic_runs_from_prsm_headers_s"] = 0.0
+            _update_job(
+                job_id,
+                stage_detail="Preparing Fragment Match sidecar...",
+                message="Preparing Fragment Match sidecar...",
+            )
+            pfmb_prepare = prepare_bu_pfmb_sidecar(ingest_root, slug=slug)
+            pfmb_sidecar_dir = pfmb_prepare.sidecar_dir
+            pfmb_prepare_message = pfmb_prepare.message
+            if pfmb_prepare.status.startswith("skipped"):
+                log.warning(
+                    "BU PFMB sidecar skipped slug=%s status=%s message=%s",
+                    slug,
+                    pfmb_prepare.status,
+                    pfmb_prepare.message,
+                )
+            else:
+                log.info(
+                    "BU PFMB sidecar ready slug=%s status=%s dir=%s",
+                    slug,
+                    pfmb_prepare.status,
+                    pfmb_prepare.sidecar_dir,
+                )
+            _slice("bu_pfmb_prepare_s")
             stats = ingest_universal_diann(
                 root=ingest_root,
                 database_url=settings.database_url,
@@ -779,6 +835,7 @@ def run_path_import_job(
                 name=name,
                 replace=True,
                 spectra_source=spectra_source,
+                pfmb_sidecar_dir=pfmb_sidecar_dir,
                 progress_callback=_make_bu_adapter_progress_handler(job_id),
             )
             _slice("ingest_universal_diann_s")
@@ -952,6 +1009,8 @@ def run_path_import_job(
         )
         if derived_data_warning is not None:
             final_detail = f"{final_detail}. Warning: {derived_data_warning}"
+        if pfmb_prepare_message is not None:
+            final_detail = f"{final_detail}. Fragment Match: {pfmb_prepare_message}"
 
         _update_job(
             job_id,

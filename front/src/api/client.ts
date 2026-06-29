@@ -77,9 +77,15 @@ export async function fetchDataset(slug: string): Promise<DatasetOut> {
  * 失败原因常见两类：
  *   - 404：slug 不存在；
  *   - 409：当前 slug 还有正在跑的 import job（拒绝删除以防竞争）。
+ * 传 ``cancelImport: true`` 会先取消进行中的 import job 再删除。
  */
-export async function deleteDataset(slug: string): Promise<DatasetDeletedOut> {
-  const { data } = await api.delete<DatasetDeletedOut>(`/datasets/${slug}`);
+export async function deleteDataset(
+  slug: string,
+  options?: { cancelImport?: boolean },
+): Promise<DatasetDeletedOut> {
+  const { data } = await api.delete<DatasetDeletedOut>(`/datasets/${slug}`, {
+    params: options?.cancelImport ? { cancel_import: true } : undefined,
+  });
   return data;
 }
 

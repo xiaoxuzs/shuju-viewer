@@ -34,6 +34,44 @@ class Settings(BaseSettings):
     import_picker_loopback_only: bool = Field(default=True)
     #: Allow lazy UniProt FASTA fetches for Bottom-Up protein coverage. Keep disabled for offline deployments.
     bu_uniprot_enabled: bool = Field(default=False)
+    #: Project-local root for generated Bottom-Up Fragment Match sidecars.
+    bu_fragment_match_root: Path = Field(default=BACKEND_ROOT.parent / "BU- Fragment Match")
+    #: Packaged PFMB bridge executable (v1 ingest today; optional ``pfmb_v2_bridge_exe`` when available).
+    pfmb_bridge_exe: Path = Field(
+        default=BACKEND_ROOT.parent / "Hela_DIA_v2_PFMB_delivery_20260629" / "pfmb_bridge.exe"
+    )
+    #: Comma-separated roots scanned for pre-built PFMB v2 sidecars (Hela-style full RT expansion).
+    pfmb_v2_reference_roots: str = Field(
+        default=str(BACKEND_ROOT.parent / "Hela_DIA_v2_PFMB_delivery_20260629")
+    )
+    #: Optional bridge with ``full_rt`` ingest; when unset, v2 sidecars come from references.
+    pfmb_v2_bridge_exe: Path | None = Field(default=None)
+    #: Disable only through env override; generation falls back automatically on numba cache failures.
+    pfmb_bridge_disable_jit: bool = Field(default=False)
+
+    @property
+    def pfmb_v2_reference_root_list(self) -> list[Path]:
+        roots: list[Path] = []
+        for part in self.pfmb_v2_reference_roots.split(","):
+            text = part.strip()
+            if not text:
+                continue
+            path = Path(text)
+            if not path.is_absolute():
+                path = (BACKEND_ROOT / path).resolve()
+            roots.append(path)
+        return roots
+
+    def resolved_pfmb_bridge_exe(self) -> Path:
+        if self.pfmb_v2_bridge_exe is not None:
+            path = self.pfmb_v2_bridge_exe
+            if not path.is_absolute():
+                path = (BACKEND_ROOT / path).resolve()
+            return path
+        path = self.pfmb_bridge_exe
+        if not path.is_absolute():
+            path = (BACKEND_ROOT / path).resolve()
+        return path
 
     @property
     def cors_origin_list(self) -> list[str]:

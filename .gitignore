@@ -49,6 +49,9 @@ Histone-Viewer-介绍.pptx
 
 # PFMB 桥接可执行文件（本地构建，体积大勿提交）
 **/pfmb_bridge.exe
+Hela_DIA_v2_PFMB_delivery_20260629/data/results.pfmb
+Hela_DIA_v2_PFMB_delivery_20260629/data/index.json
+Hela_DIA_v2_PFMB_delivery_20260629/data/prsm.v2.mapping.jsonl
 
 # 忽略质谱数据和压缩包
 *.zip

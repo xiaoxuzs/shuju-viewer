@@ -19,8 +19,8 @@ echo [start-front] writing logs to %LOG_FILE%
 
 where pnpm >nul 2>&1
 if "%ERRORLEVEL%"=="0" (
-  pnpm run dev 2>&1 | "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "$input ^| Tee-Object -FilePath '%LOG_FILE%'"
+  pnpm run dev 2>&1 | "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "$input | Tee-Object -FilePath '%LOG_FILE%'"
 ) else (
-  npm run dev 2>&1 | "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "$input ^| Tee-Object -FilePath '%LOG_FILE%'"
+  npm run dev 2>&1 | "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "$input | Tee-Object -FilePath '%LOG_FILE%'"
 )
 endlocal

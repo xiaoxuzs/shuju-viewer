@@ -26,13 +26,18 @@ class PfmbSidecar:
 
 
 def detect_sidecar(sidecar_dir: Path | str) -> dict[str, str] | None:
-    """Return ``{"pfmb_path", "index_path"}`` if both files exist under *sidecar_dir*."""
+    """Return ``{"pfmb_path", "index_path"}`` if both files exist under *sidecar_dir*.
+
+    The Hela delivery may be passed either as its package root or as the nested
+    ``data`` directory, so both layouts are accepted.
+    """
 
     directory = Path(sidecar_dir)
-    pfmb = directory / "results.pfmb"
-    index = directory / "index.json"
-    if pfmb.is_file() and index.is_file():
-        return {"pfmb_path": str(pfmb.resolve()), "index_path": str(index.resolve())}
+    for candidate in (directory, directory / "data"):
+        pfmb = candidate / "results.pfmb"
+        index = candidate / "index.json"
+        if pfmb.is_file() and index.is_file():
+            return {"pfmb_path": str(pfmb.resolve()), "index_path": str(index.resolve())}
     return None
 
 

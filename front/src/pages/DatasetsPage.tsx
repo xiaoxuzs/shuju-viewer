@@ -87,21 +87,34 @@ export function DatasetsPage() {
   const [deleteTarget, setDeleteTarget] = useState<DatasetOut | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteBlockedByImport, setDeleteBlockedByImport] = useState(false);
 
-  const runDelete = useCallback(async () => {
-    if (!deleteTarget) return;
-    setDeleteError(null);
-    setDeleteBusy(true);
-    try {
-      await deleteDataset(deleteTarget.slug);
-      await queryClient.invalidateQueries({ queryKey: ["datasets"] });
-      setDeleteTarget(null);
-    } catch {
-      setDeleteError("Failed to delete dataset.");
-    } finally {
-      setDeleteBusy(false);
-    }
-  }, [deleteTarget, queryClient]);
+  const runDelete = useCallback(
+    async (cancelImport = false) => {
+      if (!deleteTarget) return;
+      setDeleteError(null);
+      setDeleteBusy(true);
+      try {
+        await deleteDataset(deleteTarget.slug, { cancelImport });
+        await queryClient.invalidateQueries({ queryKey: ["datasets"] });
+        setDeleteTarget(null);
+        setDeleteBlockedByImport(false);
+      } catch (error) {
+        const parsed = parseApiError(error);
+        if (!cancelImport && parsed.status === 409) {
+          setDeleteBlockedByImport(true);
+          setDeleteError(
+            "An import job is still queued or running for this dataset. Cancel the import and delete, or wait for it to finish.",
+          );
+        } else {
+          setDeleteError(parsed.message ?? "Failed to delete dataset.");
+        }
+      } finally {
+        setDeleteBusy(false);
+      }
+    },
+    [deleteTarget, queryClient],
+  );
 
   const resetImportForm = useCallback(() => {
     setSourcePath("");
@@ -252,6 +265,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                             ev.preventDefault();
                             ev.stopPropagation();
                             setDeleteError(null);
+                            setDeleteBlockedByImport(false);
                             setDeleteTarget(ds);
                           }}
                         >
@@ -503,8 +517,17 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                   Disk: removes folder <code className="font-mono">{deleteTarget.source_path || "—"}</code> (only if it
                   is under server <code className="font-mono">DATA_ROOT</code>).
                 </li>
-                <li>If there is an active import job for this slug, the backend will refuse the deletion (409).</li>
+                <li>
+                  If an import job is still running, deletion is blocked until you cancel the import or it finishes.
+                </li>
               </ul>
+
+              {deleteBlockedByImport && (
+                <p className="text-sm text-muted-foreground">
+                  Use <strong className="text-foreground">Cancel import and delete</strong> to stop any queued or
+                  running import for this slug, then remove the dataset from the database.
+                </p>
+              )}
 
               {deleteError && (
                 <p className="text-sm text-destructive" role="alert">
@@ -521,19 +544,32 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                   onClick={() => {
                     setDeleteTarget(null);
                     setDeleteError(null);
+                    setDeleteBlockedByImport(false);
                   }}
                 >
                   Cancel
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  disabled={deleteBusy}
-                  onClick={() => void runDelete()}
-                >
-                  {deleteBusy ? "Deleting…" : "Delete permanently"}
-                </Button>
+                {deleteBlockedByImport ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={deleteBusy}
+                    onClick={() => void runDelete(true)}
+                  >
+                    {deleteBusy ? "Deleting…" : "Cancel import and delete"}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={deleteBusy}
+                    onClick={() => void runDelete(false)}
+                  >
+                    {deleteBusy ? "Deleting…" : "Delete permanently"}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

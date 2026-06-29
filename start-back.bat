@@ -3,18 +3,21 @@ setlocal EnableExtensions
 rem This file lives in repo root (e.g. E:\viewer\). Join "back" without a broken "path\" quote.
 pushd "%~dp0." >nul 2>&1
 set "REPO_ROOT=%CD%"
-cd /d "%CD%\back"
+set "BACK_DIR=%REPO_ROOT%\back"
+cd /d "%BACK_DIR%"
 if not exist "app\main.py" (
   echo [start-back] Run this from the viewer repo; expected app\main.py here.
   exit /b 1
 )
 rem Use this folder's .venv only (ignore a globally activated other-project venv)
-set "VIRTUAL_ENV="
-set "VIRTUAL_ENV_PROMPT="
 if not exist ".venv\Scripts\python.exe" (
   echo [start-back] No .venv here. From this folder run:  uv sync
   exit /b 1
 )
+set "VIRTUAL_ENV=%BACK_DIR%\.venv"
+set "VIRTUAL_ENV_PROMPT=proteo-viewer-backend"
+set "PATH=%VIRTUAL_ENV%\Scripts;%PATH%"
+echo [start-back] using Python: %VIRTUAL_ENV%\Scripts\python.exe
 rem Logs go under <repo>\logs\back-YYYYMMDD-HHMMSS.log so each restart keeps a
 rem separate file (no concurrent writes, no rotation needed). Console still
 rem mirrors output for live tailing.
@@ -26,5 +29,5 @@ set "STAMP=%STAMP: =0%"
 set "LOG_FILE=%REPO_ROOT%\logs\back-%STAMP%.log"
 
 echo [start-back] writing logs to %LOG_FILE%
-".venv\Scripts\python.exe" -m uvicorn app.main:app --reload --port 8000 2>&1 | "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "$input | Tee-Object -FilePath '%LOG_FILE%'"
+python -m uvicorn app.main:app --reload --port 8000 2>&1 | "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command "$input | Tee-Object -FilePath '%LOG_FILE%'"
 endlocal

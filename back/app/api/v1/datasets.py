@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -193,17 +193,31 @@ def get_dataset_detail(
 
 
 @router.delete("/datasets/{slug}", response_model=DatasetDeletedOut)
-def delete_dataset(slug: str) -> DatasetDeletedOut:
+def delete_dataset(
+    slug: str,
+    cancel_import: bool = Query(
+        False,
+        description=(
+            "When true, mark any queued/running import jobs for this slug as cancelled "
+            "before deleting the dataset (use when deletion would otherwise return 409)."
+        ),
+    ),
+) -> DatasetDeletedOut:
     """删除一个数据集（仅数据库；磁盘上的导入目录一律保留，由用户自行管理）。
 
     1. 在 ``datasets`` 表上做 ``DELETE`` —— 由 ``ON DELETE CASCADE`` 顺带清掉
        runs / proteins / proteoforms / identification_matches /
        protein_relation_mapping 中所有关联行。
     2. 清理同 slug 的 ``import_jobs`` 记录，避免 UI 残留幽灵任务。
-    3. 若有进行中的导入任务还指向同一个 slug，会拒绝删除（防止竞争）。
+    3. 若有进行中的导入任务还指向同一个 slug，会拒绝删除（409），除非
+       ``cancel_import=true``（先取消任务再删除）。
     """
     try:
-        result = import_jobs.delete_dataset(slug)
+        if cancel_import:
+            import_jobs.cancel_active_import_jobs_for_slug(slug)
+            result = import_jobs.delete_dataset(slug, bypass_active_job_guard=True)
+        else:
+            result = import_jobs.delete_dataset(slug)
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"dataset not found: {slug}") from exc
     except RuntimeError as exc:
