@@ -1,0 +1,415 @@
+import type { Page } from "@/api/types";
+
+export interface BuOverviewCounts {
+  matches: number;
+  peptides: number;
+  proteins: number;
+  protein_groups: number;
+  runs: number;
+  decoy_matches: number;
+}
+
+export interface BuQcBlock {
+  by_run: Record<string, unknown>[];
+  aggregated: Record<string, unknown>;
+}
+
+export interface BuRunSummary {
+  run_id: number;
+  file_name: string;
+  raw_format: string | null;
+  diann_run_name: string | null;
+  match_count: number | null;
+  has_im: boolean | null;
+}
+
+export interface BuOverviewOut {
+  dataset_id: number;
+  slug: string;
+  name: string;
+  analysis_mode: "BOTTOM_UP";
+  source_software: string | null;
+  status: string;
+  source_root: string;
+  q_value_cutoff: number | null;
+  counts: BuOverviewCounts;
+  qc: BuQcBlock;
+  runs: BuRunSummary[];
+  capabilities: Record<string, unknown>;
+  import_stats: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface BuRtMzHeatmapOut {
+  unit_rt: "min";
+  unit_mz: "Th";
+  rt_edges: number[];
+  mz_edges: number[];
+  counts: number[][];
+  max_count: number;
+  total_points: number;
+  run_id: number | null;
+}
+
+export interface BuProteinListItemOut {
+  id: number;
+  accession: string;
+  gene_name: string | null;
+  description: string | null;
+  is_decoy: boolean;
+  protein_group: string | null;
+  peptide_count: number;
+  match_count: number;
+  best_q_value: number | null;
+  pg_max_lfq: number | null;
+  pg_q_value: number | null;
+  pg_quantity: number | null;
+}
+
+export type BuCoverageMode = "full" | "partial" | "list_only" | "decoy";
+
+export interface BuCoverageSegment {
+  peptide_id: number;
+  sequence: string;
+  start: number | null;
+  end: number | null;
+  match_count: number;
+  best_q_value: number | null;
+  is_ambiguous: boolean;
+  occurrence_index: number;
+}
+
+export interface BuProteinPeptideRef {
+  peptide_id: number;
+  sequence: string;
+  modified_sequence: string | null;
+  match_count: number;
+  best_q_value: number | null;
+  best_match_id: number | null;
+}
+
+export interface BuProteinDetailOut extends BuProteinListItemOut {
+  base_sequence: string | null;
+  coverage_mode: BuCoverageMode;
+  coverage_percent: number | null;
+  coverage_segments: BuCoverageSegment[];
+  peptides: BuProteinPeptideRef[];
+  extra_metadata: Record<string, unknown>;
+}
+
+export interface BuPeptideListItemOut {
+  id: number;
+  sequence: string;
+  length: number | null;
+  theoretical_mass: number | null;
+  missed_cleavages: number | null;
+  match_count: number;
+  protein_count: number;
+  best_q_value: number | null;
+  best_precursor_mz: number | null;
+  best_charge: number | null;
+  best_match_id: number | null;
+  protein_groups: string | null;
+  genes: string | null;
+  example_modified: string | null;
+}
+
+export interface BuPeptideProteinRef {
+  protein_id: number;
+  accession: string;
+  gene_name: string | null;
+  protein_group: string | null;
+  is_unique: boolean;
+}
+
+export interface BuPeptideMatchSummaryItem {
+  id: number;
+  run_id: number;
+  run_name: string;
+  precursor_mz: number | null;
+  precursor_charge: number | null;
+  retention_time: number | null;
+  q_value: number | null;
+  intensity: number | null;
+}
+
+export interface BuPeptideMatchesSummary {
+  total: number;
+  items: BuPeptideMatchSummaryItem[];
+}
+
+export interface BuPeptideDetailOut extends BuPeptideListItemOut {
+  proteins: BuPeptideProteinRef[];
+  matches_summary: BuPeptideMatchesSummary;
+  extra_metadata: Record<string, unknown>;
+}
+
+export interface BuMatchListItemOut {
+  id: number;
+  run_id: number;
+  run_name: string;
+  peptide_id: number;
+  sequence: string;
+  modified_sequence: string | null;
+  precursor_mz: number | null;
+  precursor_charge: number | null;
+  retention_time: number | null;
+  experimental_mass: number | null;
+  q_value: number | null;
+  score: number | null;
+  intensity: number | null;
+  is_decoy_match: boolean;
+  scan_number: number;
+  protein_group: string | null;
+  protein_accessions: string[];
+  genes: string | null;
+  search_engine: string | null;
+}
+
+export interface BuRunDetail {
+  run_id: number;
+  file_name: string;
+  raw_format: string | null;
+  file_path: string;
+  diann_run_name: string | null;
+}
+
+export interface BuRtWindow {
+  rt_start: number | null;
+  rt_stop: number | null;
+  rt_apex: number | null;
+  unit: string;
+}
+
+export interface BuProteinMini {
+  protein_id: number;
+  accession: string;
+  gene_name: string | null;
+  description: string | null;
+}
+
+export interface BuMatchDetailOut extends Omit<BuMatchListItemOut, "scan_number"> {
+  scan_number?: number | null;
+  identification_rt_apex?: number | null;
+  scan_available?: boolean;
+  scan_unavailable_reason?: string | null;
+  spectrum_native_id: string | null;
+  ms_level: number;
+  entity_type: "PEPTIDE";
+  run: BuRunDetail;
+  rt_window: BuRtWindow;
+  proteins: BuProteinMini[];
+  diann: Record<string, unknown>;
+  spectrum_links: Record<string, string | null>;
+  extra_metadata: Record<string, unknown>;
+}
+
+export interface BuSpectrumPrecursor {
+  selected_mz: number | null;
+  charge: number | null;
+  isolation_target_mz: number | null;
+  isolation_lower: number | null;
+  isolation_upper: number | null;
+}
+
+export interface BuMatchedIon {
+  ion_type: "b" | "y";
+  position: number;
+  charge: number;
+  theo_mz: number;
+  exp_mz: number;
+  ppm: number;
+  intensity: number;
+}
+
+export interface BuSpectrumMarker {
+  mz: number;
+  label: string;
+  charge: number | null;
+}
+
+export interface BuSpectrumV1 {
+  scan: number;
+  native_id: string | null;
+  ms_level: 1 | 2;
+  rt_seconds: number;
+  rt_minutes: number;
+  mz: number[];
+  intensity: number[];
+  precursor: BuSpectrumPrecursor | null;
+  matched_ions: BuMatchedIon[];
+  markers: BuSpectrumMarker[];
+}
+
+export interface BuXicTrace {
+  label: string;
+  isotope_index: number;
+  target_mz: number;
+  intensity: number[];
+}
+
+export interface BuXicOut {
+  rt: number[];
+  intensity: number[];
+  precursor_mz: number;
+  precursor_charge: number | null;
+  ppm: number;
+  rt_apex: number | null;
+  rt_start: number | null;
+  rt_stop: number | null;
+  traces: BuXicTrace[];
+  unit_rt: "min";
+}
+
+export interface BuProductXicPoint {
+  rt: number;
+  intensity: number;
+  scan: number;
+}
+
+export interface BuProductXicOut {
+  curve_type: "PRODUCT_ION_XIC";
+  x_axis: "rt";
+  y_axis: "intensity";
+  unit_rt: "min";
+  product_mz: number;
+  ppm: number;
+  precursor_mz: number;
+  isolation_filter: boolean;
+  points: BuProductXicPoint[];
+}
+
+export interface BuProductXicBatchIonIn {
+  id: string;
+  ion: string;
+  series: "b" | "y";
+  position: number;
+  charge: number;
+  mz: number;
+}
+
+export interface BuProductXicBatchIn {
+  tolerance_ppm: number;
+  ions: BuProductXicBatchIonIn[];
+  rt_window?: { start: number; end: number };
+}
+
+export interface BuProductXicBatchTraceOut extends BuProductXicBatchIonIn {
+  tolerance_ppm: number;
+  status: "ok" | "no_signal" | "error";
+  points: BuProductXicPoint[];
+  error?: string | null;
+}
+
+export interface BuProductXicBatchOut {
+  traces: BuProductXicBatchTraceOut[];
+}
+
+export interface BuChromatogramOut {
+  type: "tic" | "bpc";
+  unit_rt: "min";
+  rt: number[];
+  intensity: number[];
+  downsampled: boolean;
+  point_count_original: number;
+}
+
+export interface BuDiaWindowItem {
+  mz: number;
+  width: number;
+  label: string;
+}
+
+export interface BuDiaWindowsOut {
+  run_id: number;
+  window_count: number;
+  windows: BuDiaWindowItem[];
+}
+
+export interface BuMobilitySliceOut {
+  mz: number[];
+  one_over_k0: number[];
+  intensity: number[];
+  frame_id: number | null;
+  rt_min: number | null;
+  unit_rt: "min";
+}
+
+export interface BuPfmbMatchedIon {
+  ion_type: "b" | "y" | "c" | "z_dot";
+  fragment_ordinal: number;
+  charge: number;
+  intensity: number;
+  observed_neutral_mass: number;
+  theoretical_neutral_mass: number;
+  mass_error_ppm: number;
+  mass_error_da: number;
+  peak_id: number;
+}
+
+export interface BuMs2SlotItem {
+  prsm_index: number;
+  slot_index: number;
+  slot_rt_seconds: number;
+  rt_minutes: number;
+}
+
+export interface BuMs2SlotListOut {
+  has_pfmb: boolean;
+  source_row: number | null;
+  apex_slot: number | null;
+  slots: BuMs2SlotItem[];
+}
+
+export interface BuMs2AnnotationOut {
+  prsm_index: number;
+  peptide: string;
+  matched_peak_count: number;
+  matched_ions: BuPfmbMatchedIon[];
+}
+
+export interface BuMs2FragmentRow {
+  key: string;
+  ion_type: BuPfmbMatchedIon["ion_type"];
+  fragment_ordinal: number;
+  occurrence: number;
+  total_intensity: number;
+}
+
+export interface BuMs2SlotSummary {
+  prsm_index: number;
+  slot_index: number;
+  rt_minutes: number;
+  matched_peak_count: number;
+  matched_ion_count: number;
+  // Summed once per distinct peak_id; not a true TIC.
+  total_intensity: number;
+}
+
+export interface BuMs2AnnotationMatrixOut {
+  peptide: string;
+  apex_slot: number | null;
+  slots: BuMs2SlotItem[];
+  fragments: BuMs2FragmentRow[];
+  intensity: number[][];
+  detected?: boolean[][];
+  slot_summary: BuMs2SlotSummary[];
+}
+
+export interface BuListParams {
+  page?: number;
+  page_size?: number;
+  search?: string;
+  sort?: string;
+  order?: "asc" | "desc";
+  q_max?: number;
+  run_id?: number;
+  peptide_id?: number;
+  protein_id?: number;
+  charge?: number;
+  decoy?: boolean;
+}
+
+export type BuProteinPage = Page<BuProteinListItemOut>;
+export type BuPeptidePage = Page<BuPeptideListItemOut>;
+export type BuMatchPage = Page<BuMatchListItemOut>;
