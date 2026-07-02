@@ -43,6 +43,12 @@ from app.ingest.bu.run_discovery import discover_bu_runs, match_diann_runs_to_fi
 from app.ingest.bu.universal_diann_adapter import ingest_universal_diann
 from app.ingest.universal_prsm_js_adapter import ingest_universal_prsm_js
 from app.pfmb.sidecar_prepare import prepare_bu_pfmb_sidecar
+from app.raw_conversion import (
+    RawConversionBatch,
+    RawConversionError,
+    RawFileCandidate,
+    convert_raw_files_for_import,
+)
 from app.services.import_planner import ImportLayoutError, plan_zip_ingest
 from app.services.import_planner.types import DatasetShape
 from app.services.incoming_path_relocate import relocate_incoming_root
@@ -62,6 +68,7 @@ _PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
     "fingerprint_compute_s",
     "duplicate_check_by_fingerprint_s",
     "plan_zip_ingest_s",
+    "raw_conversion_s",
     "mzml_mapping_validate_s",
     "bu_mzml_mapping_validate_s",
     "bu_pfmb_prepare_s",
@@ -259,6 +266,7 @@ _CUTOFF_ORDER: dict[str, int] = {kind: idx for idx, kind in enumerate(cutoff_kin
 _PHASE_RANGES: dict[str, tuple[float, float]] = {
     "queued":      (0.0, 1.0),
     "fingerprint": (1.0, 8.0),
+    "raw_conversion": (8.0, 12.0),
     "init":        (8.0, 12.0),
     "proteins":    (12.0, 20.0),
     "matches":     (20.0, 95.0),
@@ -268,6 +276,7 @@ _PHASE_RANGES: dict[str, tuple[float, float]] = {
 _PHASE_LABELS: dict[str, str] = {
     "queued":      "Queued…",
     "fingerprint": "Computing dataset metadata fingerprint…",
+    "raw_conversion": "Converting RAW to mzML",
     "init":        "Creating dataset record…",
     "proteins":    "Importing proteins and proteoforms…",
     "matches":     "Importing identifications (PrSM details)…",
@@ -279,6 +288,7 @@ _PHASE_LABELS: dict[str, str] = {
 _BU_PHASE_RANGES: dict[str, tuple[float, float]] = {
     "queued":      (0.0, 1.0),
     "fingerprint": (1.0, 8.0),
+    "raw_conversion": (8.0, 12.0),
     "init":        (8.0, 12.0),
     "runs":        (12.0, 18.0),
     "proteins":    (18.0, 35.0),
@@ -290,6 +300,7 @@ _BU_PHASE_RANGES: dict[str, tuple[float, float]] = {
 _BU_PHASE_LABELS: dict[str, str] = {
     "queued":      "Queued",
     "fingerprint": "Computing fingerprint",
+    "raw_conversion": "Converting RAW to mzML",
     "init":        "Initializing dataset",
     "runs":        "Registering spectrum files",
     "proteins":    "Importing proteins",
@@ -559,11 +570,11 @@ def _make_bu_adapter_progress_handler(job_id: str) -> Callable[[ProgressEvent], 
     return handle
 
 
-def _validate_bu_mzml_mapping(ingest_root: Path) -> None:
+def _validate_bu_mzml_mapping(ingest_root: Path, *, extra_mzml_roots: tuple[Path, ...] | None = None) -> None:
     """Validate DIA-NN Run values against discovered mzML files before ingest."""
     report = find_diann_report(ingest_root)
     info = inspect_report(report)
-    run_files = discover_bu_runs(ingest_root)
+    run_files = discover_bu_runs(ingest_root, extra_mzml_roots=extra_mzml_roots)
     if not any(run_file.raw_format == "mzml" for run_file in run_files):
         raise RuntimeError("DIA-NN dataset requires mzML mapping validation, but no mzML files were found.")
     matched = match_diann_runs_to_files(info.run_names, run_files)
@@ -644,6 +655,67 @@ def _fingerprint_progress_handler(job_id: str) -> Callable[[int], None]:
     return handle
 
 
+def _raw_conversion_output_dir(ingest_root: Path) -> Path:
+    configured = settings.raw_conversion_output_dir
+    if configured is None:
+        return ingest_root / ".viewer-derived" / "raw-converted-mzml"
+    if configured.is_absolute():
+        return configured
+    return ingest_root / configured
+
+
+def _raw_conversion_progress_handler(job_id: str) -> Callable[[int, int, RawFileCandidate], None]:
+    def handle(current: int, total: int, candidate: RawFileCandidate) -> None:
+        start, end = _PHASE_RANGES["raw_conversion"]
+        if total <= 0:
+            local = 0.0
+        else:
+            local = min(1.0, max(0.0, current / total))
+        pct = max(start, min(end - 0.02, start + (end - start) * local))
+        _update_job(
+            job_id,
+            progress=pct,
+            stage="raw_conversion",
+            stage_label=_PHASE_LABELS["raw_conversion"],
+            stage_detail=f"Converting {current}/{total}: {candidate.raw_path.name}",
+            message="Converting RAW to mzML",
+        )
+
+    return handle
+
+
+def _raw_conversion_error_detail(exc: RawConversionError) -> str:
+    parts = [f"{exc.code}: {exc.message}"]
+    result = exc.result
+    if result is not None:
+        if result.stdout_log_path is not None:
+            parts.append(f"stdout log: {result.stdout_log_path}")
+        if result.stderr_log_path is not None:
+            parts.append(f"stderr log: {result.stderr_log_path}")
+    return ". ".join(parts)
+
+
+def _raw_conversion_metadata_by_mzml_key(batch: RawConversionBatch | None) -> dict[str, dict[str, Any]]:
+    if batch is None:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for result in batch.results:
+        if result.mzml_path is None:
+            continue
+        key = normalize_spectrum_file_name(result.mzml_path.name)
+        out[key] = {
+            "raw_path": str(result.raw_path),
+            "raw_conversion": result.metadata(),
+        }
+    return out
+
+
+def _dataset_raw_conversion_summary(batch: RawConversionBatch | None) -> dict[str, Any] | None:
+    if batch is None:
+        return None
+    return {"raw_conversion_summary": batch.summary()}
+
+
 def run_path_import_job(
     *,
     job_id: str,
@@ -716,6 +788,43 @@ def run_path_import_job(
             raise RuntimeError(str(exc)) from exc
         _slice("plan_zip_ingest_s")
 
+        raw_conversion_batch: RawConversionBatch | None = None
+        raw_conversion_output_dir: Path | None = None
+        raw_conversion_by_mzml_key: dict[str, dict[str, Any]] = {}
+        if plan.contains_raw:
+            raw_conversion_output_dir = _raw_conversion_output_dir(ingest_root)
+            _update_job(
+                job_id,
+                stage="raw_conversion",
+                stage_label=_PHASE_LABELS["raw_conversion"],
+                stage_detail="Preparing converted mzML files",
+                message="Converting RAW to mzML",
+                progress=_PHASE_RANGES["raw_conversion"][0],
+            )
+            try:
+                raw_conversion_batch = convert_raw_files_for_import(
+                    source_root=ingest_root,
+                    output_dir=raw_conversion_output_dir,
+                    converter_exe=settings.thermo_raw_file_parser_exe,
+                    timeout_seconds=settings.raw_conversion_timeout_seconds,
+                    force=settings.raw_conversion_force,
+                    progress_callback=_raw_conversion_progress_handler(job_id),
+                )
+            except RawConversionError as exc:
+                raise RuntimeError(_raw_conversion_error_detail(exc)) from exc
+            raw_conversion_by_mzml_key = _raw_conversion_metadata_by_mzml_key(raw_conversion_batch)
+            _update_job(
+                job_id,
+                progress=_PHASE_RANGES["raw_conversion"][1],
+                stage_detail="Preparing converted mzML files",
+                message="Preparing converted mzML files",
+            )
+            _slice("raw_conversion_s")
+        else:
+            timing["raw_conversion_s"] = 0.0
+            _t = time.perf_counter()
+
+        extra_mzml_roots = (raw_conversion_output_dir,) if raw_conversion_output_dir is not None else None
         mzml_mapping: dict[str, Path] | None = None
         spectra_source = plan.spectra_source
         is_bu_diann = plan.shape == DatasetShape.DIANN_DIA
@@ -728,7 +837,7 @@ def run_path_import_job(
                 message="Validating DIA-NN mzML mapping…",
             )
             try:
-                _validate_bu_mzml_mapping(ingest_root)
+                _validate_bu_mzml_mapping(ingest_root, extra_mzml_roots=extra_mzml_roots)
             except Exception as exc:  # noqa: BLE001
                 raise RuntimeError(f"DIA-NN mzML mapping validation failed: {exc}") from exc
             _slice("bu_mzml_mapping_validate_s")
@@ -741,7 +850,10 @@ def run_path_import_job(
                 message="Validating mzML mapping…",
             )
             try:
-                mapping_result = build_mapping_from_extracted_dataset(ingest_root=ingest_root)
+                mapping_result = build_mapping_from_extracted_dataset(
+                    ingest_root=ingest_root,
+                    extra_mzml_roots=extra_mzml_roots,
+                )
             except MzmlMappingError as exc:
                 raise RuntimeError(f"mzML mapping validation failed: {exc}") from exc
             mzml_mapping = mapping_result.mapping
@@ -835,6 +947,8 @@ def run_path_import_job(
                 name=name,
                 replace=True,
                 spectra_source=spectra_source,
+                extra_mzml_roots=extra_mzml_roots,
+                raw_conversion_by_mzml_key=raw_conversion_by_mzml_key,
                 pfmb_sidecar_dir=pfmb_sidecar_dir,
                 progress_callback=_make_bu_adapter_progress_handler(job_id),
             )
@@ -870,6 +984,22 @@ def run_path_import_job(
                         "dataset_id": stats.dataset_id,
                     },
                 )
+
+                raw_summary_patch = _dataset_raw_conversion_summary(raw_conversion_batch)
+                if raw_summary_patch is not None:
+                    conn.execute(
+                        text(
+                            """
+                            UPDATE datasets
+                            SET extra_metadata = COALESCE(extra_metadata, '{}'::jsonb) || CAST(:extra_patch AS jsonb)
+                            WHERE dataset_id = :dataset_id
+                            """
+                        ),
+                        {
+                            "dataset_id": stats.dataset_id,
+                            "extra_patch": json.dumps(raw_summary_patch, ensure_ascii=False),
+                        },
+                    )
 
                 if incoming_dir_abs != final_dir_abs:
                     conn.execute(
@@ -954,6 +1084,10 @@ def run_path_import_job(
                             )
                         else:
                             mzml_stored = str(mzml_path)
+                        patch = {"raw_format": "mzml", "mzml_file_path": mzml_stored}
+                        raw_patch = raw_conversion_by_mzml_key.get(key)
+                        if raw_patch is not None:
+                            patch.update(raw_patch)
                         conn.execute(
                             text(
                                 """
@@ -964,7 +1098,7 @@ def run_path_import_job(
                             ),
                             {
                                 "run_id": run_id,
-                                "patch": json.dumps({"mzml_file_path": mzml_stored}, ensure_ascii=False),
+                                "patch": json.dumps(patch, ensure_ascii=False),
                             },
                         )
 

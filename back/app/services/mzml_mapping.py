@@ -10,6 +10,7 @@ one-to-one mapping between:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,15 +30,19 @@ class MzmlMappingError(RuntimeError):
     pass
 
 
-def collect_mzml_files(extract_root: Path) -> list[Path]:
-    root = extract_root.resolve()
+def collect_mzml_files(extract_root: Path, *, extra_roots: Sequence[Path] | None = None) -> list[Path]:
+    roots = [extract_root.resolve()]
+    if extra_roots is not None:
+        roots.extend(root.resolve() for root in extra_roots)
     # Case-insensitive on Windows, but keep both patterns for portability.
-    files = (
-        list(root.rglob("*.mzML"))
-        + list(root.rglob("*.mzml"))
-        + list(root.rglob("*.mzML.gz"))
-        + list(root.rglob("*.mzml.gz"))
-    )
+    files: list[Path] = []
+    for root in roots:
+        files.extend(
+            list(root.rglob("*.mzML"))
+            + list(root.rglob("*.mzml"))
+            + list(root.rglob("*.mzML.gz"))
+            + list(root.rglob("*.mzml.gz"))
+        )
     # De-dup by resolved path.
     uniq: dict[str, Path] = {}
     for p in files:
@@ -59,15 +64,17 @@ def normalize_spectrum_file_name(value: str) -> str:
 
     Rules (fixed):
     - take basename (drop any directories)
-    - drop one trailing .mzml (case-insensitive)
+    - drop one trailing .mzml or .raw (case-insensitive)
     - lowercase
     """
     name = (value or "").strip().replace("\\", "/").split("/")[-1]
     low = name.lower()
     if low.endswith(".gz"):
         low = low[: -len(".gz")]
-    if low.endswith(".mzml"):
-        low = low[: -len(".mzml")]
+    for suffix in (".mzml", ".raw"):
+        if low.endswith(suffix):
+            low = low[: -len(suffix)]
+            break
     return low
 
 
@@ -147,9 +154,13 @@ def build_one_to_one_mapping(
     return out
 
 
-def build_mapping_from_extracted_dataset(*, ingest_root: Path) -> MzmlMappingResult:
+def build_mapping_from_extracted_dataset(
+    *,
+    ingest_root: Path,
+    extra_mzml_roots: Sequence[Path] | None = None,
+) -> MzmlMappingResult:
     """Collect mzML files + spectrum_file_name set and build strict mapping."""
-    mzml_files = collect_mzml_files(ingest_root)
+    mzml_files = collect_mzml_files(ingest_root, extra_roots=extra_mzml_roots)
     prsms_candidates = [
         ingest_root / "toppic_prsm_cutoff" / "data_js" / "prsms",
         ingest_root / "data",

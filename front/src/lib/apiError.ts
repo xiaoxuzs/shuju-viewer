@@ -7,6 +7,12 @@ export type ApiErrorKind =
   | "chromatogram_summary_stale"
   | "unsupported_raw_format"
   | "indexed_mzml_unsupported"
+  | "raw_converter_missing"
+  | "raw_conversion_failed"
+  | "raw_conversion_timeout"
+  | "raw_conversion_output_missing"
+  | "raw_conversion_output_invalid"
+  | "raw_conversion_permission_denied"
   | "no_signal"
   | "not_found"
   | "validation"
@@ -29,6 +35,13 @@ const KNOWN_CODES = new Set<ApiErrorKind>([
   "chromatogram_summary_missing",
   "chromatogram_summary_stale",
   "unsupported_raw_format",
+  "indexed_mzml_unsupported",
+  "raw_converter_missing",
+  "raw_conversion_failed",
+  "raw_conversion_timeout",
+  "raw_conversion_output_missing",
+  "raw_conversion_output_invalid",
+  "raw_conversion_permission_denied",
   "no_signal",
 ]);
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -120,6 +121,8 @@ def ingest_universal_diann(
     replace: bool = False,
     q_value_cutoff: float = Q_VALUE_CUTOFF,
     spectra_source: str | None = None,
+    extra_mzml_roots: Sequence[Path] | None = None,
+    raw_conversion_by_mzml_key: dict[str, dict[str, Any]] | None = None,
     pfmb_sidecar_dir: Path | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> UniversalDiannImportStats:
@@ -131,7 +134,11 @@ def ingest_universal_diann(
     descriptions_path = sibling_file(report_path, ".protein_description.tsv")
     refined_report_path = report_path.with_name("target_report.parquet")
 
-    run_files = discover_bu_runs(root)
+    run_files = discover_bu_runs(
+        root,
+        extra_mzml_roots=extra_mzml_roots,
+        raw_conversion_by_mzml_key=raw_conversion_by_mzml_key,
+    )
     if not run_files:
         raise ValueError(f"no mzML or Bruker .d runs found under {root}")
     run_file_by_diann = match_diann_runs_to_files(report_info.run_names, run_files)
@@ -339,6 +346,10 @@ def _insert_runs(conn: Connection, *, dataset_id: int, run_files: list[BuRunFile
         }
         if run_file.raw_format == "mzml":
             metadata["mzml_file_path"] = str(run_file.file_path)
+            if run_file.raw_path is not None:
+                metadata["raw_path"] = str(run_file.raw_path)
+            if run_file.raw_conversion is not None:
+                metadata["raw_conversion"] = run_file.raw_conversion
         if run_file.raw_format == "bruker_d":
             metadata["tdf_path"] = str(run_file.file_path)
         row = conn.execute(

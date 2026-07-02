@@ -1,6 +1,7 @@
 const IMPORT_STAGE_LABELS: Record<string, string> = {
   queued: "Queued",
   fingerprint: "Computing dataset fingerprint",
+  raw_conversion: "Converting RAW to mzML",
   init: "Initializing import",
   proteins: "Importing proteins",
   proteoforms: "Importing proteoforms",

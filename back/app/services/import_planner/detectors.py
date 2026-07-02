@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.raw_conversion.discovery import collect_raw_files
 from app.services.mzml_mapping import collect_mzml_files
 
 _TOPPIC_CUTOFF_DIRS: tuple[str, ...] = ("toppic_prsm_cutoff", "toppic_proteoform_cutoff")
@@ -26,7 +27,7 @@ def detect_spectra_source(ingest_root: Path) -> str:
     at least one ``spectrum*.js`` file.
     """
     root = ingest_root.resolve()
-    if collect_mzml_files(root):
+    if collect_mzml_files(root) or collect_raw_files(root):
         return "mzml_memory"
     topfd_ms1_dir = root / "topfd" / "ms1_json"
     topfd_ms2_dir = root / "topfd" / "ms2_json"
@@ -41,10 +42,12 @@ def detect_bu_spectra_source(ingest_root: Path) -> str:
     """Pick DIA-NN Bottom-Up spectrum source: mzML memory, Bruker TDF, or mixed."""
     root = ingest_root.resolve()
     has_mzml = bool(collect_mzml_files(root))
+    has_raw = bool(collect_raw_files(root))
     has_tdf = any(p.is_dir() for p in root.rglob("*.d"))
-    if has_mzml and has_tdf:
+    has_mzml_like = has_mzml or has_raw
+    if has_mzml_like and has_tdf:
         return "mixed"
-    if has_mzml:
+    if has_mzml_like:
         return "mzml_memory"
     if has_tdf:
         return "tdf_memory"

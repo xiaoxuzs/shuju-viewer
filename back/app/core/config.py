@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     pfmb_v2_bridge_exe: Path | None = Field(default=None)
     #: Disable only through env override; generation falls back automatically on numba cache failures.
     pfmb_bridge_disable_jit: bool = Field(default=False)
+    #: Optional ThermoRawFileParser executable. Only checked when an import contains Thermo .raw files.
+    thermo_raw_file_parser_exe: Path | None = Field(default=None)
+    #: Per-file RAW conversion timeout.
+    raw_conversion_timeout_seconds: int = Field(default=3600)
+    #: Optional output dir for converted mzML. Relative paths are resolved under the selected ingest root.
+    raw_conversion_output_dir: Path | None = Field(default=None)
+    #: Force reconversion even when a same-stem mzML already exists.
+    raw_conversion_force: bool = Field(default=False)
 
     @property
     def pfmb_v2_reference_root_list(self) -> list[Path]:

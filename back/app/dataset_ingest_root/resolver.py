@@ -28,6 +28,9 @@ def has_bu_diann_layout(path: Path) -> bool:
     has_mzml = any(p.is_file() for p in path.rglob("*.mzML")) or any(p.is_file() for p in path.rglob("*.mzml"))
     if has_mzml:
         return True
+    has_raw = any(p.is_file() and p.suffix.lower() == ".raw" for p in path.rglob("*"))
+    if has_raw:
+        return True
     return any(p.is_dir() for p in path.rglob("*.d"))
 
 
@@ -69,7 +72,7 @@ def find_ingest_root(extract_dir: Path) -> Path:
         )
     raise ValueError(
         "Could not find a TopPIC or DIA-NN dataset folder "
-        "(expect TopPIC topfd/toppic_*_cutoff, or DIA-NN all_report.parquet plus mzML/.d)."
+        "(expect TopPIC topfd/toppic_*_cutoff, or DIA-NN all_report.parquet plus mzML/.raw/.d)."
     )
 
 

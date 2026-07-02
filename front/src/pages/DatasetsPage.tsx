@@ -58,7 +58,22 @@ function statusVariant(status: string | null): "outline" | "secondary" | "succes
 }
 
 function importFailureMessage(detail: string | null | undefined): string {
-  return detail ? `Failed to import dataset: ${detail}` : "Failed to import dataset.";
+  if (!detail) return "Failed to import dataset.";
+  if (detail.includes("raw_converter_missing")) {
+    return `RAW converter is not configured. ${detail}`;
+  }
+  if (detail.includes("raw_conversion_timeout")) {
+    return `RAW conversion failed: conversion timed out. ${detail}`;
+  }
+  if (
+    detail.includes("raw_conversion_failed")
+    || detail.includes("raw_conversion_output_missing")
+    || detail.includes("raw_conversion_output_invalid")
+    || detail.includes("raw_conversion_permission_denied")
+  ) {
+    return `RAW conversion failed. ${detail}`;
+  }
+  return `Failed to import dataset: ${detail}`;
 }
 
 function metadataNumber(ds: DatasetOut, key: string): number | null {
@@ -216,9 +231,9 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
             <div className="mt-4 rounded-md border border-border/60 bg-muted/30 p-3 text-left">
               <div className="font-medium text-foreground">No Bottom-Up datasets available</div>
               <div className="mt-1">
-                For DIA-NN data, choose an ingest root containing <strong>all_report.parquet</strong> plus mzML
-                files or a Bruker <strong>.d</strong> directory. The parquet and spectra must live under the same
-                selected root.
+                For DIA-NN data, choose an ingest root containing <strong>all_report.parquet</strong> plus mzML,
+                Thermo RAW, or a Bruker <strong>.d</strong> directory. The report and spectra must live under the
+                same selected root.
               </div>
             </div>
           </CardContent>
@@ -337,11 +352,10 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
             <CardHeader>
               <CardTitle id="import-dialog-title">Import dataset from folder</CardTitle>
               <CardDescription>
-                Pick the <strong>TopPIC output folder</strong> on this machine (you may select a wrapper folder; the
-                backend finds the ingest root with <span className="font-mono">topfd</span> /{" "}
-                <span className="font-mono">toppic_*_cutoff</span>). A metadata fingerprint is used for deduplication;
-                files are not copied. <strong>Browse folder</strong> opens a native dialog on the same computer as the
-                API (typical local setup); you can still paste a path manually.
+                Pick a TopPIC, PrSM, or DIA-NN dataset folder on this machine. Thermo RAW files are converted to mzML
+                during import when a converter is configured. A metadata fingerprint is used for deduplication; files
+                are not copied. <strong>Browse folder</strong> opens a native dialog on the same computer as the API
+                (typical local setup); you can still paste a path manually.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

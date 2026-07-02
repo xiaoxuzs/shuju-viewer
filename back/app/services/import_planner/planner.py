@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.dataset_ingest_root.resolver import has_bu_diann_layout
+from app.raw_conversion.contracts import RAW_VENDOR_THERMO
+from app.raw_conversion.discovery import collect_raw_files
 from app.services.prsm_files import ingest_root_has_supported_prsm_files, prsm_bundle_prsm_directory
 
 from .detectors import detect_bu_spectra_source, detect_spectra_source, is_toppic_html_tree
@@ -41,6 +43,13 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
     - PrSM-only bundle under ``data/`` or ``data/prsms/`` requires ``mzml_memory`` (same as job runner).
     """
     root = ingest_root.resolve()
+    raw_files = tuple(collect_raw_files(root))
+    raw_kwargs = {
+        "contains_raw": bool(raw_files),
+        "raw_files": raw_files,
+        "raw_vendor": RAW_VENDOR_THERMO if raw_files else None,
+        "requires_raw_conversion": bool(raw_files),
+    }
     toppic = is_toppic_html_tree(root)
     bu_diann = has_bu_diann_layout(root)
     prsm_bundle = prsm_bundle_prsm_directory(root) is not None
@@ -50,6 +59,7 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
             shape=DatasetShape.DIANN_DIA,
             spectra_source=detect_bu_spectra_source(root),
             need_toppic_multirun_pass=False,
+            **raw_kwargs,
         )
 
     if toppic:
@@ -60,6 +70,7 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
             shape=DatasetShape.TOPPIC_HTML,
             spectra_source=src,
             need_toppic_multirun_pass=(src == "mzml_memory"),
+            **raw_kwargs,
         )
 
     if prsm_bundle:
@@ -70,6 +81,7 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
             shape=DatasetShape.PRSM_BUNDLE,
             spectra_source=src,
             need_toppic_multirun_pass=False,
+            **raw_kwargs,
         )
 
     raise ImportLayoutError(_UNSUPPORTED)

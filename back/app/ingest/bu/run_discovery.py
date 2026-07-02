@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from app.services.mzml_mapping import collect_mzml_files, normalize_spectrum_file_name
 
@@ -14,6 +16,8 @@ class BuRunFile:
     file_name: str
     raw_format: str
     diann_run_name: str | None = None
+    raw_path: Path | None = None
+    raw_conversion: dict[str, Any] | None = None
 
 
 def is_valid_bruker_tdf_root(path: Path) -> bool:
@@ -40,24 +44,37 @@ def normalize_diann_run_name(value: str) -> str:
     """Normalize DIA-NN ``Run`` values and file names for matching."""
     name = (value or "").strip().replace("\\", "/").split("/")[-1]
     low = name.lower()
-    for suffix in (".mzml.gz", ".mzml", ".d"):
+    for suffix in (".mzml.gz", ".mzml", ".raw", ".d"):
         if low.endswith(suffix):
             low = low[: -len(suffix)]
             break
     return low
 
 
-def discover_bu_runs(root: Path) -> list[BuRunFile]:
+def discover_bu_runs(
+    root: Path,
+    *,
+    extra_mzml_roots: Sequence[Path] | None = None,
+    raw_conversion_by_mzml_key: dict[str, dict[str, Any]] | None = None,
+) -> list[BuRunFile]:
     """Return one run entry per mzML file and valid Bruker ``.d`` directory."""
     base = root.resolve()
     runs: list[BuRunFile] = []
-    for mzml in collect_mzml_files(base):
+    raw_by_key = raw_conversion_by_mzml_key or {}
+    for mzml in collect_mzml_files(base, extra_roots=extra_mzml_roots):
+        key = normalize_spectrum_file_name(mzml.name)
+        raw_meta = raw_by_key.get(key, {})
+        raw_path = raw_meta.get("raw_path")
         runs.append(
             BuRunFile(
                 file_path=mzml.resolve(),
                 file_name=mzml.name,
                 raw_format="mzml",
-                diann_run_name=normalize_spectrum_file_name(mzml.name),
+                diann_run_name=key,
+                raw_path=Path(str(raw_path)) if raw_path else None,
+                raw_conversion=(
+                    raw_meta.get("raw_conversion") if isinstance(raw_meta.get("raw_conversion"), dict) else None
+                ),
             )
         )
 

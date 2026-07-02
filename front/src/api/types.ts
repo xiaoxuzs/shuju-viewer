@@ -76,9 +76,9 @@ export interface ImportJobOut {
   dataset_slug: string | null;
   /** Real progress 0..100. 100 only when status === 'success'. */
   progress: number;
-  /** Phase code: queued | fingerprint | init | proteins | matches | finalize | success | failed. */
+  /** Phase code: queued | fingerprint | raw_conversion | init | proteins | matches | finalize | success | failed. */
   stage: string | null;
-  /** Human-readable label for the current phase (Chinese in current build). */
+  /** Human-readable label for the current phase. */
   stage_label: string | null;
   /** Free-form detail line, e.g. "1234/4567 PrSM details". */
   stage_detail: string | null;
