@@ -6,6 +6,8 @@ import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageLoading } from "@/components/common/page-loading";
 import { DatasetPage } from "@/pages/DatasetPage";
 import { BuDatasetLayout } from "@/features/bu/layout/BuDatasetLayout";
+import { SpectraOnlyPage } from "@/features/spectra-only/pages/SpectraOnlyPage";
+import { isSpectraOnlyDataset } from "@/features/spectra-only/utils";
 
 export function DatasetModeGate() {
   const { slug = "" } = useParams();
@@ -23,6 +25,13 @@ export function DatasetModeGate() {
   const datasetHome = `/datasets/${slug}`;
   if (data.analysis_mode === "BOTTOM_UP") {
     return <BuDatasetLayout dataset={data} />;
+  }
+
+  if (isSpectraOnlyDataset(data)) {
+    if (location.pathname !== datasetHome) {
+      return <Navigate to={datasetHome} replace />;
+    }
+    return <SpectraOnlyPage dataset={data} />;
   }
 
   if (location.pathname !== datasetHome) {

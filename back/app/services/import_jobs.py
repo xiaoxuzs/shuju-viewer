@@ -41,6 +41,7 @@ from app.ingest.universal_toppic_adapter import (
 from app.ingest.bu.diann_parquet_reader import find_diann_report, inspect_report
 from app.ingest.bu.run_discovery import discover_bu_runs, match_diann_runs_to_files
 from app.ingest.bu.universal_diann_adapter import ingest_universal_diann
+from app.ingest.mzml_only_adapter import ingest_mzml_only
 from app.ingest.universal_prsm_js_adapter import ingest_universal_prsm_js
 from app.pfmb.sidecar_prepare import prepare_bu_pfmb_sidecar
 from app.raw_conversion import (
@@ -76,6 +77,7 @@ _PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
     "ingest_universal_toppic_s",
     "ingest_universal_prsm_js_s",
     "ingest_universal_diann_s",
+    "ingest_mzml_only_s",
     "assign_toppic_runs_from_prsm_headers_s",
     "description_update_s",
     "db_finalize_paths_and_metadata_s",
@@ -828,6 +830,11 @@ def run_path_import_job(
         mzml_mapping: dict[str, Path] | None = None
         spectra_source = plan.spectra_source
         is_bu_diann = plan.shape == DatasetShape.DIANN_DIA
+        is_mzml_only = plan.shape == DatasetShape.MZML_ONLY
+        needs_prsm_mzml_mapping = (
+            plan.shape in {DatasetShape.TOPPIC_HTML, DatasetShape.PRSM_BUNDLE}
+            and spectra_source == "mzml_memory"
+        )
         pfmb_sidecar_dir: Path | None = None
         pfmb_prepare_message: str | None = None
         if is_bu_diann and spectra_source in {"mzml_memory", "mixed"}:
@@ -843,7 +850,7 @@ def run_path_import_job(
             _slice("bu_mzml_mapping_validate_s")
             timing["mzml_mapping_validate_s"] = 0.0
             _t = time.perf_counter()
-        elif spectra_source == "mzml_memory":
+        elif needs_prsm_mzml_mapping:
             _update_job(
                 job_id,
                 stage_detail="Validating mzML mapping…",
@@ -877,6 +884,7 @@ def run_path_import_job(
         if plan.shape == DatasetShape.TOPPIC_HTML:
             timing["ingest_universal_diann_s"] = 0.0
             timing["ingest_universal_prsm_js_s"] = 0.0
+            timing["ingest_mzml_only_s"] = 0.0
             stats = ingest_universal_toppic(
                 root=ingest_root,
                 database_url=settings.database_url,
@@ -904,6 +912,7 @@ def run_path_import_job(
         elif plan.shape == DatasetShape.PRSM_BUNDLE:
             timing["ingest_universal_toppic_s"] = 0.0
             timing["ingest_universal_diann_s"] = 0.0
+            timing["ingest_mzml_only_s"] = 0.0
             stats = ingest_universal_prsm_js(
                 root=ingest_root,
                 database_url=settings.database_url,
@@ -916,6 +925,7 @@ def run_path_import_job(
         elif plan.shape == DatasetShape.DIANN_DIA:
             timing["ingest_universal_toppic_s"] = 0.0
             timing["ingest_universal_prsm_js_s"] = 0.0
+            timing["ingest_mzml_only_s"] = 0.0
             timing["assign_toppic_runs_from_prsm_headers_s"] = 0.0
             _update_job(
                 job_id,
@@ -953,6 +963,21 @@ def run_path_import_job(
                 progress_callback=_make_bu_adapter_progress_handler(job_id),
             )
             _slice("ingest_universal_diann_s")
+        elif plan.shape == DatasetShape.MZML_ONLY:
+            timing["ingest_universal_toppic_s"] = 0.0
+            timing["ingest_universal_prsm_js_s"] = 0.0
+            timing["ingest_universal_diann_s"] = 0.0
+            timing["assign_toppic_runs_from_prsm_headers_s"] = 0.0
+            stats = ingest_mzml_only(
+                root=ingest_root,
+                database_url=settings.database_url,
+                slug=slug,
+                name=name,
+                replace=True,
+                extra_mzml_roots=extra_mzml_roots,
+                raw_conversion_by_mzml_key=raw_conversion_by_mzml_key,
+            )
+            _slice("ingest_mzml_only_s")
         else:
             raise RuntimeError("internal error: unsupported import plan shape")
 
@@ -1036,7 +1061,7 @@ def run_path_import_job(
                         },
                     )
 
-                if not is_bu_diann and spectra_source == "mzml_memory":
+                if not is_bu_diann and not is_mzml_only and spectra_source == "mzml_memory":
                     if mzml_mapping is None:
                         raise RuntimeError("internal error: mzml_mapping is missing for mzml_memory dataset")
 

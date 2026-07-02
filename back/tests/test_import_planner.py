@@ -121,3 +121,30 @@ def test_plan_bu_diann_mixed(tmp_path: Path) -> None:
     assert plan.shape == DatasetShape.DIANN_DIA
     assert plan.spectra_source == "mixed"
     assert plan.need_toppic_multirun_pass is False
+
+
+def test_plan_accepts_mzml_only(tmp_path: Path) -> None:
+    mzml = tmp_path / "sample.mzML"
+    mzml.write_text("<mzML />", encoding="utf-8")
+    (tmp_path / "sample.json").write_text("{}", encoding="utf-8")
+
+    plan = plan_zip_ingest(tmp_path)
+
+    assert plan.shape == DatasetShape.MZML_ONLY
+    assert plan.spectra_source == "mzml_memory"
+    assert plan.mzml_files == (mzml.resolve(),)
+    assert plan.contains_raw is False
+
+
+def test_plan_keeps_toppic_priority_over_mzml_only(tmp_path: Path) -> None:
+    proteins = tmp_path / "toppic_prsm_cutoff" / "data_js" / "proteins.js"
+    proteins.parent.mkdir(parents=True, exist_ok=True)
+    proteins.write_text("proteins = [];", encoding="utf-8")
+    prsm = tmp_path / "toppic_prsm_cutoff" / "data_js" / "prsms" / "prsm1.js"
+    prsm.parent.mkdir(parents=True, exist_ok=True)
+    prsm.write_text("prsm_data = {};", encoding="utf-8")
+    (tmp_path / "run.mzML").write_text("<mzML />", encoding="utf-8")
+
+    plan = plan_zip_ingest(tmp_path)
+
+    assert plan.shape == DatasetShape.TOPPIC_HTML

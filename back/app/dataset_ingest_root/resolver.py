@@ -8,6 +8,19 @@ from pathlib import Path
 _BU_REPORT_NAMES = ("all_report.parquet", "target_report.parquet")
 
 
+def _has_mzml_or_raw_file(path: Path) -> bool:
+    for candidate in path.rglob("*"):
+        try:
+            if not candidate.is_file():
+                continue
+        except OSError:
+            continue
+        name = candidate.name.lower()
+        if name.endswith(".mzml") or candidate.suffix.lower() == ".raw":
+            return True
+    return False
+
+
 def has_dataset_layout(path: Path) -> bool:
     """Return True if *path* looks like a TopPIC HTML tree or PrSM bundle root."""
     return path.is_dir() and (
@@ -34,10 +47,16 @@ def has_bu_diann_layout(path: Path) -> bool:
     return any(p.is_dir() for p in path.rglob("*.d"))
 
 
+def has_spectra_only_layout(path: Path) -> bool:
+    """Return True when *path* has standalone mzML or Thermo RAW spectra."""
+    return path.is_dir() and _has_mzml_or_raw_file(path)
+
+
 def _matching_layouts(path: Path) -> list[tuple[str, Path]]:
     matches: list[tuple[str, Path]] = []
     has_td = has_dataset_layout(path)
     has_bu = has_bu_diann_layout(path)
+    has_spectra = has_spectra_only_layout(path)
     if has_td and has_bu:
         raise ValueError(
             "The selected ingest root matches both TopPIC and DIA-NN layouts; keep exactly one dataset shape."
@@ -46,6 +65,8 @@ def _matching_layouts(path: Path) -> list[tuple[str, Path]]:
         matches.append(("TopPIC", path))
     if has_bu:
         matches.append(("DIA-NN", path))
+    if not has_td and not has_bu and has_spectra:
+        matches.append(("mzML/RAW spectra", path))
     return matches
 
 
@@ -68,11 +89,12 @@ def find_ingest_root(extract_dir: Path) -> Path:
         return matches[0][1].resolve()
     if len(matches) > 1:
         raise ValueError(
-            "Multiple dataset folders found under the selected path; keep a single TopPIC or DIA-NN output tree."
+            "Multiple dataset folders found under the selected path; keep a single TopPIC, DIA-NN, mzML-only, "
+            "or Thermo RAW-only dataset folder."
         )
     raise ValueError(
-        "Could not find a TopPIC or DIA-NN dataset folder "
-        "(expect TopPIC topfd/toppic_*_cutoff, or DIA-NN all_report.parquet plus mzML/.raw/.d)."
+        "Could not find a supported dataset folder (expect TopPIC topfd/toppic_*_cutoff, DIA-NN "
+        "all_report.parquet plus mzML/.raw/.d, mzML-only files, or Thermo RAW-only files)."
     )
 
 

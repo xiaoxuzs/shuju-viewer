@@ -46,7 +46,7 @@ from app.schemas.bu import (
     BuXicOut,
     BuXicTrace,
 )
-from app.schemas.dataset import CutoffOut, DatasetDeletedOut, DatasetOut
+from app.schemas.dataset import CutoffOut, DatasetDeletedOut, DatasetOut, DatasetRunSummary
 from app.schemas.protein import (
     PrsmDetailOut,
     PrsmListItemOut,
@@ -59,6 +59,7 @@ from app.schemas.protein import (
 __all__ = [
     "Page",
     "DatasetOut",
+    "DatasetRunSummary",
     "DatasetDeletedOut",
     "CutoffOut",
     "BuRunSummary",

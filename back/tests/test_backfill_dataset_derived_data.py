@@ -54,11 +54,13 @@ def _dataset(
     dataset_id: int = 40,
     slug: str = "bu",
     analysis_mode: str = "BOTTOM_UP",
+    capabilities: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "dataset_id": dataset_id,
         "slug": slug,
         "analysis_mode": analysis_mode,
+        "capabilities": capabilities or {},
     }
 
 
@@ -229,6 +231,42 @@ def test_non_bu_only_generates_scan_index(
 
     assert generated == ["scan"]
     assert result.runs[0].chromatogram_summary_status == "skipped_not_bu"
+
+
+def test_spectra_only_generates_scan_index_and_chromatogram(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_paths(monkeypatch)
+    monkeypatch.setattr(derived_data_backfill, "_scan_index_state", lambda *_args, **_kwargs: "missing")
+    monkeypatch.setattr(derived_data_backfill, "_chromatogram_state", lambda **_kwargs: "missing")
+    generated: list[str] = []
+    monkeypatch.setattr(
+        derived_data_backfill,
+        "_generate_scan_index",
+        lambda *_args, **_kwargs: generated.append("scan"),
+    )
+    monkeypatch.setattr(
+        derived_data_backfill,
+        "_generate_chromatogram",
+        lambda *_args, **_kwargs: generated.append("chrom"),
+    )
+
+    result = derived_data_backfill.backfill_dataset_derived_data(
+        _session(
+            dataset=_dataset(
+                40,
+                "spectra",
+                "TOP_DOWN",
+                {"analysis_shape": "mzml_only", "has_chromatogram": True},
+            ),
+            runs=[_run(1)],
+        ),  # type: ignore[arg-type]
+        dataset_id=40,
+    )
+
+    assert generated == ["scan", "chrom"]
+    assert result.runs[0].scan_index_status == "generated"
+    assert result.runs[0].chromatogram_summary_status == "generated"
 
 
 def test_ready_skips_and_force_regenerates(

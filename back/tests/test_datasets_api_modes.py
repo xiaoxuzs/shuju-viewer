@@ -7,7 +7,7 @@ import pytest
 
 from app.api.v1 import datasets as datasets_api
 from app.api.v1.datasets import _cutoffs_payload, _dataset_out
-from app.schemas import BuRunSummary, CutoffOut
+from app.schemas import BuRunSummary, CutoffOut, DatasetRunSummary
 from app.services import spectrum_memory_wiring
 
 
@@ -106,6 +106,43 @@ def test_td_dataset_json_contract_keeps_cutoffs_and_omits_bu_runs() -> None:
     assert data["cutoffs"][0]["kind"] == "prsm"
     assert data["cutoffs"][1]["kind"] == "proteoform"
     assert data["bu_runs"] is None
+    assert data["dataset_mode"] == "top_down"
+
+
+def test_spectra_only_dataset_json_contract_includes_generic_runs() -> None:
+    out = _dataset_out(
+        row=_row(
+            slug="spectra",
+            dataset_name="Spectra",
+            analysis_mode="TOP_DOWN",
+            source_software="mzML_only",
+            capabilities={
+                "analysis_shape": "mzml_only",
+                "spectra_source": "mzml_memory",
+                "has_chromatogram": True,
+            },
+        ),
+        cutoffs=[],
+        bu_runs=None,
+        runs=[
+            DatasetRunSummary(
+                run_id=10,
+                run_name="run.mzML",
+                raw_format="mzml",
+                mzml_file_path="D:\\data\\run.mzML",
+                raw_path=None,
+                metadata={"raw_format": "mzml", "mzml_file_path": "D:\\data\\run.mzML"},
+            )
+        ],
+    )
+
+    data = out.model_dump(mode="json")
+    assert data["analysis_mode"] == "TOP_DOWN"
+    assert data["dataset_mode"] == "spectra_only"
+    assert data["cutoffs"] == []
+    assert data["bu_runs"] is None
+    assert data["runs"][0]["run_name"] == "run.mzML"
+    assert data["runs"][0]["raw_format"] == "mzml"
 
 
 def test_td_cutoffs_payload_omits_empty_cutoff() -> None:

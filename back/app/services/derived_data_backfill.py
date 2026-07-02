@@ -73,7 +73,7 @@ def resolve_dataset(
         row = session.execute(
             text(
                 """
-                SELECT dataset_id, slug, analysis_mode
+                SELECT dataset_id, slug, analysis_mode, capabilities
                 FROM datasets
                 WHERE dataset_id = :dataset_id
                 """
@@ -87,7 +87,7 @@ def resolve_dataset(
         row = session.execute(
             text(
                 """
-                SELECT dataset_id, slug, analysis_mode
+                SELECT dataset_id, slug, analysis_mode, capabilities
                 FROM datasets
                 WHERE slug = :slug
                 """
@@ -141,6 +141,15 @@ def _is_mzml(run: dict[str, Any]) -> bool:
     metadata = _run_metadata(run)
     raw_format = str(metadata.get("raw_format") or "").lower()
     return raw_format == "mzml" or bool(metadata.get("mzml_file_path"))
+
+
+def _chromatogram_enabled(dataset: dict[str, Any]) -> bool:
+    if str(dataset.get("analysis_mode") or "").upper() == "BOTTOM_UP":
+        return True
+    capabilities = dataset.get("capabilities")
+    caps = dict(capabilities) if isinstance(capabilities, dict) else {}
+    shape = str(caps.get("analysis_shape") or "").lower()
+    return caps.get("has_chromatogram") is True or shape in {"mzml_only", "raw_mzml_only"}
 
 
 def _scan_index_state(
@@ -225,7 +234,7 @@ def backfill_dataset_derived_data(
     dataset = resolve_dataset(session, dataset_id=dataset_id, slug=slug)
     resolved_dataset_id = int(dataset["dataset_id"])
     dataset_slug = str(dataset["slug"])
-    is_bottom_up = str(dataset.get("analysis_mode") or "").upper() == "BOTTOM_UP"
+    can_generate_chromatogram = _chromatogram_enabled(dataset)
     runs = select_runs(session, dataset_id=resolved_dataset_id, run_id=run_id)
     results: list[DerivedDataRunResult] = []
 
@@ -274,7 +283,7 @@ def backfill_dataset_derived_data(
                         scan_status = "ready"
 
                 if selected_chromatogram:
-                    if not is_bottom_up:
+                    if not can_generate_chromatogram:
                         chromatogram_status = "skipped_not_bu"
                     else:
                         summary_source_path = resolve_run_source_path(

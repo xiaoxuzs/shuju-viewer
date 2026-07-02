@@ -29,13 +29,15 @@ import { parseApiError } from "@/lib/apiError";
 import { clampImportProgress, formatImportStageLabel } from "@/lib/importStages";
 import { basenamePath, slugifyFolderName } from "@/lib/serverPathFromDirectoryInput";
 import { cn } from "@/lib/utils";
+import { isSpectraOnlyDataset } from "@/features/spectra-only/utils";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function analysisModeLabel(mode: DatasetOut["analysis_mode"]): string {
-  return mode === "BOTTOM_UP" ? "Bottom-Up" : "Top-Down";
+function analysisModeLabel(ds: DatasetOut): string {
+  if (isSpectraOnlyDataset(ds)) return "Spectra";
+  return ds.analysis_mode === "BOTTOM_UP" ? "Bottom-Up" : "Top-Down";
 }
 
 function statusLabel(status: string | null): string {
@@ -217,8 +219,8 @@ export function DatasetsPage() {
       {data && data.length === 0 && (
         <Card>
           <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            No datasets ingested yet. Use <strong>Import from folder</strong> for a TopPIC output directory on this
-            machine, or run the universal-schema ingest CLI:
+            No datasets ingested yet. Use <strong>Import from folder</strong> for a TopPIC, PrSM, DIA-NN, mzML, or
+            Thermo RAW directory on this machine, or run the universal-schema ingest CLI:
             <pre className="mt-3 overflow-x-auto rounded-md bg-muted/50 p-3 text-left text-xs">
 {`cd back
 uv run python -m app.ingest.universal_toppic_adapter ingest \\
@@ -231,9 +233,8 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
             <div className="mt-4 rounded-md border border-border/60 bg-muted/30 p-3 text-left">
               <div className="font-medium text-foreground">No Bottom-Up datasets available</div>
               <div className="mt-1">
-                For DIA-NN data, choose an ingest root containing <strong>all_report.parquet</strong> plus mzML,
-                Thermo RAW, or a Bruker <strong>.d</strong> directory. The report and spectra must live under the
-                same selected root.
+                For spectra-only data, choose a folder containing mzML files or Thermo RAW files. ThermoRawFileParser
+                JSON files are treated as sidecar metadata, not identification results.
               </div>
             </div>
           </CardContent>
@@ -247,8 +248,11 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
             const totalProteoforms = ds.cutoffs.reduce((a, c) => a + c.proteoform_count, 0);
             const totalPrsms = ds.cutoffs.reduce((a, c) => a + c.prsm_count, 0);
             const isBottomUp = ds.analysis_mode === "BOTTOM_UP";
+            const isSpectraOnly = isSpectraOnlyDataset(ds);
             const qValueCutoff = metadataNumber(ds, "q_value_cutoff");
             const buRunCount = ds.bu_runs?.length ?? 0;
+            const spectraRunCount = ds.runs?.length ?? 0;
+            const spectraFormat = ds.runs?.[0]?.raw_format ?? "mzML";
             return (
               <Link
                 key={ds.id}
@@ -263,7 +267,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                           {isBottomUp ? <Activity className="h-5 w-5" /> : <Database className="h-5 w-5" />}
                         </div>
                         <Badge variant="outline">{ds.slug}</Badge>
-                        <Badge variant={isBottomUp ? "default" : "secondary"}>{analysisModeLabel(ds.analysis_mode)}</Badge>
+                        <Badge variant={isBottomUp ? "default" : "secondary"}>{analysisModeLabel(ds)}</Badge>
                         <Badge variant={statusVariant(ds.status)}>{statusLabel(ds.status)}</Badge>
                       </div>
                       <div className="flex items-center gap-1 text-muted-foreground">
@@ -293,7 +297,27 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                     {ds.description && <CardDescription>{ds.description}</CardDescription>}
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {isBottomUp ? (
+                    {isSpectraOnly ? (
+                      <>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <Metric icon={<FileText className="h-3.5 w-3.5" />} label="Runs" value={spectraRunCount} />
+                          <Metric icon={<Layers className="h-3.5 w-3.5" />} label="Format" value={spectraFormat} />
+                          <Metric
+                            icon={<ListTree className="h-3.5 w-3.5" />}
+                            label="Source"
+                            value={ds.source_software ?? "mzML"}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          <Badge variant="outline">No identifications</Badge>
+                          {ds.runs?.map((run) => (
+                            <Badge key={run.run_id} variant="secondary" className="font-mono text-[10px]">
+                              {run.raw_format ?? "mzml"}
+                            </Badge>
+                          ))}
+                        </div>
+                      </>
+                    ) : isBottomUp ? (
                       <>
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           <Metric icon={<FileText className="h-3.5 w-3.5" />} label="Runs" value={buRunCount} />
@@ -352,10 +376,10 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
             <CardHeader>
               <CardTitle id="import-dialog-title">Import dataset from folder</CardTitle>
               <CardDescription>
-                Pick a TopPIC, PrSM, or DIA-NN dataset folder on this machine. Thermo RAW files are converted to mzML
-                during import when a converter is configured. A metadata fingerprint is used for deduplication; files
-                are not copied. <strong>Browse folder</strong> opens a native dialog on the same computer as the API
-                (typical local setup); you can still paste a path manually.
+                Pick a TopPIC, PrSM, DIA-NN, mzML, or Thermo RAW folder on this machine. Thermo RAW files are converted
+                to mzML during import when a converter is configured. A metadata fingerprint is used for deduplication;
+                files are not copied. <strong>Browse folder</strong> opens a native dialog on the same computer as the
+                API (typical local setup); you can still paste a path manually.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

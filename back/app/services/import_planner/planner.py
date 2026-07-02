@@ -7,9 +7,10 @@ from pathlib import Path
 from app.dataset_ingest_root.resolver import has_bu_diann_layout
 from app.raw_conversion.contracts import RAW_VENDOR_THERMO
 from app.raw_conversion.discovery import collect_raw_files
+from app.services.mzml_mapping import collect_mzml_files
 from app.services.prsm_files import ingest_root_has_supported_prsm_files, prsm_bundle_prsm_directory
 
-from .detectors import detect_bu_spectra_source, detect_spectra_source, is_toppic_html_tree
+from .detectors import detect_bu_spectra_source, detect_spectra_source, has_mzml_or_raw_spectra, is_toppic_html_tree
 from .types import DatasetShape, ImportLayoutError, ImportPlan
 
 _NO_PRSM_TOPPIC = (
@@ -23,13 +24,18 @@ _UNSUPPORTED = (
     "Expected either (1) TopPIC HTML output: toppic_prsm_cutoff or toppic_proteoform_cutoff "
     "with data_js/proteins.js plus PrSM detail files (prsm*.js|json|txt in data/, data/prsms/, or under "
     "that cutoff's data_js/prsms/), or (2) a PrSM-only bundle: supported prsm* under data/ or data/prsms/ "
-    "with mzML present in the tree so spectra use mzml_memory mode."
+    "with mzML present in the tree so spectra use mzml_memory mode, or (3) standalone mzML-only/Thermo RAW-only "
+    "spectra files for basic spectra viewing."
 )
 
 _PRSM_BUNDLE_NO_MZML = (
     "PrSM files under data/ or data/prsms/ require mzML-backed spectra here. Add *.mzML under the dataset tree, "
     "or remove topfd/ms1_json and topfd/ms2_json spectrum*.js files that force TopFD JS mode."
 )
+
+
+def _collect_uncompressed_mzml_files(root: Path) -> tuple[Path, ...]:
+    return tuple(path for path in collect_mzml_files(root) if path.name.lower().endswith(".mzml"))
 
 
 def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
@@ -44,9 +50,11 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
     """
     root = ingest_root.resolve()
     raw_files = tuple(collect_raw_files(root))
+    mzml_files = _collect_uncompressed_mzml_files(root)
     raw_kwargs = {
         "contains_raw": bool(raw_files),
         "raw_files": raw_files,
+        "mzml_files": mzml_files,
         "raw_vendor": RAW_VENDOR_THERMO if raw_files else None,
         "requires_raw_conversion": bool(raw_files),
     }
@@ -80,6 +88,14 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
         return ImportPlan(
             shape=DatasetShape.PRSM_BUNDLE,
             spectra_source=src,
+            need_toppic_multirun_pass=False,
+            **raw_kwargs,
+        )
+
+    if has_mzml_or_raw_spectra(root):
+        return ImportPlan(
+            shape=DatasetShape.MZML_ONLY,
+            spectra_source="mzml_memory",
             need_toppic_multirun_pass=False,
             **raw_kwargs,
         )

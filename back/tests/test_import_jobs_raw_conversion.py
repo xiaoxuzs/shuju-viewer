@@ -92,6 +92,7 @@ def _install_common_patches(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     updates: list[dict[str, Any]] = []
     derived_calls: list[int] = []
     inserted_run_metadata: list[dict[str, Any]] = []
+    mzml_only_calls: list[dict[str, Any]] = []
     engine = _NoopEngine()
 
     monkeypatch.setattr(import_jobs, "_db_engine", engine)
@@ -146,10 +147,19 @@ def _install_common_patches(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         return SimpleNamespace(dataset_id=7, run_id=1, proteins=1, proteoforms=0, matches=1)
 
     monkeypatch.setattr(import_jobs, "ingest_universal_diann", fake_ingest_universal_diann)
+    monkeypatch.setattr(
+        import_jobs,
+        "ingest_mzml_only",
+        lambda **kwargs: (
+            mzml_only_calls.append(kwargs)
+            or SimpleNamespace(dataset_id=7, run_id=1, runs=1, proteins=0, proteoforms=0, matches=0)
+        ),
+    )
     return {
         "updates": updates,
         "derived_calls": derived_calls,
         "inserted_run_metadata": inserted_run_metadata,
+        "mzml_only_calls": mzml_only_calls,
         "engine": engine,
     }
 
@@ -262,3 +272,81 @@ def test_raw_import_job_skips_existing_same_stem_mzml(
     assert metadata["raw_conversion"]["converter_name"] == "ThermoRawFileParser"
     assert state["derived_calls"] == [7]
     assert not any(update.get("status") == "failed" for update in state["updates"])
+
+
+def test_mzml_only_import_job_does_not_call_converter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "spectra"
+    root.mkdir()
+    (root / "sample.mzML").write_text("<mzML><indexListOffset>1</indexListOffset></mzML>", encoding="utf-8")
+    (root / "sample.json").write_text("{}", encoding="utf-8")
+    state = _install_common_patches(monkeypatch)
+    monkeypatch.setattr(import_jobs.settings, "thermo_raw_file_parser_exe", None)
+
+    def fail_converter(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("RAW converter must not be called for mzML-only imports")
+
+    monkeypatch.setattr(import_jobs, "convert_raw_files_for_import", fail_converter)
+
+    _run_job(root)
+
+    stages = [update.get("stage") for update in state["updates"]]
+    assert "raw_conversion" not in stages
+    assert state["derived_calls"] == [7]
+    assert state["mzml_only_calls"]
+    assert state["mzml_only_calls"][0]["extra_mzml_roots"] is None
+
+
+def test_raw_only_import_job_converts_before_mzml_only_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw-only"
+    root.mkdir()
+    (root / "sample.raw").write_bytes(b"raw")
+    converter = tmp_path / "ThermoRawFileParser.exe"
+    converter.write_bytes(b"fake")
+    state = _install_common_patches(monkeypatch)
+    monkeypatch.setattr(import_jobs.settings, "thermo_raw_file_parser_exe", converter)
+
+    def fake_run(command: list[str], **_kwargs: Any) -> SimpleNamespace:
+        raw_path = Path(command[2])
+        output_dir = Path(command[4])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / f"{raw_path.stem}.mzML").write_text(
+            "<mzML><indexListOffset>1</indexListOffset></mzML>",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stdout="converted", stderr="")
+
+    monkeypatch.setattr("app.raw_conversion.thermo_raw_file_parser.subprocess.run", fake_run)
+
+    _run_job(root)
+
+    stages = [update.get("stage") for update in state["updates"]]
+    assert "raw_conversion" in stages
+    assert state["derived_calls"] == [7]
+    call = state["mzml_only_calls"][0]
+    assert call["extra_mzml_roots"] is not None
+    assert call["raw_conversion_by_mzml_key"]["sample"]["raw_conversion"]["status"] == "converted"
+
+
+def test_raw_only_import_job_fails_when_converter_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw-only"
+    root.mkdir()
+    (root / "sample.raw").write_bytes(b"raw")
+    state = _install_common_patches(monkeypatch)
+    monkeypatch.setattr(import_jobs.settings, "thermo_raw_file_parser_exe", None)
+
+    _run_job(root)
+
+    failed = [update for update in state["updates"] if update.get("status") == "failed"]
+    assert failed
+    assert "raw_converter_missing" in str(failed[-1].get("error"))
+    assert state["derived_calls"] == []
+    assert state["mzml_only_calls"] == []

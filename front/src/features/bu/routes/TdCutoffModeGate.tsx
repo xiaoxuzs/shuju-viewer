@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchDataset } from "@/api/client";
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageLoading } from "@/components/common/page-loading";
+import { isSpectraOnlyDataset } from "@/features/spectra-only/utils";
 
 export function TdCutoffModeGate() {
   const { slug = "" } = useParams();
@@ -16,7 +17,7 @@ export function TdCutoffModeGate() {
   if (isLoading) return <PageLoading />;
   if (error && !data) return <DataLoadError />;
   if (!data) return <DataEmptyState />;
-  if (data?.analysis_mode === "BOTTOM_UP") {
+  if (data?.analysis_mode === "BOTTOM_UP" || isSpectraOnlyDataset(data)) {
     return <Navigate to={`/datasets/${slug}`} replace />;
   }
   return <Outlet />;

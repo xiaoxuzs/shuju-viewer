@@ -13,6 +13,7 @@ class DatasetShape(str, Enum):
     TOPPIC_HTML = "toppic_html"
     PRSM_BUNDLE = "prsm_bundle"
     DIANN_DIA = "diann_dia"
+    MZML_ONLY = "mzml_only"
     UNSUPPORTED = "unsupported"
 
 
@@ -25,7 +26,7 @@ class ImportPlan:
     """Immutable plan produced before DB ingest or heavy I/O."""
 
     shape: DatasetShape
-    """``TOPPIC_HTML``, ``PRSM_BUNDLE``, or ``DIANN_DIA``."""
+    """``TOPPIC_HTML``, ``PRSM_BUNDLE``, ``DIANN_DIA``, or ``MZML_ONLY``."""
 
     spectra_source: str
     """Spectra source string used in ``datasets.capabilities``."""
@@ -38,6 +39,9 @@ class ImportPlan:
 
     raw_files: tuple[Path, ...] = ()
     """Detected Thermo ``.raw`` files. Planner only records them; conversion happens later."""
+
+    mzml_files: tuple[Path, ...] = ()
+    """Detected mzML files. Planner only records paths; parsing happens after ingest."""
 
     raw_vendor: str | None = None
     """P0 vendor label for detected RAW files."""

@@ -23,6 +23,19 @@ class CutoffOut(BaseModel):
     prsm_count: int = 0
 
 
+class DatasetRunSummary(BaseModel):
+    """Generic run summary for dataset modes that are not Bottom-Up specific."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    run_id: int
+    run_name: str
+    raw_format: str | None = None
+    mzml_file_path: str | None = None
+    raw_path: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class DatasetOut(BaseModel):
     """数据集卡片/详情：基本字段 + 嵌套 cutoff 列表。
 
@@ -39,9 +52,11 @@ class DatasetOut(BaseModel):
     source_path: str
     capabilities: dict[str, object] = Field(default_factory=dict)
     analysis_mode: Literal["TOP_DOWN", "BOTTOM_UP"] | None = None
+    dataset_mode: str = "top_down"
     status: str | None = None
     source_software: str | None = None
     extra_metadata: dict[str, Any] | None = None
+    runs: list[DatasetRunSummary] | None = None
     bu_runs: list[BuRunSummary] | None = None
     created_at: datetime
     updated_at: datetime | None = None

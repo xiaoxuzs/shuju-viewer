@@ -56,3 +56,17 @@ def test_plan_keeps_existing_bruker_d_behavior(tmp_path: Path) -> None:
     assert plan.shape == DatasetShape.DIANN_DIA
     assert plan.spectra_source == "mixed"
     assert plan.contains_raw is False
+
+
+def test_plan_accepts_raw_only_as_mzml_only(tmp_path: Path) -> None:
+    raw = tmp_path / "sample.RAW"
+    raw.write_bytes(b"raw")
+
+    plan = plan_zip_ingest(tmp_path)
+
+    assert plan.shape == DatasetShape.MZML_ONLY
+    assert plan.spectra_source == "mzml_memory"
+    assert plan.contains_raw is True
+    assert plan.raw_files == (raw.resolve(),)
+    assert plan.raw_vendor == "thermo"
+    assert plan.requires_raw_conversion is True

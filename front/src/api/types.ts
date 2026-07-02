@@ -40,14 +40,25 @@ export interface DatasetOut {
   source_path: string;
   capabilities: Record<string, unknown>;
   analysis_mode: "TOP_DOWN" | "BOTTOM_UP" | string | null;
+  dataset_mode: "top_down" | "bottom_up" | "spectra_only" | string;
   status: string | null;
   source_software: string | null;
   extra_metadata: Record<string, unknown> | null;
+  runs: DatasetRunSummary[] | null;
   bu_runs: BuRunSummary[] | null;
   created_at: string;
   /** universal schema 没有 updated_at 列；后端总是返回 null。 */
   updated_at: string | null;
   cutoffs: CutoffOut[];
+}
+
+export interface DatasetRunSummary {
+  run_id: number;
+  run_name: string;
+  raw_format: string | null;
+  mzml_file_path: string | null;
+  raw_path: string | null;
+  metadata: Record<string, unknown>;
 }
 
 export interface BuRunSummary {

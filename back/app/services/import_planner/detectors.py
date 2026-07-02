@@ -52,3 +52,10 @@ def detect_bu_spectra_source(ingest_root: Path) -> str:
     if has_tdf:
         return "tdf_memory"
     return "mzml_memory"
+
+
+def has_mzml_or_raw_spectra(ingest_root: Path) -> bool:
+    """True when a root contains standalone mzML files or Thermo RAW files."""
+    root = ingest_root.resolve()
+    has_mzml = any(path.name.lower().endswith(".mzml") for path in collect_mzml_files(root))
+    return has_mzml or bool(collect_raw_files(root))

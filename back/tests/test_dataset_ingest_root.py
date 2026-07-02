@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.dataset_ingest_root import find_ingest_root, resolve_ingest_root
-from app.dataset_ingest_root.resolver import has_bu_diann_layout
+from app.dataset_ingest_root.resolver import has_bu_diann_layout, has_spectra_only_layout
 
 
 def _mkdir(p: Path) -> None:
@@ -56,3 +56,39 @@ def test_resolve_rejects_td_and_bu_same_root(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="both TopPIC and DIA-NN"):
         find_ingest_root(root)
+
+
+def test_resolve_mzml_only_root(tmp_path: Path) -> None:
+    root = tmp_path / "spectra"
+    root.mkdir()
+    (root / "run.mzML").write_text("<mzML />", encoding="utf-8")
+
+    assert has_spectra_only_layout(root) is True
+    assert resolve_ingest_root(root) == root.resolve()
+
+
+def test_resolve_raw_only_root(tmp_path: Path) -> None:
+    root = tmp_path / "raw"
+    root.mkdir()
+    (root / "sample.RAW").write_bytes(b"raw")
+
+    assert has_spectra_only_layout(root) is True
+    assert resolve_ingest_root(root) == root.resolve()
+
+
+def test_resolve_mzml_with_thermo_parser_json_root(tmp_path: Path) -> None:
+    root = tmp_path / "thermo-out"
+    root.mkdir()
+    (root / "sample.mzML").write_text("<mzML />", encoding="utf-8")
+    (root / "sample.json").write_text("{}", encoding="utf-8")
+
+    assert resolve_ingest_root(root) == root.resolve()
+
+
+def test_bruker_d_only_is_not_spectra_only(tmp_path: Path) -> None:
+    root = tmp_path / "bruker"
+    (root / "sample.d").mkdir(parents=True)
+
+    assert has_spectra_only_layout(root) is False
+    with pytest.raises(ValueError, match="supported dataset folder"):
+        resolve_ingest_root(root)
