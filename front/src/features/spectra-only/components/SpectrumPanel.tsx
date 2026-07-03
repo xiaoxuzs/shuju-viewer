@@ -53,7 +53,7 @@ export function SpectrumPanel({
     if (spectrum.data.native_id) {
       subtitleParts.push(`Native ID ${spectrum.data.native_id}`);
     }
-    const subtitle = subtitleParts.join(" · ");
+    const subtitle = subtitleParts.join(" | ");
 
     return (
       <>

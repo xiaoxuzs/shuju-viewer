@@ -149,6 +149,44 @@ def test_generic_scan_index_endpoint_returns_scan_metadata(monkeypatch: pytest.M
     assert out["total"] == 1
     assert out["items"][0]["scan_number"] == 2
     assert out["items"][0]["precursor_mz"] == 500.2
+    assert out["scans"] == out["items"]
+    assert out["summary"]["total_scans"] == 2
+    assert out["summary"]["ms1_count"] == 1
+    assert out["summary"]["ms2_count"] == 1
+
+
+def test_generic_scan_index_endpoint_returns_run_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    index = MzmlScanIndex(
+        scan_number=np.asarray([10, 11, 12, 13], dtype=np.int64),
+        native_id=np.asarray(["scan=10", "scan=11", "scan=12", "scan=13"], dtype=np.str_),
+        ms_level=np.asarray([1, 2, 3, 2], dtype=np.uint8),
+        retention_time=np.asarray([0.5, 0.75, 1.25, 1.5], dtype=np.float64),
+        tic=np.asarray([100.0, 200.0, 80.0, 50.0], dtype=np.float64),
+        bpc=np.asarray([20.0, 90.0, 60.0, 30.0], dtype=np.float64),
+        precursor_mz=np.asarray([np.nan, 500.2, np.nan, np.nan], dtype=np.float64),
+        isolation_target_mz=np.asarray([np.nan, 500.0, np.nan, np.nan], dtype=np.float64),
+        isolation_lower_mz=np.asarray([np.nan, 499.0, np.nan, np.nan], dtype=np.float64),
+        isolation_upper_mz=np.asarray([np.nan, 501.0, np.nan, np.nan], dtype=np.float64),
+    )
+    monkeypatch.setattr(mzml_spectra_api, "load_scan_index", lambda *_args, **_kwargs: index)
+
+    out = mzml_spectra_api.mzml_run_scan_index(39, 10, session=object())  # type: ignore[arg-type]
+
+    assert out["summary"] == {
+        "total_scans": 4,
+        "ms1_count": 1,
+        "ms2_count": 2,
+        "other_count": 1,
+        "ms_level_counts": {"1": 1, "2": 2, "3": 1},
+        "rt_min": 0.5,
+        "rt_max": 1.5,
+        "scan_min": 10,
+        "scan_max": 13,
+        "max_tic": 200.0,
+        "max_bpc": 90.0,
+        "ms2_fraction": 0.5,
+        "precursor_linked_ms2_count": 1,
+    }
 
 
 def test_generic_scan_index_endpoint_reports_backfill_command(monkeypatch: pytest.MonkeyPatch) -> None:

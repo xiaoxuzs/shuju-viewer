@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChromatogramPanel } from "@/features/spectra-only/components/ChromatogramPanel";
 import { RunSelector } from "@/features/spectra-only/components/RunSelector";
+import { RunSummaryCards } from "@/features/spectra-only/components/RunSummaryCards";
 import { ScanListPanel } from "@/features/spectra-only/components/ScanListPanel";
 import { SpectrumPanel } from "@/features/spectra-only/components/SpectrumPanel";
 
@@ -49,6 +50,8 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
       <div className="mb-5 flex flex-wrap justify-end gap-2">
         <RunSelector runs={runs} selectedRunId={selectedRun?.run_id ?? null} onChange={selectRun} />
       </div>
+
+      <RunSummaryCards datasetId={dataset.id} runId={selectedRun?.run_id ?? null} />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(320px,420px)_1fr]">
         <div className="space-y-5">

@@ -79,6 +79,48 @@ def _finite_or_none(value: Any) -> float | None:
     return parsed if math.isfinite(parsed) else None
 
 
+def _finite_min(values: Any) -> float | None:
+    finite = [_finite_or_none(value) for value in values]
+    finite = [value for value in finite if value is not None]
+    return min(finite) if finite else None
+
+
+def _finite_max(values: Any) -> float | None:
+    finite = [_finite_or_none(value) for value in values]
+    finite = [value for value in finite if value is not None]
+    return max(finite) if finite else None
+
+
+def _scan_index_summary(index: Any) -> dict[str, Any]:
+    ms_level_counts: dict[str, int] = {}
+    for level in index.ms_level:
+        key = str(int(level))
+        ms_level_counts[key] = ms_level_counts.get(key, 0) + 1
+
+    total_scans = int(index.scan_count)
+    ms1_count = ms_level_counts.get("1", 0)
+    ms2_count = ms_level_counts.get("2", 0)
+    return {
+        "total_scans": total_scans,
+        "ms1_count": ms1_count,
+        "ms2_count": ms2_count,
+        "other_count": total_scans - ms1_count - ms2_count,
+        "ms_level_counts": ms_level_counts,
+        "rt_min": _finite_min(index.retention_time),
+        "rt_max": _finite_max(index.retention_time),
+        "scan_min": int(index.scan_number.min()) if total_scans else None,
+        "scan_max": int(index.scan_number.max()) if total_scans else None,
+        "max_tic": _finite_max(index.tic),
+        "max_bpc": _finite_max(index.bpc),
+        "ms2_fraction": (ms2_count / total_scans) if total_scans else None,
+        "precursor_linked_ms2_count": sum(
+            1
+            for level, precursor_mz in zip(index.ms_level, index.precursor_mz)
+            if int(level) == 2 and _finite_or_none(precursor_mz) is not None
+        ),
+    }
+
+
 @router.get(
     "/datasets/{dataset_id}/runs/{run_id}/spectra/{scan_number}",
     response_model=dict[str, Any],
@@ -215,4 +257,6 @@ def mzml_run_scan_index(
         "offset": offset,
         "limit": limit,
         "items": items,
+        "scans": items,
+        "summary": _scan_index_summary(index),
     }
