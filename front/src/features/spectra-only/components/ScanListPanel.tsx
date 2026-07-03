@@ -1,39 +1,55 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 
 import { PlotStatus } from "@/components/common/plot-status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { fetchSpectraScanIndex } from "@/features/spectra-only/api/spectraClient";
 import type { SpectraScanIndexItem } from "@/features/spectra-only/types";
-import { chartQueryRetry, parseApiError } from "@/lib/apiError";
+import {
+  filterScansByMsLevel,
+  type ScanLevelFilter,
+} from "@/features/spectra-only/utils/scanRelations";
+import { parseApiError } from "@/lib/apiError";
 import { cn, formatNumber } from "@/lib/utils";
 
+const SCAN_LIST_DISPLAY_LIMIT = 250;
+
 export function ScanListPanel({
-  datasetId,
   runId,
+  scans,
+  total,
+  isLoading,
+  error,
   selectedScan,
   onSelectScan,
 }: {
-  datasetId: number;
   runId: number | null;
+  scans: SpectraScanIndexItem[];
+  total: number;
+  isLoading: boolean;
+  error: unknown;
   selectedScan: number | null;
   onSelectScan: (scan: number) => void;
 }) {
   const [scanInput, setScanInput] = useState("");
-  const scanIndex = useQuery({
-    queryKey: ["spectra-only", datasetId, runId, "scan-index"],
-    queryFn: () => fetchSpectraScanIndex(datasetId, runId!, { limit: 250 }),
-    enabled: runId != null,
-    retry: chartQueryRetry,
-  });
-  const scans = scanIndex.data?.items ?? [];
+  const [levelFilter, setLevelFilter] = useState<ScanLevelFilter>("all");
+  const filteredScans = useMemo(
+    () => filterScansByMsLevel(scans, levelFilter),
+    [levelFilter, scans],
+  );
+  const visibleScans = useMemo(
+    () => filteredScans.slice(0, SCAN_LIST_DISPLAY_LIMIT),
+    [filteredScans],
+  );
   const selected = useMemo(
     () => scans.find((scan) => scan.scan_number === selectedScan) ?? null,
     [scans, selectedScan],
   );
+
+  useEffect(() => {
+    setLevelFilter("all");
+  }, [runId]);
 
   useEffect(() => {
     if (selectedScan == null && scans.length > 0) {
@@ -71,16 +87,22 @@ export function ScanListPanel({
 
         {runId == null ? (
           <PlotStatus kind="empty" title="No run selected." className="min-h-48" />
-        ) : scanIndex.isLoading ? (
+        ) : isLoading ? (
           <PlotStatus kind="loading" title="Loading scan index..." className="min-h-48" />
-        ) : scanIndex.error ? (
-          <ScanIndexErrorState error={scanIndex.error} />
+        ) : error ? (
+          <ScanIndexErrorState error={error} />
         ) : scans.length === 0 ? (
           <PlotStatus kind="empty" title="No scans found in the scan index." className="min-h-48" />
+        ) : filteredScans.length === 0 ? (
+          <>
+            <ScanLevelFilterControl value={levelFilter} onChange={setLevelFilter} />
+            <PlotStatus kind="empty" title="No scans match the current filter." className="min-h-48" />
+          </>
         ) : (
           <>
+            <ScanLevelFilterControl value={levelFilter} onChange={setLevelFilter} />
             <div className="text-xs text-muted-foreground">
-              Showing {scans.length.toLocaleString()} of {scanIndex.data?.total.toLocaleString() ?? "0"} scans.
+              {formatShowingCount(visibleScans.length, filteredScans.length, total, levelFilter)}
             </div>
             {selected && (
               <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
@@ -98,7 +120,7 @@ export function ScanListPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {scans.map((scan) => (
+                  {visibleScans.map((scan) => (
                     <ScanRow
                       key={scan.scan_number}
                       scan={scan}
@@ -114,6 +136,55 @@ export function ScanListPanel({
       </CardContent>
     </Card>
   );
+}
+
+function ScanLevelFilterControl({
+  value,
+  onChange,
+}: {
+  value: ScanLevelFilter;
+  onChange: (value: ScanLevelFilter) => void;
+}) {
+  const options: Array<{ value: ScanLevelFilter; label: string }> = [
+    { value: "all", label: "All" },
+    { value: "ms1", label: "MS1" },
+    { value: "ms2", label: "MS2" },
+  ];
+  return (
+    <div className="flex rounded-md border border-border bg-muted/30 p-1 text-xs">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={cn(
+            "rounded px-3 py-1 transition-colors",
+            value === option.value
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          aria-pressed={value === option.value}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function formatShowingCount(
+  visibleCount: number,
+  filteredCount: number,
+  total: number,
+  filter: ScanLevelFilter,
+): string {
+  if (filter === "ms1") {
+    return `Showing ${visibleCount.toLocaleString()} of ${filteredCount.toLocaleString()} MS1 scans.`;
+  }
+  if (filter === "ms2") {
+    return `Showing ${visibleCount.toLocaleString()} of ${filteredCount.toLocaleString()} MS2 scans.`;
+  }
+  return `Showing ${visibleCount.toLocaleString()} of ${total.toLocaleString()} scans.`;
 }
 
 function ScanRow({

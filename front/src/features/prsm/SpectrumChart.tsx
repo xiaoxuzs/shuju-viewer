@@ -66,6 +66,8 @@ interface Props {
    * the chart draws an annotation (e.g. `Z· 19`) right above that circle.
    */
   envelopeOverlay?: EnvelopeOverlayPoint[];
+  /** Optional single peak highlight drawn with the same non-invasive overlay. */
+  highlightPeak?: EnvelopeOverlayPoint | null;
   /**
    * If provided, the Y axis renders ticks as percentages of this value
    * instead of the default SI-formatted intensity. Mirrors the original
@@ -194,6 +196,7 @@ export function SpectrumChart({
   onOpenFull,
   annotationGuidesMz,
   envelopeOverlay,
+  highlightPeak,
   yPercentBase,
   yIntensityScale = "absolute",
   className,
@@ -553,12 +556,15 @@ export function SpectrumChart({
       // Envelope-isotope hollow circles + ion annotation. Filtered to the
       // current X domain so panning/zoom keeps them responsive without a
       // full rebuild.
-      const overlay = (envelopeOverlay ?? []).filter(
+      const overlay = [
+        ...(envelopeOverlay ?? []),
+        ...(highlightPeak ? [highlightPeak] : []),
+      ].filter(
         (d) => d.mz >= xd0 && d.mz <= xd1,
       );
       envOverlayG
         .selectAll<SVGCircleElement, EnvelopeOverlayPoint>("circle")
-        .data(overlay, (d) => `${d.mz}|${d.intensity}`)
+        .data(overlay, (d) => `${d.mz}|${d.intensity}|${d.label ?? ""}`)
         .join(
           (enter) =>
             enter
@@ -900,6 +906,7 @@ export function SpectrumChart({
     fullX,
     annotationGuidesMz,
     envelopeOverlay,
+    highlightPeak,
     yPercentBase,
     yIntensityScale,
     globalBPI,
