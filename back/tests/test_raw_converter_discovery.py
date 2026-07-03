@@ -12,6 +12,13 @@ from app.raw_conversion.service import convert_raw_files_for_import
 from app.raw_conversion.tool_discovery import resolve_thermo_raw_file_parser_exe
 
 
+def _command_value(command: list[str], prefix: str) -> str:
+    for item in command:
+        if item.startswith(prefix):
+            return item[len(prefix) :]
+    raise AssertionError(f"missing command argument: {prefix}")
+
+
 def test_configured_thermo_raw_file_parser_path_has_priority(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -107,7 +114,7 @@ def test_raw_conversion_uses_discovered_local_tool_without_running_real_exe(
 
     def fake_run(command: list[str], **kwargs: Any) -> SimpleNamespace:
         calls.append({"command": command, **kwargs})
-        output_dir = Path(command[4])
+        output_dir = Path(_command_value(command, "-o="))
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "sample.mzML").write_text(
             "<mzML><indexListOffset>1</indexListOffset></mzML>",
@@ -126,4 +133,6 @@ def test_raw_conversion_uses_discovered_local_tool_without_running_real_exe(
 
     assert batch.summary() == {"total_raw_files": 1, "converted": 1, "skipped": 0, "failed": 0}
     assert calls[0]["command"][0] == str(local_tool.resolve())
+    assert "-f=2" in calls[0]["command"]
+    assert "-g" not in calls[0]["command"]
     assert calls[0]["shell"] is False

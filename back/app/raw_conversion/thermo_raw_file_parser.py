@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,6 +11,16 @@ from app.raw_conversion.contracts import RawConversionRequest, RawConversionResu
 from app.raw_conversion.errors import RawConversionError
 
 CONVERTER_NAME = "ThermoRawFileParser"
+INDEX_LIST_OFFSET_MARKER = b"indexListOffset"
+INDEXED_MZML_OPEN_MARKER = b"<indexedmzML"
+INDEXED_MZML_CLOSE_MARKER = b"</indexedmzML>"
+EMBEDDED_INDEX_MARKERS = (
+    INDEX_LIST_OFFSET_MARKER,
+    INDEXED_MZML_OPEN_MARKER,
+    INDEXED_MZML_CLOSE_MARKER,
+)
+DEFAULT_TAIL_BYTES = 4 * 1024 * 1024
+DEFAULT_SCAN_CHUNK_BYTES = 1024 * 1024
 
 
 def _now_iso() -> str:
@@ -28,57 +39,148 @@ def build_thermo_raw_file_parser_command(request: RawConversionRequest) -> list[
         raise RawConversionError("raw_converter_missing", "THERMO_RAW_FILE_PARSER_EXE is not configured.")
     return [
         str(request.converter_exe),
-        "-i",
-        str(request.raw_path),
-        "-o",
-        str(request.output_dir),
-        "-f",
-        "1",
+        f"-i={request.raw_path}",
+        f"-o={request.output_dir}",
+        "-f=2",
+        "-m=0",
     ]
 
 
-def locate_output_mzml(raw_path: Path, output_dir: Path) -> Path | None:
-    for suffix in (".mzML", ".mzml"):
+def locate_output_mzml(raw_path: Path, output_dir: Path, *, modified_since_ns: int | None = None) -> Path | None:
+    for suffix in (".mzML", ".mzml", ".mzML.gz", ".mzml.gz"):
         candidate = output_dir / f"{raw_path.stem}{suffix}"
         try:
-            if candidate.is_file():
+            stat = candidate.stat()
+            if candidate.is_file() and (modified_since_ns is None or stat.st_mtime_ns >= modified_since_ns):
                 return candidate.resolve()
         except OSError:
             continue
     return None
 
 
-def mzml_has_index_list_offset(path: Path, *, tail_bytes: int = 1024 * 1024) -> bool:
+def _find_embedded_index_markers(data: bytes) -> set[bytes]:
+    return {marker for marker in EMBEDDED_INDEX_MARKERS if marker in data}
+
+
+def has_embedded_index_list_offset(
+    path: Path,
+    *,
+    tail_bytes: int = DEFAULT_TAIL_BYTES,
+    chunk_bytes: int = DEFAULT_SCAN_CHUNK_BYTES,
+) -> bool:
     try:
         size = path.stat().st_size
         with path.open("rb") as fh:
-            if size > tail_bytes:
-                fh.seek(max(0, size - tail_bytes))
-            return b"indexListOffset" in fh.read()
+            tail_start = max(0, size - tail_bytes)
+            fh.seek(tail_start)
+            if INDEX_LIST_OFFSET_MARKER in _find_embedded_index_markers(fh.read()):
+                return True
+            if tail_start == 0:
+                return False
+
+            fh.seek(0)
+            overlap = b""
+            overlap_size = max(len(marker) for marker in EMBEDDED_INDEX_MARKERS) - 1
+            while True:
+                chunk = fh.read(chunk_bytes)
+                if not chunk:
+                    return False
+                data = overlap + chunk
+                if INDEX_LIST_OFFSET_MARKER in _find_embedded_index_markers(data):
+                    return True
+                overlap = data[-overlap_size:]
     except OSError:
         return False
 
 
-def validate_converted_mzml(path: Path | None) -> Path:
+def _format_validation_context(
+    *,
+    command: list[str] | None,
+    output_path: Path | None,
+    file_size: int | None,
+    stdout_log_path: Path | None,
+    stderr_log_path: Path | None,
+) -> str:
+    parts = [
+        f"command: {command or []}",
+        f"output path: {output_path}",
+        f"file size: {file_size if file_size is not None else 'unknown'}",
+        f"searched marker: {INDEX_LIST_OFFSET_MARKER.decode('ascii')}",
+    ]
+    if stdout_log_path is not None:
+        parts.append(f"stdout log: {stdout_log_path}")
+    if stderr_log_path is not None:
+        parts.append(f"stderr log: {stderr_log_path}")
+    return "; ".join(parts)
+
+
+def validate_converted_mzml(
+    path: Path | None,
+    *,
+    command: list[str] | None = None,
+    stdout_log_path: Path | None = None,
+    stderr_log_path: Path | None = None,
+    expected_output_path: Path | None = None,
+    invalid_subject: str = "Converted mzML",
+) -> Path:
     if path is None:
-        raise RawConversionError("raw_conversion_output_missing", "Thermo RAW conversion did not produce an mzML file.")
+        context = _format_validation_context(
+            command=command,
+            output_path=expected_output_path,
+            file_size=None,
+            stdout_log_path=stdout_log_path,
+            stderr_log_path=stderr_log_path,
+        )
+        raise RawConversionError(
+            "raw_conversion_output_missing",
+            f"Thermo RAW conversion did not produce a fresh mzML file. {context}",
+        )
     try:
         stat = path.stat()
     except OSError as exc:
         raise RawConversionError("raw_conversion_output_missing", f"Converted mzML does not exist: {path}") from exc
+    context = _format_validation_context(
+        command=command,
+        output_path=path,
+        file_size=stat.st_size,
+        stdout_log_path=stdout_log_path,
+        stderr_log_path=stderr_log_path,
+    )
     if stat.st_size <= 0:
-        raise RawConversionError("raw_conversion_output_invalid", f"Converted mzML is empty: {path}")
-    if path.suffix.lower() != ".mzml":
+        raise RawConversionError("raw_conversion_output_invalid", f"{invalid_subject} is empty: {path}. {context}")
+    lower_name = path.name.lower()
+    if lower_name.endswith((".mzml.gz", ".mzml.gzip")):
         raise RawConversionError(
             "raw_conversion_output_invalid",
-            f"Converted output is not an uncompressed mzML: {path}",
+            f"{invalid_subject} is gzip-compressed mzML, which P0 does not support: {path}. {context}",
         )
-    if not mzml_has_index_list_offset(path):
+    if not lower_name.endswith(".mzml"):
         raise RawConversionError(
             "raw_conversion_output_invalid",
-            f"Converted mzML is missing embedded indexListOffset: {path}",
+            f"{invalid_subject} is not an uncompressed mzML: {path}. {context}",
+        )
+    if not has_embedded_index_list_offset(path):
+        raise RawConversionError(
+            "raw_conversion_output_invalid",
+            f"{invalid_subject} is missing embedded indexListOffset: {path}. {context}",
         )
     return path.resolve()
+
+
+def validate_existing_mzml(path: Path) -> Path:
+    try:
+        return validate_converted_mzml(
+            path,
+            command=["skipped_existing_mzml"],
+            invalid_subject="Existing same-stem mzML",
+        )
+    except RawConversionError as exc:
+        if exc.code == "raw_conversion_output_invalid" and "missing embedded indexListOffset" in exc.message:
+            raise RawConversionError(
+                exc.code,
+                f"existing mzML is not indexed: {exc.message}",
+            ) from exc
+        raise
 
 
 def run_thermo_raw_file_parser(
@@ -91,6 +193,7 @@ def run_thermo_raw_file_parser(
     command: list[str] = []
     stdout_text = ""
     stderr_text = ""
+    located_output_path: Path | None = None
 
     try:
         if request.converter_exe is None:
@@ -104,6 +207,7 @@ def run_thermo_raw_file_parser(
         stdout_log_path.parent.mkdir(parents=True, exist_ok=True)
         stderr_log_path.parent.mkdir(parents=True, exist_ok=True)
         command = build_thermo_raw_file_parser_command(request)
+        conversion_started_mtime_ns = time.time_ns()
         completed = subprocess.run(
             command,
             capture_output=True,
@@ -121,7 +225,18 @@ def run_thermo_raw_file_parser(
                 "raw_conversion_failed",
                 f"ThermoRawFileParser exited with code {completed.returncode}; stderr log: {stderr_log_path}",
             )
-        mzml_path = validate_converted_mzml(locate_output_mzml(request.raw_path, request.output_dir))
+        located_output_path = locate_output_mzml(
+            request.raw_path,
+            request.output_dir,
+            modified_since_ns=conversion_started_mtime_ns,
+        )
+        mzml_path = validate_converted_mzml(
+            located_output_path,
+            command=command,
+            stdout_log_path=stdout_log_path,
+            stderr_log_path=stderr_log_path,
+            expected_output_path=request.output_dir / f"{request.raw_path.stem}.mzML",
+        )
         return RawConversionResult(
             raw_path=request.raw_path.resolve(),
             mzml_path=mzml_path,
@@ -176,7 +291,7 @@ def run_thermo_raw_file_parser(
             raise
         result = RawConversionResult(
             raw_path=request.raw_path.resolve(),
-            mzml_path=locate_output_mzml(request.raw_path, request.output_dir),
+            mzml_path=located_output_path or locate_output_mzml(request.raw_path, request.output_dir),
             status="failed",
             converter_name=CONVERTER_NAME,
             converter_version=None,

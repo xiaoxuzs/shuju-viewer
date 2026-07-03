@@ -74,6 +74,13 @@ class _RunInsertConnection:
         return _RunInsertResult(len(self.metadata_out))
 
 
+def _command_value(command: list[str], prefix: str) -> str:
+    for item in command:
+        if item.startswith(prefix):
+            return item[len(prefix) :]
+    raise AssertionError(f"missing command argument: {prefix}")
+
+
 def _make_diann_root(tmp_path: Path, *, raw: bool, mzml: bool) -> Path:
     root = tmp_path / "diann"
     report = root / "DIANN_2.0" / "all_report.parquet"
@@ -188,8 +195,8 @@ def test_raw_import_job_converts_and_records_run_metadata(
 
     def fake_run(command: list[str], **kwargs: Any) -> SimpleNamespace:
         calls.append({"command": command, **kwargs})
-        raw_path = Path(command[2])
-        output_dir = Path(command[4])
+        raw_path = Path(_command_value(command, "-i="))
+        output_dir = Path(_command_value(command, "-o="))
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / f"{raw_path.stem}.mzML").write_text(
             "<mzML><indexListOffset>1</indexListOffset></mzML>",
@@ -205,6 +212,8 @@ def test_raw_import_job_converts_and_records_run_metadata(
     assert "raw_conversion" in stages
     assert state["derived_calls"] == [7]
     assert calls and calls[0]["shell"] is False
+    assert "-f=2" in calls[0]["command"]
+    assert "-g" not in calls[0]["command"]
     metadata = state["inserted_run_metadata"][0]
     assert metadata["raw_format"] == "mzml"
     assert metadata["raw_path"] == str((root / "sample.raw").resolve())
@@ -285,6 +294,30 @@ def test_raw_import_job_skips_existing_same_stem_mzml(
     assert not any(update.get("status") == "failed" for update in state["updates"])
 
 
+def test_raw_import_job_rejects_existing_same_stem_mzml_without_index(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = _make_diann_root(tmp_path, raw=True, mzml=False)
+    (root / "sample.mzML").write_text("<mzML></mzML>", encoding="utf-8")
+    state = _install_common_patches(monkeypatch)
+    monkeypatch.setattr(import_jobs.settings, "thermo_raw_file_parser_exe", None)
+
+    def fail_resolver(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("RAW converter must not be discovered when force=false and same-stem mzML exists")
+
+    monkeypatch.setattr("app.raw_conversion.service.resolve_thermo_raw_file_parser_exe", fail_resolver)
+
+    _run_job(root)
+
+    failed = [update for update in state["updates"] if update.get("status") == "failed"]
+    assert failed
+    assert "raw_conversion_output_invalid" in str(failed[-1].get("error"))
+    assert "existing mzML is not indexed" in str(failed[-1].get("error"))
+    assert state["derived_calls"] == []
+    assert state["inserted_run_metadata"] == []
+
+
 def test_mzml_only_import_job_does_not_call_converter(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -323,8 +356,8 @@ def test_raw_only_import_job_converts_before_mzml_only_adapter(
     monkeypatch.setattr(import_jobs.settings, "thermo_raw_file_parser_exe", converter)
 
     def fake_run(command: list[str], **_kwargs: Any) -> SimpleNamespace:
-        raw_path = Path(command[2])
-        output_dir = Path(command[4])
+        raw_path = Path(_command_value(command, "-i="))
+        output_dir = Path(_command_value(command, "-o="))
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / f"{raw_path.stem}.mzML").write_text(
             "<mzML><indexListOffset>1</indexListOffset></mzML>",

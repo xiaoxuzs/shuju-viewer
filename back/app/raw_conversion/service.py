@@ -13,7 +13,11 @@ from app.raw_conversion.contracts import (
 )
 from app.raw_conversion.discovery import discover_raw_file_candidates
 from app.raw_conversion.errors import RawConversionError
-from app.raw_conversion.thermo_raw_file_parser import CONVERTER_NAME, run_thermo_raw_file_parser
+from app.raw_conversion.thermo_raw_file_parser import (
+    CONVERTER_NAME,
+    run_thermo_raw_file_parser,
+    validate_existing_mzml,
+)
 from app.raw_conversion.tool_discovery import resolve_thermo_raw_file_parser_exe
 
 RawConversionProgress = Callable[[int, int, RawFileCandidate], None]
@@ -25,9 +29,14 @@ def _log_paths(logs_dir: Path, index: int, raw_path: Path) -> tuple[Path, Path]:
 
 
 def _skipped_result(candidate: RawFileCandidate) -> RawConversionResult:
+    mzml_path = (
+        validate_existing_mzml(candidate.existing_mzml_path)
+        if candidate.existing_mzml_path is not None
+        else None
+    )
     return RawConversionResult(
         raw_path=candidate.raw_path,
-        mzml_path=candidate.existing_mzml_path,
+        mzml_path=mzml_path,
         status="skipped_existing_mzml",
         converter_name=CONVERTER_NAME,
         converter_version=None,
@@ -63,9 +72,27 @@ def convert_raw_files_for_import(
             progress_callback(index, len(candidates), candidate)
 
         if candidate.existing_mzml_path is not None and not force:
-            result = _skipped_result(candidate)
+            try:
+                result = _skipped_result(candidate)
+            except RawConversionError as exc:
+                result = RawConversionResult(
+                    raw_path=candidate.raw_path,
+                    mzml_path=candidate.existing_mzml_path,
+                    status="failed",
+                    converter_name=CONVERTER_NAME,
+                    converter_version=None,
+                    command=["skipped_existing_mzml"],
+                    started_at=None,
+                    finished_at=None,
+                    stdout_log_path=None,
+                    stderr_log_path=None,
+                    error_message=exc.message,
+                )
+                results.append(result)
+                raise RawConversionError(exc.code, exc.message, result=result) from exc
             results.append(result)
-            raw_to_mzml[str(candidate.raw_path)] = candidate.existing_mzml_path
+            if result.mzml_path is not None:
+                raw_to_mzml[str(candidate.raw_path)] = result.mzml_path
             continue
 
         if resolved_converter_exe is None:
