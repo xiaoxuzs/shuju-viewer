@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 
 import { PlotStatus } from "@/components/common/plot-status";
@@ -8,12 +8,15 @@ import { Input } from "@/components/ui/input";
 import type { SpectraScanIndexItem } from "@/features/spectra-only/types";
 import {
   filterScansByMsLevel,
+  getMsLevel,
+  getScanNumber,
   type ScanLevelFilter,
 } from "@/features/spectra-only/utils/scanRelations";
+import { clampPage, findPageForScan, paginateScans } from "@/features/spectra-only/utils/scanPagination";
 import { parseApiError } from "@/lib/apiError";
 import { cn, formatNumber } from "@/lib/utils";
 
-const SCAN_LIST_DISPLAY_LIMIT = 250;
+const SCAN_LIST_PAGE_SIZE = 250;
 
 export function ScanListPanel({
   runId,
@@ -33,35 +36,84 @@ export function ScanListPanel({
   onSelectScan: (scan: number) => void;
 }) {
   const [scanInput, setScanInput] = useState("");
+  const [pageInput, setPageInput] = useState("");
   const [levelFilter, setLevelFilter] = useState<ScanLevelFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [scanSearchMessage, setScanSearchMessage] = useState<string | null>(null);
+  const previousSelectedScanRef = useRef<number | null>(selectedScan);
   const filteredScans = useMemo(
     () => filterScansByMsLevel(scans, levelFilter),
     [levelFilter, scans],
   );
-  const visibleScans = useMemo(
-    () => filteredScans.slice(0, SCAN_LIST_DISPLAY_LIMIT),
-    [filteredScans],
+  const scanPage = useMemo(
+    () => paginateScans(filteredScans, currentPage, SCAN_LIST_PAGE_SIZE),
+    [currentPage, filteredScans],
   );
+  const visibleScans = scanPage.items;
   const selected = useMemo(
-    () => scans.find((scan) => scan.scan_number === selectedScan) ?? null,
+    () => scans.find((scan) => getScanNumber(scan) === selectedScan) ?? null,
     [scans, selectedScan],
   );
+  const selectedPage = selectedScan == null ? null : findPageForScan(filteredScans, selectedScan, SCAN_LIST_PAGE_SIZE);
+  const selectedHiddenByFilter = selected != null && selectedPage == null;
 
   useEffect(() => {
     setLevelFilter("all");
+    setCurrentPage(1);
+    setScanSearchMessage(null);
   }, [runId]);
 
   useEffect(() => {
     if (selectedScan == null && scans.length > 0) {
-      onSelectScan(scans[0].scan_number);
+      const firstScanNumber = getScanNumber(scans[0]);
+      if (firstScanNumber != null) onSelectScan(firstScanNumber);
     }
   }, [onSelectScan, scans, selectedScan]);
 
+  useEffect(() => {
+    setCurrentPage((page) => clampPage(page, scanPage.totalPages));
+  }, [scanPage.totalPages]);
+
+  useEffect(() => {
+    if (selectedScan === previousSelectedScanRef.current) return;
+    previousSelectedScanRef.current = selectedScan;
+    setScanSearchMessage(null);
+    if (selectedScan == null) return;
+    const nextPage = findPageForScan(filteredScans, selectedScan, SCAN_LIST_PAGE_SIZE);
+    if (nextPage != null) setCurrentPage(nextPage);
+  }, [filteredScans, selectedScan]);
+
+  const changeLevelFilter = (value: ScanLevelFilter) => {
+    setLevelFilter(value);
+    setCurrentPage(1);
+    setScanSearchMessage(null);
+  };
+
   const submitScan = () => {
     const parsed = Number(scanInput);
-    if (Number.isInteger(parsed) && parsed > 0) {
-      onSelectScan(parsed);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setScanSearchMessage("Scan number was not found.");
+      return;
     }
+
+    const scanExists = scans.some((scan) => getScanNumber(scan) === parsed);
+    if (!scanExists) {
+      setScanSearchMessage("Scan number was not found.");
+      return;
+    }
+
+    const nextPage = findPageForScan(filteredScans, parsed, SCAN_LIST_PAGE_SIZE);
+    if (nextPage != null) {
+      setCurrentPage(nextPage);
+    }
+    setScanSearchMessage(null);
+    onSelectScan(parsed);
+  };
+
+  const submitPage = () => {
+    const parsed = Number(pageInput);
+    if (!Number.isInteger(parsed)) return;
+    setCurrentPage(clampPage(parsed, scanPage.totalPages));
   };
 
   return (
@@ -95,18 +147,31 @@ export function ScanListPanel({
           <PlotStatus kind="empty" title="No scans found in the scan index." className="min-h-48" />
         ) : filteredScans.length === 0 ? (
           <>
-            <ScanLevelFilterControl value={levelFilter} onChange={setLevelFilter} />
+            <ScanLevelFilterControl value={levelFilter} onChange={changeLevelFilter} />
             <PlotStatus kind="empty" title="No scans match the current filter." className="min-h-48" />
           </>
         ) : (
           <>
-            <ScanLevelFilterControl value={levelFilter} onChange={setLevelFilter} />
-            <div className="text-xs text-muted-foreground">
-              {formatShowingCount(visibleScans.length, filteredScans.length, total, levelFilter)}
+            <ScanLevelFilterControl value={levelFilter} onChange={changeLevelFilter} />
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{formatShowingRange(scanPage.pageStart, scanPage.pageEnd, filteredScans.length, total, levelFilter)}</span>
+              <span>
+                Page {scanPage.currentPage.toLocaleString()} of {scanPage.totalPages.toLocaleString()}
+              </span>
             </div>
             {selected && (
               <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
-                Selected scan {selected.scan_number} - MS{selected.ms_level} - RT {formatNumber(selected.retention_time, 2)} min
+                Selected scan {selected.scan_number} - MS{getMsLevel(selected) ?? selected.ms_level} - RT {formatNumber(selected.retention_time, 2)} min
+              </div>
+            )}
+            {selectedHiddenByFilter && (
+              <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
+                Selected scan is hidden by the current filter.
+              </div>
+            )}
+            {scanSearchMessage && (
+              <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
+                {scanSearchMessage}
               </div>
             )}
             <div className="max-h-[360px] overflow-auto rounded-md border border-border/60">
@@ -122,14 +187,53 @@ export function ScanListPanel({
                 <tbody>
                   {visibleScans.map((scan) => (
                     <ScanRow
-                      key={scan.scan_number}
+                      key={String(getScanNumber(scan) ?? scan.native_id)}
                       scan={scan}
-                      active={scan.scan_number === selectedScan}
-                      onSelect={() => onSelectScan(scan.scan_number)}
+                      active={getScanNumber(scan) === selectedScan}
+                      onSelect={() => {
+                        const scanNumber = getScanNumber(scan);
+                        if (scanNumber != null) onSelectScan(scanNumber);
+                      }}
                     />
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={scanPage.currentPage <= 1}
+                onClick={() => setCurrentPage((page) => clampPage(page - 1, scanPage.totalPages))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={scanPage.currentPage >= scanPage.totalPages}
+                onClick={() => setCurrentPage((page) => clampPage(page + 1, scanPage.totalPages))}
+              >
+                Next
+              </Button>
+              <div className="ml-auto flex min-w-0 items-center gap-2">
+                <Input
+                  inputMode="numeric"
+                  aria-label="Go to page"
+                  placeholder="Go to page"
+                  value={pageInput}
+                  className="h-9 w-28"
+                  onChange={(event) => setPageInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") submitPage();
+                  }}
+                />
+                <Button type="button" variant="outline" size="sm" onClick={submitPage}>
+                  Go
+                </Button>
+              </div>
             </div>
           </>
         )}
@@ -172,19 +276,20 @@ function ScanLevelFilterControl({
   );
 }
 
-function formatShowingCount(
-  visibleCount: number,
+function formatShowingRange(
+  pageStart: number,
+  pageEnd: number,
   filteredCount: number,
   total: number,
   filter: ScanLevelFilter,
 ): string {
   if (filter === "ms1") {
-    return `Showing ${visibleCount.toLocaleString()} of ${filteredCount.toLocaleString()} MS1 scans.`;
+    return `Showing ${pageStart.toLocaleString()}-${pageEnd.toLocaleString()} of ${filteredCount.toLocaleString()} MS1 scans.`;
   }
   if (filter === "ms2") {
-    return `Showing ${visibleCount.toLocaleString()} of ${filteredCount.toLocaleString()} MS2 scans.`;
+    return `Showing ${pageStart.toLocaleString()}-${pageEnd.toLocaleString()} of ${filteredCount.toLocaleString()} MS2 scans.`;
   }
-  return `Showing ${visibleCount.toLocaleString()} of ${total.toLocaleString()} scans.`;
+  return `Showing ${pageStart.toLocaleString()}-${pageEnd.toLocaleString()} of ${total.toLocaleString()} scans.`;
 }
 
 function ScanRow({
@@ -205,7 +310,7 @@ function ScanRow({
       onClick={onSelect}
     >
       <td className="px-2 py-1.5 font-mono">{scan.scan_number}</td>
-      <td className="px-2 py-1.5">MS{scan.ms_level}</td>
+      <td className="px-2 py-1.5">MS{getMsLevel(scan) ?? scan.ms_level}</td>
       <td className="px-2 py-1.5">{formatNumber(scan.retention_time, 2)}</td>
       <td className="px-2 py-1.5">{formatNumber(scan.tic, 2)}</td>
     </tr>

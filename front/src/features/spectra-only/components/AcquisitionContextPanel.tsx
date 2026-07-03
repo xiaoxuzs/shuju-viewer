@@ -1,6 +1,7 @@
 import { PlotStatus } from "@/components/common/plot-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SpectraScanIndexItem } from "@/features/spectra-only/types";
+import { getMsLevel, getScanNumber } from "@/features/spectra-only/utils/scanRelations";
 import { cn, formatNumber } from "@/lib/utils";
 
 export function AcquisitionContextPanel({
@@ -14,8 +15,10 @@ export function AcquisitionContextPanel({
   childMs2Scans: SpectraScanIndexItem[];
   onSelectScan: (scanNumber: number) => void;
 }) {
-  const selectedMs2Scan = selectedScan?.ms_level === 2 ? selectedScan : null;
-  const contextMs1Scan = selectedScan?.ms_level === 1 ? selectedScan : parentMs1Scan;
+  const selectedMsLevel = getMsLevel(selectedScan);
+  const selectedMs2Scan = selectedMsLevel === 2 ? selectedScan : null;
+  const contextMs1Scan = selectedMsLevel === 1 ? selectedScan : parentMs1Scan;
+  const selectedMs2ScanNumber = getScanNumber(selectedMs2Scan);
 
   return (
     <Card>
@@ -29,7 +32,7 @@ export function AcquisitionContextPanel({
             title="Select a scan to view its acquisition context."
             className="min-h-32"
           />
-        ) : selectedScan.ms_level !== 1 && selectedScan.ms_level !== 2 ? (
+        ) : selectedMsLevel !== 1 && selectedMsLevel !== 2 ? (
           <PlotStatus
             kind="empty"
             title="Acquisition context is available for MS1 and MS2 scans."
@@ -67,7 +70,7 @@ export function AcquisitionContextPanel({
             )}
             <ChildMs2List
               scans={childMs2Scans}
-              activeScanNumber={selectedMs2Scan?.scan_number ?? null}
+              activeScanNumber={selectedMs2ScanNumber}
               onSelectScan={onSelectScan}
             />
           </>
@@ -113,14 +116,18 @@ function ChildMs2List({
                   key={scan.scan_number}
                   className={cn(
                     "cursor-pointer border-t border-border/50 transition-colors hover:bg-accent/50",
-                    scan.scan_number === activeScanNumber && "bg-primary/10 text-primary",
+                    getScanNumber(scan) === activeScanNumber && "bg-primary/10 text-primary",
                   )}
                   tabIndex={0}
-                  onClick={() => onSelectScan(scan.scan_number)}
+                  onClick={() => {
+                    const scanNumber = getScanNumber(scan);
+                    if (scanNumber != null) onSelectScan(scanNumber);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      onSelectScan(scan.scan_number);
+                      const scanNumber = getScanNumber(scan);
+                      if (scanNumber != null) onSelectScan(scanNumber);
                     }
                   }}
                 >

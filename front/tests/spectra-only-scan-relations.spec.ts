@@ -2,12 +2,20 @@ import { expect, test } from "@playwright/test";
 
 import type { SpectraScanIndexItem } from "../src/features/spectra-only/types";
 import {
+  buildScanRelations,
   filterScansByMsLevel,
   findChildMs2Scans,
   findNearestPeakByMz,
   findParentMs1Scan,
   formatMassError,
+  getMsLevel,
 } from "../src/features/spectra-only/utils/scanRelations";
+import {
+  clampPage,
+  findPageForScan,
+  getTotalPages,
+  paginateScans,
+} from "../src/features/spectra-only/utils/scanPagination";
 
 const scans: SpectraScanIndexItem[] = [
   scan({ scan_number: 100, ms_level: 1, retention_time: 1.0 }),
@@ -34,9 +42,132 @@ test("MS2 parent is the nearest previous MS1 in full scan order", () => {
   expect(findParentMs1Scan(scans, scans[4])?.scan_number).toBe(400);
 });
 
-test("MS1 children are MS2 scans before the next MS1", () => {
+test("standard DDA sequence assigns MS2 scans to the nearest previous MS1", () => {
   expect(findChildMs2Scans(scans, scans[0]).map((item) => item.scan_number)).toEqual([210, 220]);
   expect(findChildMs2Scans(scans, scans[3]).map((item) => item.scan_number)).toEqual([450]);
+});
+
+test("consecutive MS1 scans give children only to the most recent MS1", () => {
+  const dda = [
+    scan({ scan_number: 1, ms_level: 1 }),
+    scan({ scan_number: 2, ms_level: 1 }),
+    scan({ scan_number: 3, ms_level: 2 }),
+  ];
+
+  expect(findChildMs2Scans(dda, dda[0])).toEqual([]);
+  expect(findChildMs2Scans(dda, dda[1]).map((item) => item.scan_number)).toEqual([3]);
+});
+
+test("scan relations are built from scan-number order", () => {
+  const unordered = [
+    scan({ scan_number: 3, ms_level: 2 }),
+    scan({ scan_number: 1, ms_level: 1 }),
+    scan({ scan_number: 2, ms_level: 2 }),
+    scan({ scan_number: 4, ms_level: 1 }),
+  ];
+
+  const relations = buildScanRelations(unordered);
+
+  expect(relations.orderedScans.map((item) => item.scan_number)).toEqual([1, 2, 3, 4]);
+  expect(findChildMs2Scans(unordered, unordered[1]).map((item) => item.scan_number)).toEqual([2, 3]);
+});
+
+test("MS level normalization accepts numbers and common strings", () => {
+  expect(getMsLevel(scan({ ms_level: 1 }))).toBe(1);
+  expect(getMsLevel(scan({ ms_level: "2" }))).toBe(2);
+  expect(getMsLevel(scan({ ms_level: "MS1" }))).toBe(1);
+  expect(getMsLevel(scan({ ms_level: "ms2" }))).toBe(2);
+});
+
+test("string scan numbers still match selected scans and child lists", () => {
+  const mixed = [
+    scan({ scan_number: "10", ms_level: "MS1" }),
+    scan({ scan_number: "11", ms_level: "MS2" }),
+    scan({ scan_number: 12, ms_level: "2" }),
+  ];
+
+  expect(findParentMs1Scan(mixed, scan({ scan_number: 11, ms_level: 2 }))?.scan_number).toBe("10");
+  expect(findChildMs2Scans(mixed, scan({ scan_number: 10, ms_level: 1 })).map((item) => item.scan_number)).toEqual([
+    "11",
+    12,
+  ]);
+});
+
+test("MS level filtering does not affect parent-child calculation from the full index", () => {
+  const ms1Only = filterScansByMsLevel(scans, "ms1");
+
+  expect(ms1Only.map((item) => item.scan_number)).toEqual([100, 400]);
+  expect(findChildMs2Scans(scans, ms1Only[0]).map((item) => item.scan_number)).toEqual([210, 220]);
+});
+
+test("scan pagination keeps 250 rows per page", () => {
+  const manyScans = makeScans(600);
+
+  expect(getTotalPages(manyScans.length, 250)).toBe(3);
+
+  const firstPage = paginateScans(manyScans, 1, 250);
+  expect(firstPage.pageStart).toBe(1);
+  expect(firstPage.pageEnd).toBe(250);
+  expect(firstPage.items[0].scan_number).toBe(1);
+  expect(firstPage.items[firstPage.items.length - 1].scan_number).toBe(250);
+
+  const secondPage = paginateScans(manyScans, 2, 250);
+  expect(secondPage.pageStart).toBe(251);
+  expect(secondPage.pageEnd).toBe(500);
+  expect(secondPage.items[0].scan_number).toBe(251);
+  expect(secondPage.items[secondPage.items.length - 1].scan_number).toBe(500);
+
+  const thirdPage = paginateScans(manyScans, 3, 250);
+  expect(thirdPage.pageStart).toBe(501);
+  expect(thirdPage.pageEnd).toBe(600);
+  expect(thirdPage.items[0].scan_number).toBe(501);
+  expect(thirdPage.items[thirdPage.items.length - 1].scan_number).toBe(600);
+});
+
+test("filtered scan pagination uses the filtered total", () => {
+  const manyScans = makeScans(600);
+  const ms1Scans = filterScansByMsLevel(manyScans, "ms1");
+  const ms2Scans = filterScansByMsLevel(manyScans, "ms2");
+
+  expect(ms1Scans).toHaveLength(300);
+  expect(ms2Scans).toHaveLength(300);
+  expect(getTotalPages(ms1Scans.length, 250)).toBe(2);
+  expect(getTotalPages(ms2Scans.length, 250)).toBe(2);
+});
+
+test("go to page clamps outside the valid page range", () => {
+  expect(clampPage(0, 3)).toBe(1);
+  expect(clampPage(-5, 3)).toBe(1);
+  expect(clampPage(4, 3)).toBe(3);
+  expect(clampPage(Number.NaN, 3)).toBe(1);
+});
+
+test("go to scan can locate scans after the first 250 rows", () => {
+  const manyScans = makeScans(600);
+
+  expect(findPageForScan(manyScans, 250, 250)).toBe(1);
+  expect(findPageForScan(manyScans, 251, 250)).toBe(2);
+  expect(findPageForScan(manyScans, 600, 250)).toBe(3);
+});
+
+test("go to scan normalizes string and number scan numbers", () => {
+  const mixed = [
+    scan({ scan_number: "10", ms_level: 1 }),
+    scan({ scan_number: 11, ms_level: 1 }),
+    scan({ scan_number: "12", ms_level: 2 }),
+  ];
+
+  expect(findPageForScan(mixed, 10, 1)).toBe(1);
+  expect(findPageForScan(mixed, 11, 1)).toBe(2);
+  expect(findPageForScan(mixed, 12, 1)).toBe(3);
+});
+
+test("selected scan can remain selected when hidden by the current filter", () => {
+  const mixed = [scan({ scan_number: 1, ms_level: 1 }), scan({ scan_number: 2, ms_level: 2 })];
+  const ms1Scans = filterScansByMsLevel(mixed, "ms1");
+
+  expect(findPageForScan(mixed, 2, 250)).toBe(1);
+  expect(findPageForScan(ms1Scans, 2, 250)).toBeNull();
 });
 
 test("parent lookup returns null when no previous MS1 exists", () => {
@@ -64,7 +195,7 @@ test("nearest precursor peak returns null outside tolerance", () => {
   expect(findNearestPeakByMz([{ mz: 500.2, intensity: 100 }], 500.02, 0.05)).toBeNull();
 });
 
-function scan(overrides: Partial<SpectraScanIndexItem>): SpectraScanIndexItem {
+function scan(overrides: Record<string, unknown>): SpectraScanIndexItem {
   return {
     scan_number: overrides.scan_number ?? 1,
     native_id: `scan=${overrides.scan_number ?? 1}`,
@@ -76,5 +207,11 @@ function scan(overrides: Partial<SpectraScanIndexItem>): SpectraScanIndexItem {
     isolation_target_mz: overrides.isolation_target_mz ?? null,
     isolation_lower_mz: overrides.isolation_lower_mz ?? null,
     isolation_upper_mz: overrides.isolation_upper_mz ?? null,
-  };
+  } as unknown as SpectraScanIndexItem;
+}
+
+function makeScans(count: number): SpectraScanIndexItem[] {
+  return Array.from({ length: count }, (_item, index) =>
+    scan({ scan_number: index + 1, ms_level: index % 2 === 0 ? 1 : 2 }),
+  );
 }

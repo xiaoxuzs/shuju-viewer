@@ -15,6 +15,8 @@ import { fetchSpectraFullScanIndex } from "@/features/spectra-only/api/spectraCl
 import {
   findChildMs2Scans,
   findParentMs1Scan,
+  getMsLevel,
+  getScanNumber,
 } from "@/features/spectra-only/utils/scanRelations";
 import { chartQueryRetry } from "@/lib/apiError";
 
@@ -31,18 +33,21 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
   });
   const allScans = scanIndex.data?.items ?? [];
   const selectedScanItem = useMemo(
-    () => allScans.find((scan) => scan.scan_number === selectedScan) ?? null,
+    () => allScans.find((scan) => getScanNumber(scan) === selectedScan) ?? null,
     [allScans, selectedScan],
   );
+  const selectedMsLevel = getMsLevel(selectedScanItem);
   const parentMs1Scan = useMemo(
     () => findParentMs1Scan(allScans, selectedScanItem),
     [allScans, selectedScanItem],
   );
-  const contextMs1Scan = selectedScanItem?.ms_level === 1 ? selectedScanItem : parentMs1Scan;
+  const contextMs1Scan = selectedMsLevel === 1 ? selectedScanItem : parentMs1Scan;
   const childMs2Scans = useMemo(
     () => findChildMs2Scans(allScans, contextMs1Scan),
     [allScans, contextMs1Scan],
   );
+  const parentMs1ScanNumber = getScanNumber(parentMs1Scan);
+  const selectedScanNumber = getScanNumber(selectedScanItem);
 
   useEffect(() => {
     if (!selectedRun && runs.length > 0) {
@@ -101,33 +106,35 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
             childMs2Scans={childMs2Scans}
             onSelectScan={setSelectedScan}
           />
-          {selectedScanItem?.ms_level === 2 ? (
+          {selectedMsLevel === 2 ? (
             <>
-              {parentMs1Scan && (
+              {parentMs1Scan && parentMs1ScanNumber != null && (
                 <SpectrumPanel
                   datasetId={dataset.id}
                   runId={selectedRun?.run_id ?? null}
-                  scanNumber={parentMs1Scan.scan_number}
+                  scanNumber={parentMs1ScanNumber}
                   titlePrefix="Parent MS1 Spectrum"
                   highlight={{
-                    targetMz: selectedScanItem.precursor_mz,
+                    targetMz: selectedScanItem?.precursor_mz,
                     label: "precursor",
                     toleranceDa: 0.05,
                   }}
                 />
               )}
-              <SpectrumPanel
-                datasetId={dataset.id}
-                runId={selectedRun?.run_id ?? null}
-                scanNumber={selectedScanItem.scan_number}
-                titlePrefix="Selected MS2 Spectrum"
-              />
+              {selectedScanNumber != null && (
+                <SpectrumPanel
+                  datasetId={dataset.id}
+                  runId={selectedRun?.run_id ?? null}
+                  scanNumber={selectedScanNumber}
+                  titlePrefix="Selected MS2 Spectrum"
+                />
+              )}
             </>
-          ) : selectedScanItem?.ms_level === 1 ? (
+          ) : selectedMsLevel === 1 && selectedScanNumber != null ? (
             <SpectrumPanel
               datasetId={dataset.id}
               runId={selectedRun?.run_id ?? null}
-              scanNumber={selectedScanItem.scan_number}
+              scanNumber={selectedScanNumber}
               titlePrefix="MS1 Spectrum"
             />
           ) : (
