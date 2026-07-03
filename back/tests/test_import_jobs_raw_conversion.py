@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from app.ingest.bu import universal_diann_adapter as diann_adapter
+from app.raw_conversion.errors import RawConversionError
 from app.services import import_jobs
 
 
@@ -245,6 +246,11 @@ def test_raw_import_job_fails_when_converter_missing(
     state = _install_common_patches(monkeypatch)
     monkeypatch.setattr(import_jobs.settings, "thermo_raw_file_parser_exe", None)
 
+    def fail_resolver(_configured_path: object) -> None:
+        raise RawConversionError("raw_converter_missing", "test converter missing")
+
+    monkeypatch.setattr("app.raw_conversion.service.resolve_thermo_raw_file_parser_exe", fail_resolver)
+
     _run_job(root)
 
     failed = [update for update in state["updates"] if update.get("status") == "failed"]
@@ -261,6 +267,11 @@ def test_raw_import_job_skips_existing_same_stem_mzml(
     root = _make_diann_root(tmp_path, raw=True, mzml=True)
     state = _install_common_patches(monkeypatch)
     monkeypatch.setattr(import_jobs.settings, "thermo_raw_file_parser_exe", None)
+
+    def fail_resolver(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("RAW converter must not be discovered when same-stem mzML is reused")
+
+    monkeypatch.setattr("app.raw_conversion.service.resolve_thermo_raw_file_parser_exe", fail_resolver)
 
     _run_job(root)
 
@@ -342,6 +353,11 @@ def test_raw_only_import_job_fails_when_converter_missing(
     (root / "sample.raw").write_bytes(b"raw")
     state = _install_common_patches(monkeypatch)
     monkeypatch.setattr(import_jobs.settings, "thermo_raw_file_parser_exe", None)
+
+    def fail_resolver(_configured_path: object) -> None:
+        raise RawConversionError("raw_converter_missing", "test converter missing")
+
+    monkeypatch.setattr("app.raw_conversion.service.resolve_thermo_raw_file_parser_exe", fail_resolver)
 
     _run_job(root)
 

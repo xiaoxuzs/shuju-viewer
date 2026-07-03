@@ -14,6 +14,7 @@ from app.raw_conversion.contracts import (
 from app.raw_conversion.discovery import discover_raw_file_candidates
 from app.raw_conversion.errors import RawConversionError
 from app.raw_conversion.thermo_raw_file_parser import CONVERTER_NAME, run_thermo_raw_file_parser
+from app.raw_conversion.tool_discovery import resolve_thermo_raw_file_parser_exe
 
 RawConversionProgress = Callable[[int, int, RawFileCandidate], None]
 
@@ -55,6 +56,7 @@ def convert_raw_files_for_import(
     candidates = discover_raw_file_candidates(source_root=root, output_dir=out_dir)
     results: list[RawConversionResult] = []
     raw_to_mzml: dict[str, Path] = {}
+    resolved_converter_exe: Path | None = None
 
     for index, candidate in enumerate(candidates, start=1):
         if progress_callback is not None:
@@ -66,11 +68,14 @@ def convert_raw_files_for_import(
             raw_to_mzml[str(candidate.raw_path)] = candidate.existing_mzml_path
             continue
 
+        if resolved_converter_exe is None:
+            resolved_converter_exe = resolve_thermo_raw_file_parser_exe(converter_exe)
+
         stdout_log, stderr_log = _log_paths(logs_dir, index, candidate.raw_path)
         request = RawConversionRequest(
             raw_path=candidate.raw_path,
             output_dir=candidate.expected_mzml_path.parent,
-            converter_exe=converter_exe,
+            converter_exe=resolved_converter_exe,
             timeout_seconds=timeout_seconds,
             force=force,
         )

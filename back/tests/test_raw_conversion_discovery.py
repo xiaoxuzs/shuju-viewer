@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from app.raw_conversion.discovery import collect_raw_files, discover_raw_file_candidates
 from app.raw_conversion.service import convert_raw_files_for_import
 
@@ -37,11 +39,19 @@ def test_discovery_maps_existing_same_stem_mzml(tmp_path: Path) -> None:
     assert candidates[0].existing_mzml_path == mzml.resolve()
 
 
-def test_service_skips_existing_mzml_without_converter(tmp_path: Path) -> None:
+def test_service_skips_existing_mzml_without_converter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     raw = tmp_path / "sample.raw"
     mzml = tmp_path / "sample.mzML"
     raw.write_bytes(b"raw")
     mzml.write_text("<mzML><indexListOffset>1</indexListOffset></mzML>", encoding="utf-8")
+
+    def fail_resolver(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("converter discovery must not run when same-stem mzML is reused")
+
+    monkeypatch.setattr("app.raw_conversion.service.resolve_thermo_raw_file_parser_exe", fail_resolver)
 
     batch = convert_raw_files_for_import(
         source_root=tmp_path,
@@ -55,8 +65,16 @@ def test_service_skips_existing_mzml_without_converter(tmp_path: Path) -> None:
     assert batch.raw_to_mzml[str(raw.resolve())] == mzml.resolve()
 
 
-def test_service_no_raw_does_not_need_converter(tmp_path: Path) -> None:
+def test_service_no_raw_does_not_need_converter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     (tmp_path / "sample.mzML").write_text("<mzML />", encoding="utf-8")
+
+    def fail_resolver(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("converter discovery must not run without RAW files")
+
+    monkeypatch.setattr("app.raw_conversion.service.resolve_thermo_raw_file_parser_exe", fail_resolver)
 
     batch = convert_raw_files_for_import(
         source_root=tmp_path,

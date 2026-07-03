@@ -47,6 +47,10 @@ Thumbs.db
 # ---- 其他 ----
 Histone-Viewer-介绍.pptx
 
+# 本地 Thermo RAW 转换工具（二进制文件，勿提交）
+/ThermoRawFileParser1.4.5/
+/ThermoRawFileParser/
+
 # PFMB 桥接可执行文件（本地构建，体积大勿提交）
 **/pfmb_bridge.exe
 Hela_DIA_v2_PFMB_delivery_20260629/data/results.pfmb
