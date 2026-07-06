@@ -24,6 +24,7 @@ const scans: SpectraScanIndexItem[] = [
   scan({ scan_number: 400, ms_level: 1, retention_time: 2.0 }),
   scan({ scan_number: 450, ms_level: 2, retention_time: 2.1, precursor_mz: 700.01 }),
 ];
+const SCAN_LIST_PAGE_SIZE = 16;
 
 test("scan level filter keeps All, MS1, and MS2 separate", () => {
   expect(filterScansByMsLevel(scans, "all").map((item) => item.scan_number)).toEqual([
@@ -100,39 +101,39 @@ test("MS level filtering does not affect parent-child calculation from the full 
   expect(findChildMs2Scans(scans, ms1Only[0]).map((item) => item.scan_number)).toEqual([210, 220]);
 });
 
-test("scan pagination keeps 250 rows per page", () => {
-  const manyScans = makeScans(600);
+test("scan pagination keeps 16 rows per page", () => {
+  const manyScans = makeScans(40);
 
-  expect(getTotalPages(manyScans.length, 250)).toBe(3);
+  expect(getTotalPages(manyScans.length, SCAN_LIST_PAGE_SIZE)).toBe(3);
 
-  const firstPage = paginateScans(manyScans, 1, 250);
+  const firstPage = paginateScans(manyScans, 1, SCAN_LIST_PAGE_SIZE);
   expect(firstPage.pageStart).toBe(1);
-  expect(firstPage.pageEnd).toBe(250);
+  expect(firstPage.pageEnd).toBe(16);
   expect(firstPage.items[0].scan_number).toBe(1);
-  expect(firstPage.items[firstPage.items.length - 1].scan_number).toBe(250);
+  expect(firstPage.items[firstPage.items.length - 1].scan_number).toBe(16);
 
-  const secondPage = paginateScans(manyScans, 2, 250);
-  expect(secondPage.pageStart).toBe(251);
-  expect(secondPage.pageEnd).toBe(500);
-  expect(secondPage.items[0].scan_number).toBe(251);
-  expect(secondPage.items[secondPage.items.length - 1].scan_number).toBe(500);
+  const secondPage = paginateScans(manyScans, 2, SCAN_LIST_PAGE_SIZE);
+  expect(secondPage.pageStart).toBe(17);
+  expect(secondPage.pageEnd).toBe(32);
+  expect(secondPage.items[0].scan_number).toBe(17);
+  expect(secondPage.items[secondPage.items.length - 1].scan_number).toBe(32);
 
-  const thirdPage = paginateScans(manyScans, 3, 250);
-  expect(thirdPage.pageStart).toBe(501);
-  expect(thirdPage.pageEnd).toBe(600);
-  expect(thirdPage.items[0].scan_number).toBe(501);
-  expect(thirdPage.items[thirdPage.items.length - 1].scan_number).toBe(600);
+  const thirdPage = paginateScans(manyScans, 3, SCAN_LIST_PAGE_SIZE);
+  expect(thirdPage.pageStart).toBe(33);
+  expect(thirdPage.pageEnd).toBe(40);
+  expect(thirdPage.items[0].scan_number).toBe(33);
+  expect(thirdPage.items[thirdPage.items.length - 1].scan_number).toBe(40);
 });
 
 test("filtered scan pagination uses the filtered total", () => {
-  const manyScans = makeScans(600);
+  const manyScans = makeScans(40);
   const ms1Scans = filterScansByMsLevel(manyScans, "ms1");
   const ms2Scans = filterScansByMsLevel(manyScans, "ms2");
 
-  expect(ms1Scans).toHaveLength(300);
-  expect(ms2Scans).toHaveLength(300);
-  expect(getTotalPages(ms1Scans.length, 250)).toBe(2);
-  expect(getTotalPages(ms2Scans.length, 250)).toBe(2);
+  expect(ms1Scans).toHaveLength(20);
+  expect(ms2Scans).toHaveLength(20);
+  expect(getTotalPages(ms1Scans.length, SCAN_LIST_PAGE_SIZE)).toBe(2);
+  expect(getTotalPages(ms2Scans.length, SCAN_LIST_PAGE_SIZE)).toBe(2);
 });
 
 test("go to page clamps outside the valid page range", () => {
@@ -142,32 +143,30 @@ test("go to page clamps outside the valid page range", () => {
   expect(clampPage(Number.NaN, 3)).toBe(1);
 });
 
-test("go to scan can locate scans after the first 250 rows", () => {
-  const manyScans = makeScans(600);
+test("go to scan can locate scans after the first 16 rows", () => {
+  const manyScans = makeScans(40);
 
-  expect(findPageForScan(manyScans, 250, 250)).toBe(1);
-  expect(findPageForScan(manyScans, 251, 250)).toBe(2);
-  expect(findPageForScan(manyScans, 600, 250)).toBe(3);
+  expect(findPageForScan(manyScans, 16, SCAN_LIST_PAGE_SIZE)).toBe(1);
+  expect(findPageForScan(manyScans, 17, SCAN_LIST_PAGE_SIZE)).toBe(2);
+  expect(findPageForScan(manyScans, 40, SCAN_LIST_PAGE_SIZE)).toBe(3);
 });
 
 test("go to scan normalizes string and number scan numbers", () => {
-  const mixed = [
-    scan({ scan_number: "10", ms_level: 1 }),
-    scan({ scan_number: 11, ms_level: 1 }),
-    scan({ scan_number: "12", ms_level: 2 }),
-  ];
+  const mixed = Array.from({ length: 34 }, (_item, index) =>
+    scan({ scan_number: index % 2 === 0 ? String(index + 1) : index + 1, ms_level: 1 }),
+  );
 
-  expect(findPageForScan(mixed, 10, 1)).toBe(1);
-  expect(findPageForScan(mixed, 11, 1)).toBe(2);
-  expect(findPageForScan(mixed, 12, 1)).toBe(3);
+  expect(findPageForScan(mixed, 16, SCAN_LIST_PAGE_SIZE)).toBe(1);
+  expect(findPageForScan(mixed, 17, SCAN_LIST_PAGE_SIZE)).toBe(2);
+  expect(findPageForScan(mixed, 34, SCAN_LIST_PAGE_SIZE)).toBe(3);
 });
 
 test("selected scan can remain selected when hidden by the current filter", () => {
   const mixed = [scan({ scan_number: 1, ms_level: 1 }), scan({ scan_number: 2, ms_level: 2 })];
   const ms1Scans = filterScansByMsLevel(mixed, "ms1");
 
-  expect(findPageForScan(mixed, 2, 250)).toBe(1);
-  expect(findPageForScan(ms1Scans, 2, 250)).toBeNull();
+  expect(findPageForScan(mixed, 2, SCAN_LIST_PAGE_SIZE)).toBe(1);
+  expect(findPageForScan(ms1Scans, 2, SCAN_LIST_PAGE_SIZE)).toBeNull();
 });
 
 test("parent lookup returns null when no previous MS1 exists", () => {
@@ -180,7 +179,7 @@ test("nearest precursor peak uses fixed Da tolerance", () => {
   const match = findNearestPeakByMz(
     [
       { mz: 499.8, intensity: 100 },
-      { mz: 500.018, intensity: 250 },
+      { mz: 500.018, intensity: 240 },
       { mz: 500.08, intensity: 500 },
     ],
     500.02,

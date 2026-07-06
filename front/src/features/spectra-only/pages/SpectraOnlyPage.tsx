@@ -87,7 +87,7 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
       <RunSummaryCards datasetId={dataset.id} runId={selectedRun?.run_id ?? null} />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(320px,420px)_1fr]">
-        <div className="space-y-5">
+        <div className="space-y-5 xl:sticky xl:top-16 xl:z-20 xl:self-start">
           <ScanListPanel
             runId={selectedRun?.run_id ?? null}
             scans={allScans}
@@ -127,6 +127,7 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
                   runId={selectedRun?.run_id ?? null}
                   scanNumber={selectedScanNumber}
                   titlePrefix="Selected MS2 Spectrum"
+                  enablePeakAnnotations
                 />
               )}
             </>

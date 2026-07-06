@@ -16,7 +16,7 @@ import { clampPage, findPageForScan, paginateScans } from "@/features/spectra-on
 import { parseApiError } from "@/lib/apiError";
 import { cn, formatNumber } from "@/lib/utils";
 
-const SCAN_LIST_PAGE_SIZE = 250;
+const SCAN_LIST_PAGE_SIZE = 16;
 
 export function ScanListPanel({
   runId,
@@ -117,22 +117,30 @@ export function ScanListPanel({
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="xl:flex xl:h-[700px] xl:max-h-[calc(100vh-5rem)] xl:flex-col xl:overflow-hidden">
+      <CardHeader className="p-4 pb-3 xl:shrink-0">
         <CardTitle className="text-base">Scans</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex gap-2">
+      <CardContent className="flex flex-col gap-2 p-4 pt-0 xl:min-h-0 xl:flex-1 xl:overflow-hidden">
+        <div className="flex shrink-0 gap-2">
           <Input
             inputMode="numeric"
             placeholder="Scan number"
             value={scanInput}
+            className="h-8"
             onChange={(event) => setScanInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") submitScan();
             }}
           />
-          <Button type="button" variant="outline" size="icon" aria-label="Load scan" onClick={submitScan}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            aria-label="Load scan"
+            onClick={submitScan}
+          >
             <Search className="h-4 w-4" />
           </Button>
         </div>
@@ -147,41 +155,42 @@ export function ScanListPanel({
           <PlotStatus kind="empty" title="No scans found in the scan index." className="min-h-48" />
         ) : filteredScans.length === 0 ? (
           <>
-            <ScanLevelFilterControl value={levelFilter} onChange={changeLevelFilter} />
+            <div className="shrink-0">
+              <ScanLevelFilterControl value={levelFilter} onChange={changeLevelFilter} />
+            </div>
             <PlotStatus kind="empty" title="No scans match the current filter." className="min-h-48" />
           </>
         ) : (
           <>
-            <ScanLevelFilterControl value={levelFilter} onChange={changeLevelFilter} />
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <div className="shrink-0">
+              <ScanLevelFilterControl value={levelFilter} onChange={changeLevelFilter} />
+            </div>
+            <div className="shrink-0 text-xs text-muted-foreground">
               <span>{formatShowingRange(scanPage.pageStart, scanPage.pageEnd, filteredScans.length, total, levelFilter)}</span>
-              <span>
-                Page {scanPage.currentPage.toLocaleString()} of {scanPage.totalPages.toLocaleString()}
-              </span>
             </div>
             {selected && (
-              <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
+              <div className="shrink-0 rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
                 Selected scan {selected.scan_number} - MS{getMsLevel(selected) ?? selected.ms_level} - RT {formatNumber(selected.retention_time, 2)} min
               </div>
             )}
             {selectedHiddenByFilter && (
-              <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
+              <div className="shrink-0 rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
                 Selected scan is hidden by the current filter.
               </div>
             )}
             {scanSearchMessage && (
-              <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
+              <div className="shrink-0 rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
                 {scanSearchMessage}
               </div>
             )}
-            <div className="max-h-[360px] overflow-auto rounded-md border border-border/60">
+            <div className="max-h-[360px] overflow-auto rounded-md border border-border/60 xl:min-h-0 xl:max-h-none xl:flex-1">
               <table className="w-full text-left text-xs">
                 <thead className="sticky top-0 bg-background text-muted-foreground">
                   <tr>
-                    <th className="px-2 py-2 font-medium">Scan</th>
-                    <th className="px-2 py-2 font-medium">MS</th>
-                    <th className="px-2 py-2 font-medium">RT min</th>
-                    <th className="px-2 py-2 font-medium">TIC</th>
+                    <th className="px-2 py-1 font-medium">Scan</th>
+                    <th className="px-2 py-1 font-medium">MS</th>
+                    <th className="px-2 py-1 font-medium">RT min</th>
+                    <th className="px-2 py-1 font-medium">TIC</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -199,11 +208,12 @@ export function ScanListPanel({
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/60 pt-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                className="h-8"
                 disabled={scanPage.currentPage <= 1}
                 onClick={() => setCurrentPage((page) => clampPage(page - 1, scanPage.totalPages))}
               >
@@ -213,24 +223,28 @@ export function ScanListPanel({
                 type="button"
                 variant="outline"
                 size="sm"
+                className="h-8"
                 disabled={scanPage.currentPage >= scanPage.totalPages}
                 onClick={() => setCurrentPage((page) => clampPage(page + 1, scanPage.totalPages))}
               >
                 Next
               </Button>
+              <span className="text-xs text-muted-foreground">
+                Page {scanPage.currentPage.toLocaleString()} of {scanPage.totalPages.toLocaleString()}
+              </span>
               <div className="ml-auto flex min-w-0 items-center gap-2">
                 <Input
                   inputMode="numeric"
                   aria-label="Go to page"
                   placeholder="Go to page"
                   value={pageInput}
-                  className="h-9 w-28"
+                  className="h-8 w-28"
                   onChange={(event) => setPageInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") submitPage();
                   }}
                 />
-                <Button type="button" variant="outline" size="sm" onClick={submitPage}>
+                <Button type="button" variant="outline" size="sm" className="h-8" onClick={submitPage}>
                   Go
                 </Button>
               </div>
@@ -309,10 +323,10 @@ function ScanRow({
       )}
       onClick={onSelect}
     >
-      <td className="px-2 py-1.5 font-mono">{scan.scan_number}</td>
-      <td className="px-2 py-1.5">MS{getMsLevel(scan) ?? scan.ms_level}</td>
-      <td className="px-2 py-1.5">{formatNumber(scan.retention_time, 2)}</td>
-      <td className="px-2 py-1.5">{formatNumber(scan.tic, 2)}</td>
+      <td className="px-2 py-1 font-mono">{scan.scan_number}</td>
+      <td className="px-2 py-1">MS{getMsLevel(scan) ?? scan.ms_level}</td>
+      <td className="px-2 py-1">{formatNumber(scan.retention_time, 2)}</td>
+      <td className="px-2 py-1">{formatNumber(scan.tic, 2)}</td>
     </tr>
   );
 }

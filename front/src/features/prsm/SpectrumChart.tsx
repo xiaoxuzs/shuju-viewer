@@ -17,6 +17,10 @@ export interface ChartPeak {
   /** free-form tooltip line added under the numbers (e.g. "C·95 · z+3"). */
   tooltip?: string | null;
   charge?: number | null;
+  /** Optional stable key for raw peak interactions. */
+  peakKey?: string | null;
+  /** Optional relative intensity percentage for raw spectra tooltips. */
+  relativeIntensity?: number | null;
 }
 
 /**
@@ -68,6 +72,12 @@ interface Props {
   envelopeOverlay?: EnvelopeOverlayPoint[];
   /** Optional single peak highlight drawn with the same non-invasive overlay. */
   highlightPeak?: EnvelopeOverlayPoint | null;
+  /** Optional raw peak labels, used by spectra-only MS2 peak annotation. */
+  peakLabels?: EnvelopeOverlayPoint[];
+  /** Optional selected raw peak highlight, kept separate from precursor highlight. */
+  selectedPeak?: EnvelopeOverlayPoint | null;
+  /** Optional raw peak click callback. */
+  onPeakClick?: (peak: ChartPeak) => void;
   /**
    * If provided, the Y axis renders ticks as percentages of this value
    * instead of the default SI-formatted intensity. Mirrors the original
@@ -81,12 +91,15 @@ interface Props {
    * Ignored when `yPercentBase` is set.
    */
   yIntensityScale?: "absolute" | "percent";
+  /** Optional automatic Y-axis headroom ratio, e.g. 0.12 keeps 12% space above the tallest visible peak. */
+  yHeadroomRatio?: number;
   className?: string;
 }
 
 export interface EnvelopeOverlayPoint {
   mz: number;
   intensity: number;
+  key?: string;
   color?: string;
   label?: string;
 }
@@ -197,8 +210,12 @@ export function SpectrumChart({
   annotationGuidesMz,
   envelopeOverlay,
   highlightPeak,
+  peakLabels,
+  selectedPeak,
+  onPeakClick,
   yPercentBase,
   yIntensityScale = "absolute",
+  yHeadroomRatio = 0,
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -256,6 +273,8 @@ export function SpectrumChart({
     yPercentBase != null && yPercentBase > 0;
   const useGlobalRA =
     yIntensityScale === "percent" && !useLocalPercentPanel;
+  const safeYHeadroomRatio =
+    Number.isFinite(yHeadroomRatio) && yHeadroomRatio > 0 ? yHeadroomRatio : 0;
 
   const axisYLabel = useMemo(() => {
     if (useGlobalRA) return "Relative abundance (%)";
@@ -429,7 +448,7 @@ export function SpectrumChart({
           else yDomain = [y0, y1];
         }
       } else {
-        yDomain = z.y ?? [0, autoYMax];
+        yDomain = z.y ?? [0, autoYMax * (1 + safeYHeadroomRatio)];
       }
       // Same reason as X: keep domain exact so Y zoom is also truly stepless.
       yScale = d3.scaleLinear().domain(yDomain).range([innerH, 0]);
@@ -558,13 +577,15 @@ export function SpectrumChart({
       // full rebuild.
       const overlay = [
         ...(envelopeOverlay ?? []),
+        ...(peakLabels ?? []),
         ...(highlightPeak ? [highlightPeak] : []),
+        ...(selectedPeak ? [selectedPeak] : []),
       ].filter(
         (d) => d.mz >= xd0 && d.mz <= xd1,
       );
       envOverlayG
         .selectAll<SVGCircleElement, EnvelopeOverlayPoint>("circle")
-        .data(overlay, (d) => `${d.mz}|${d.intensity}|${d.label ?? ""}`)
+        .data(overlay, (d) => d.key ?? `${d.mz}|${d.intensity}|${d.label ?? ""}`)
         .join(
           (enter) =>
             enter
@@ -756,6 +777,19 @@ export function SpectrumChart({
     // regardless of whether the brush overlay is currently on top.
     let tooltipRaf = 0;
     let lastMoveEvent: MouseEvent | null = null;
+    const findNearestPeakAt = (px: number): ChartPeak | null => {
+      const mzVal = xScale.invert(px);
+      const idx = bisectMz(hoverCandidates, mzVal);
+      const a = hoverCandidates[Math.max(0, idx - 1)];
+      const b = hoverCandidates[Math.min(hoverCandidates.length - 1, idx)];
+      return !a
+        ? b ?? null
+        : !b
+          ? a
+          : Math.abs(a.mz - mzVal) < Math.abs(b.mz - mzVal)
+            ? a
+            : b;
+    };
     const onMove = (event: MouseEvent) => {
       lastMoveEvent = event;
       if (tooltipRaf) return;
@@ -770,17 +804,7 @@ export function SpectrumChart({
           setTooltip((prev) => (prev == null ? prev : null));
           return;
         }
-        const mzVal = xScale.invert(px);
-        const idx = bisectMz(hoverCandidates, mzVal);
-        const a = hoverCandidates[Math.max(0, idx - 1)];
-        const b = hoverCandidates[Math.min(hoverCandidates.length - 1, idx)];
-        const nearest = !a
-          ? b
-          : !b
-            ? a
-            : Math.abs(a.mz - mzVal) < Math.abs(b.mz - mzVal)
-              ? a
-              : b;
+        const nearest = findNearestPeakAt(px);
         if (nearest) {
           setTooltip({ x: px + margin.left, y: py + margin.top, peak: nearest });
         }
@@ -795,9 +819,19 @@ export function SpectrumChart({
         commitZoomRef.current(DEFAULT_ZOOM);
       }
     };
+    const onClick = (event: MouseEvent) => {
+      if (!onPeakClick) return;
+      const rect = svgEl.getBoundingClientRect();
+      const px = event.clientX - rect.left - margin.left;
+      const py = event.clientY - rect.top - margin.top;
+      if (px < 0 || py < 0 || px > innerW || py > innerH) return;
+      const nearest = findNearestPeakAt(px);
+      if (nearest) onPeakClick(nearest);
+    };
     svgEl.addEventListener("mousemove", onMove);
     svgEl.addEventListener("mouseleave", onLeave);
     svgEl.addEventListener("dblclick", onDblClick);
+    svgEl.addEventListener("click", onClick);
 
     // Wheel zoom. Cursor region picks the axis:
     //   * over the Y-axis gutter  -> zoom Y around cursor Y.
@@ -892,6 +926,7 @@ export function SpectrumChart({
       svgEl.removeEventListener("mousemove", onMove);
       svgEl.removeEventListener("mouseleave", onLeave);
       svgEl.removeEventListener("dblclick", onDblClick);
+      svgEl.removeEventListener("click", onClick);
       if (tooltipRaf) cancelAnimationFrame(tooltipRaf);
       applyZoomRef.current = null;
     };
@@ -907,8 +942,12 @@ export function SpectrumChart({
     annotationGuidesMz,
     envelopeOverlay,
     highlightPeak,
+    peakLabels,
+    selectedPeak,
+    onPeakClick,
     yPercentBase,
     yIntensityScale,
+    safeYHeadroomRatio,
     globalBPI,
     useGlobalRA,
     useLocalPercentPanel,
@@ -975,6 +1014,11 @@ export function SpectrumChart({
               {useGlobalRA && (
                 <div className="font-mono text-muted-foreground">
                   RA {((tooltip.peak.intensity / globalBPI) * 100).toFixed(2)}%
+                </div>
+              )}
+              {typeof tooltip.peak.relativeIntensity === "number" && Number.isFinite(tooltip.peak.relativeIntensity) && (
+                <div className="font-mono text-muted-foreground">
+                  relative {tooltip.peak.relativeIntensity.toFixed(1)}%
                 </div>
               )}
               {tooltip.peak.ion && (
