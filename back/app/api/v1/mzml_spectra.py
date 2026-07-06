@@ -153,7 +153,9 @@ def mzml_spectrum(
 
 
 @router.get(
-    "/datasets/{dataset_id}/runs/{run_id}/chromatogram",
+    # ``:int`` converters keep this numeric-only so slug requests (e.g. ``dia-shuju``)
+    # fall through to the Bottom-Up ``/datasets/{slug}/.../chromatogram`` route.
+    "/datasets/{dataset_id:int}/runs/{run_id:int}/chromatogram",
     response_model=BuChromatogramOut,
 )
 def mzml_run_chromatogram(
