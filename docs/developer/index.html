@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Viewer开发者文档导航</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --surface-soft: #eef4f8;
+      --text: #18212f;
+      --muted: #5f6b7a;
+      --line: #dce4ee;
+      --accent: #0f6b7c;
+      --accent-strong: #0a4e5d;
+      --warning-bg: #fff7e8;
+      --warning-line: #efc36d;
+      --shadow: 0 14px 34px rgba(22, 34, 51, 0.08);
+      --radius: 8px;
+      --mono: Consolas, "SFMono-Regular", "Liberation Mono", Menlo, monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      line-height: 1.65;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus {
+      color: var(--accent-strong);
+      text-decoration: underline;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .hero {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, #ffffff 0%, #edf7f9 100%);
+      box-shadow: var(--shadow);
+      padding: clamp(24px, 4vw, 44px);
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: clamp(30px, 5vw, 48px);
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 760px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .section {
+      margin-top: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 22px;
+    }
+
+    .section h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc-grid a {
+      display: block;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-soft);
+      padding: 10px 12px;
+      color: var(--text);
+    }
+
+    .toc-grid a:hover,
+    .toc-grid a:focus {
+      border-color: var(--accent);
+      text-decoration: none;
+    }
+
+    .toc-grid span {
+      display: block;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .reading-order {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    .reading-order li + li {
+      margin-top: 6px;
+    }
+
+    code,
+    .file-name {
+      font-family: var(--mono);
+      font-size: 0.95em;
+    }
+
+    .notice {
+      background: var(--warning-bg);
+      border-color: var(--warning-line);
+    }
+
+    .notice ul {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .doc-card {
+      display: flex;
+      min-height: 100%;
+      flex-direction: column;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 20px;
+    }
+
+    .doc-card h2 {
+      margin: 0;
+      font-size: 21px;
+      letter-spacing: 0;
+    }
+
+    .file-name {
+      margin: 4px 0 14px;
+      color: var(--muted);
+    }
+
+    .doc-card p {
+      margin: 0 0 10px;
+    }
+
+    .doc-card strong {
+      color: var(--text);
+    }
+
+    .doc-card .open-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      align-self: flex-start;
+      margin-top: auto;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #ffffff;
+      font-weight: 650;
+      padding: 9px 14px;
+    }
+
+    .doc-card .open-link:hover,
+    .doc-card .open-link:focus {
+      background: var(--accent-strong);
+      color: #ffffff;
+      text-decoration: none;
+    }
+
+    .footer {
+      margin-top: 28px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 14px;
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        width: min(100% - 20px, 1180px);
+        padding-top: 18px;
+      }
+
+      .section,
+      .doc-card,
+      .hero {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="top" class="page">
+    <header class="hero">
+      <h1>Viewer开发者文档导航</h1>
+      <p>这是一个开发者文档索引页，用于帮助开发者快速了解每份文档的职责、阅读场景和入口链接。页面可直接在浏览器中打开，所有文档链接都使用同目录相对路径。</p>
+    </header>
+
+    <section class="section" aria-labelledby="toc-title">
+      <h2 id="toc-title">文档目录</h2>
+      <ul class="toc-grid">
+        <li><a href="#readme">开发者文档索引<span>README.md</span></a></li>
+        <li><a href="#project-overview">项目总览<span>ProjectOverview.md</span></a></li>
+        <li><a href="#ui">UI模块<span>UI.md</span></a></li>
+        <li><a href="#visualization">可视化模块<span>Visualization.md</span></a></li>
+        <li><a href="#import">导入模块<span>Import.md</span></a></li>
+        <li><a href="#import-middleware">导入中间层<span>ImportMiddleware.md</span></a></li>
+        <li><a href="#bottom-up">BottomUp模块<span>BottomUp.md</span></a></li>
+        <li><a href="#top-down">TopDown模块<span>TopDown.md</span></a></li>
+        <li><a href="#raw-file">RAW文件模块<span>RawFile.md</span></a></li>
+        <li><a href="#backend-api">后端API模块<span>BackendAPI.md</span></a></li>
+        <li><a href="#data-model-storage">数据模型和存储<span>DataModelStorage.md</span></a></li>
+        <li><a href="#spectrum-data-access">谱图数据访问<span>SpectrumDataAccess.md</span></a></li>
+        <li><a href="#derived-data-index">派生数据和索引<span>DerivedDataIndex.md</span></a></li>
+        <li><a href="#binary-format">二进制和侧车格式<span>BinaryFormat.md</span></a></li>
+        <li><a href="#config-deployment">配置和启动<span>ConfigAndDeployment.md</span></a></li>
+        <li><a href="#testing">测试模块<span>Testing.md</span></a></li>
+      </ul>
+    </section>
+
+    <section class="section" aria-labelledby="reading-title">
+      <h2 id="reading-title">推荐阅读顺序</h2>
+      <ol class="reading-order">
+        <li><code>ProjectOverview.md</code></li>
+        <li><code>DataModelStorage.md</code></li>
+        <li><code>BackendAPI.md</code></li>
+        <li><code>Import.md</code> 和 <code>ImportMiddleware.md</code></li>
+        <li><code>SpectrumDataAccess.md</code> 和 <code>DerivedDataIndex.md</code></li>
+        <li><code>BottomUp.md</code> 或 <code>TopDown.md</code></li>
+        <li><code>Visualization.md</code></li>
+        <li><code>RawFile.md</code>、<code>BinaryFormat.md</code>、<code>ConfigAndDeployment.md</code>、<code>Testing.md</code></li>
+      </ol>
+    </section>
+
+    <section class="section notice" aria-labelledby="status-title">
+      <h2 id="status-title">实现状态提醒</h2>
+      <ul>
+        <li>这些文档反映当前源码状态，不是产品能力承诺。</li>
+        <li>当前未找到 MGF 导入实现。</li>
+        <li>当前未找到 ZIP 上传入口实现，旧文档中可能存在历史描述。</li>
+        <li>当前 RAW 路径主要确认 Thermo RAW 转换，不应写成所有厂商 RAW 都支持。</li>
+        <li>RAW 不直接读取，当前流程是先转换为 uncompressed indexed mzML 再读取。</li>
+        <li><code>.viewer-derived</code> 是磁盘派生目录，不是数据库表。</li>
+        <li>PFMB annotation 和 live mzML MS2 不是同一种数据源。</li>
+        <li>当前未找到 Docker 和生产部署说明。</li>
+        <li>当前未找到统一错误码注册表。</li>
+      </ul>
+    </section>
+
+    <div class="doc-grid" aria-label="开发者文档卡片">
+      <section id="readme" class="doc-card">
+        <h2>开发者文档索引</h2>
+        <p class="file-name">README.md</p>
+        <p><strong>适合阅读者：</strong>所有开发者。</p>
+        <p><strong>主要内容：</strong>文档目录、阅读顺序、实现状态警戒表、术语速查。</p>
+        <p><strong>建议先读：</strong>无。</p>
+        <p><strong>后续阅读：</strong>ProjectOverview.md。</p>
+        <a class="open-link" href="README.md">打开文档</a>
+      </section>
+
+      <section id="project-overview" class="doc-card">
+        <h2>项目总览</h2>
+        <p class="file-name">ProjectOverview.md</p>
+        <p><strong>适合阅读者：</strong>第一次接手项目的人。</p>
+        <p><strong>主要内容：</strong>Viewer整体定位、React前端、FastAPI后端、PostgreSQL、mzML、PFMB、TopDown、BottomUp、spectra-only三类模式和磁盘文件边界。</p>
+        <p><strong>建议先读：</strong>README.md。</p>
+        <p><strong>后续阅读：</strong>DataModelStorage.md、BackendAPI.md。</p>
+        <a class="open-link" href="ProjectOverview.md">打开文档</a>
+      </section>
+
+      <section id="ui" class="doc-card">
+        <h2>UI模块</h2>
+        <p class="file-name">UI.md</p>
+        <p><strong>适合阅读者：</strong>前端开发者。</p>
+        <p><strong>主要内容：</strong>React、Vite、TypeScript、React Router、TanStack Query（React Query）、axios、Tailwind CSS、Radix、lucide-react、路由、布局和状态组件。</p>
+        <p><strong>建议先读：</strong>ProjectOverview.md、BackendAPI.md。</p>
+        <p><strong>后续阅读：</strong>Visualization.md、BackendAPI.md。</p>
+        <a class="open-link" href="UI.md">打开文档</a>
+      </section>
+
+      <section id="visualization" class="doc-card">
+        <h2>可视化模块</h2>
+        <p class="file-name">Visualization.md</p>
+        <p><strong>适合阅读者：</strong>负责图表、谱图和交互的开发者。</p>
+        <p><strong>主要内容：</strong>谱图、XIC、chromatogram、PFMB heatmap、sequence coverage、LCMS 3D、D3、SVG、Three.js和WebGL。</p>
+        <p><strong>建议先读：</strong>UI.md、SpectrumDataAccess.md。</p>
+        <p><strong>后续阅读：</strong>BottomUp.md、TopDown.md、BinaryFormat.md。</p>
+        <a class="open-link" href="Visualization.md">打开文档</a>
+      </section>
+
+      <section id="import" class="doc-card">
+        <h2>导入模块</h2>
+        <p class="file-name">Import.md</p>
+        <p><strong>适合阅读者：</strong>负责数据导入流程的后端开发者。</p>
+        <p><strong>主要内容：</strong>path-based import、source_path、FastAPI入口、Pydantic schema、threading job、pyarrow parquet、planner、adapter、DB写入和导入后派生数据。</p>
+        <p><strong>建议先读：</strong>ProjectOverview.md、DataModelStorage.md。</p>
+        <p><strong>后续阅读：</strong>ImportMiddleware.md、DataModelStorage.md、DerivedDataIndex.md。</p>
+        <a class="open-link" href="Import.md">打开文档</a>
+      </section>
+
+      <section id="import-middleware" class="doc-card">
+        <h2>导入中间层</h2>
+        <p class="file-name">ImportMiddleware.md</p>
+        <p><strong>适合阅读者：</strong>需要新增输入格式或调整导入判断逻辑的开发者。</p>
+        <p><strong>主要内容：</strong>resolver、planner、detectors、adapter、raw_conversion、pfmb、mzml_mapping组成的文档概念层。</p>
+        <p><strong>建议先读：</strong>Import.md。</p>
+        <p><strong>后续阅读：</strong>Import.md、RawFile.md、BottomUp.md、TopDown.md。</p>
+        <a class="open-link" href="ImportMiddleware.md">打开文档</a>
+      </section>
+
+      <section id="bottom-up" class="doc-card">
+        <h2>BottomUp模块</h2>
+        <p class="file-name">BottomUp.md</p>
+        <p><strong>适合阅读者：</strong>负责BU数据、BU证据页和PFMB相关功能的开发者。</p>
+        <p><strong>主要内容：</strong>DIA-NN parquet导入、pyarrow流式读取、BU列表、match详情页、MS1、MS2、precursor XIC、product ion XIC、PFMB和fragment matching。</p>
+        <p><strong>建议先读：</strong>Import.md、SpectrumDataAccess.md。</p>
+        <p><strong>后续阅读：</strong>Visualization.md、BinaryFormat.md、SpectrumDataAccess.md。</p>
+        <a class="open-link" href="BottomUp.md">打开文档</a>
+      </section>
+
+      <section id="top-down" class="doc-card">
+        <h2>TopDown模块</h2>
+        <p class="file-name">TopDown.md</p>
+        <p><strong>适合阅读者：</strong>负责TD数据、PrSM详情页和TD谱图证据的开发者。</p>
+        <p><strong>主要内容：</strong>TopPIC、PrSM bundle、protein、proteoform、PrSM、cutoff兼容层、TopFD JS spectra和mzML scan两条谱图路径。</p>
+        <p><strong>建议先读：</strong>ProjectOverview.md、DataModelStorage.md。</p>
+        <p><strong>后续阅读：</strong>SpectrumDataAccess.md、Visualization.md。</p>
+        <a class="open-link" href="TopDown.md">打开文档</a>
+      </section>
+
+      <section id="raw-file" class="doc-card">
+        <h2>RAW文件模块</h2>
+        <p class="file-name">RawFile.md</p>
+        <p><strong>适合阅读者：</strong>负责RAW转换、RAW导入和mzML读取链路的开发者。</p>
+        <p><strong>主要内容：</strong>Thermo RAW发现、ThermoRawFileParser、same-stem mzML复用、indexed mzML校验、RAW-only和mzML-only导入。</p>
+        <p><strong>建议先读：</strong>Import.md、ImportMiddleware.md。</p>
+        <p><strong>后续阅读：</strong>Import.md、SpectrumDataAccess.md。</p>
+        <a class="open-link" href="RawFile.md">打开文档</a>
+      </section>
+
+      <section id="backend-api" class="doc-card">
+        <h2>后端API模块</h2>
+        <p class="file-name">BackendAPI.md</p>
+        <p><strong>适合阅读者：</strong>负责后端接口或前后端联调的开发者。</p>
+        <p><strong>主要内容：</strong>FastAPI、Pydantic、SQLAlchemy Session、<code>api\v1</code>路由注册、依赖注入、分页结构、HTTPException和前端错误解析。</p>
+        <p><strong>建议先读：</strong>ProjectOverview.md。</p>
+        <p><strong>后续阅读：</strong>DataModelStorage.md、UI.md。</p>
+        <a class="open-link" href="BackendAPI.md">打开文档</a>
+      </section>
+
+      <section id="data-model-storage" class="doc-card">
+        <h2>数据模型和存储</h2>
+        <p class="file-name">DataModelStorage.md</p>
+        <p><strong>适合阅读者：</strong>需要理解数据库表和磁盘文件映射的开发者。</p>
+        <p><strong>主要内容：</strong>PostgreSQL、JSONB、SQLAlchemy text、universal schema、datasets、runs、identification_matches、metadata和磁盘文件路径映射。</p>
+        <p><strong>建议先读：</strong>ProjectOverview.md。</p>
+        <p><strong>后续阅读：</strong>DerivedDataIndex.md、Import.md。</p>
+        <a class="open-link" href="DataModelStorage.md">打开文档</a>
+      </section>
+
+      <section id="spectrum-data-access" class="doc-card">
+        <h2>谱图数据访问</h2>
+        <p class="file-name">SpectrumDataAccess.md</p>
+        <p><strong>适合阅读者：</strong>负责MS1、MS2、XIC、scan定位和谱图读取性能的开发者。</p>
+        <p><strong>主要内容：</strong>pyteomics、PreIndexedMzML、indexed mzML单谱读取、NumPy scan index、RT范围查询、旧memory/cache路径和gzip限制。</p>
+        <p><strong>建议先读：</strong>DataModelStorage.md、DerivedDataIndex.md。</p>
+        <p><strong>后续阅读：</strong>DerivedDataIndex.md、Visualization.md。</p>
+        <a class="open-link" href="SpectrumDataAccess.md">打开文档</a>
+      </section>
+
+      <section id="derived-data-index" class="doc-card">
+        <h2>派生数据和索引</h2>
+        <p class="file-name">DerivedDataIndex.md</p>
+        <p><strong>适合阅读者：</strong>负责导入后索引生成、回填和查询性能的开发者。</p>
+        <p><strong>主要内容：</strong>pyteomics、NumPy、scan index、chromatogram summary、<code>.viewer-derived</code>、<code>.npz</code>加<code>.json</code>、stale判断、post-import和backfill。</p>
+        <p><strong>建议先读：</strong>SpectrumDataAccess.md、DataModelStorage.md。</p>
+        <p><strong>后续阅读：</strong>SpectrumDataAccess.md、DataModelStorage.md。</p>
+        <a class="open-link" href="DerivedDataIndex.md">打开文档</a>
+      </section>
+
+      <section id="binary-format" class="doc-card">
+        <h2>二进制和侧车格式</h2>
+        <p class="file-name">BinaryFormat.md</p>
+        <p><strong>适合阅读者：</strong>负责PFMB、fragment match预计算结果或二进制侧车读取的开发者。</p>
+        <p><strong>主要内容：</strong>PFMB v3、PFM2 records、index.json、schema v2 sidecar metadata、DB baked metadata、runtime读取和<code>.npz</code>派生索引。</p>
+        <p><strong>建议先读：</strong>BottomUp.md、DerivedDataIndex.md。</p>
+        <p><strong>后续阅读：</strong>BottomUp.md、Visualization.md。</p>
+        <a class="open-link" href="BinaryFormat.md">打开文档</a>
+      </section>
+
+      <section id="config-deployment" class="doc-card">
+        <h2>配置和启动</h2>
+        <p class="file-name">ConfigAndDeployment.md</p>
+        <p><strong>适合阅读者：</strong>需要本地启动项目或检查配置项的开发者。</p>
+        <p><strong>主要内容：</strong>pydantic-settings、BaseSettings、后端 settings、环境变量、Vite proxy、启动脚本、依赖文件和当前部署说明缺口。</p>
+        <p><strong>建议先读：</strong>ProjectOverview.md。</p>
+        <p><strong>后续阅读：</strong>Testing.md。</p>
+        <a class="open-link" href="ConfigAndDeployment.md">打开文档</a>
+      </section>
+
+      <section id="testing" class="doc-card">
+        <h2>测试模块</h2>
+        <p class="file-name">Testing.md</p>
+        <p><strong>适合阅读者：</strong>准备验证改动、补测试或做回归检查的开发者。</p>
+        <p><strong>主要内容：</strong>后端 pytest、monkeypatch、前端 Playwright、route mock、cs能力测验、测试分层和重要测试入口。</p>
+        <p><strong>建议先读：</strong>对应业务模块文档。</p>
+        <p><strong>后续阅读：</strong>对应业务模块文档。</p>
+        <a class="open-link" href="Testing.md">打开文档</a>
+      </section>
+    </div>
+
+    <p class="footer"><a href="#top">回到顶部</a></p>
+  </main>
+</body>
+</html>

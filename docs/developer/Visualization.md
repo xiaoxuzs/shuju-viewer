@@ -1,0 +1,210 @@
+# Visualization
+
+## 1.模块定位
+
+Visualization 模块负责把后端返回的谱图、XIC、chromatogram、PFMB annotation、sequence coverage 和 LCMS 3D 数据渲染成可交互视图。当前主图表实现基于 D3/SVG 和 Three.js/WebGL。
+
+## 2.核心职责
+
+* 渲染 TopDown PrSM 谱图、fragmentation 和 sequence view。
+* 渲染 BU MS1/MS2、precursor XIC、product ion XIC、chromatogram、RT-mz heatmap 和 PFMB heatmap。
+* 支持 hover、click、zoom、fullscreen、peak label、fragment annotation 等交互。
+* 区分 live mzML MS2 与 PFMB annotation 两类证据来源。
+* 复用通用图表交互组件，避免每个业务页重复实现缩放和 tooltip。
+
+## 3.关键目录和文件
+
+* `front\src\features\prsm\SpectrumChart.tsx`：TD 谱图图表，使用 D3/SVG，支持 peak label、brush/wheel zoom、hover、click、fullscreen。
+* `front\src\features\prsm\FragmentationView.tsx`：TD fragmentation/ladder/error 视图。
+* `front\src\features\prsm\SequenceView.tsx`：TD sequence coverage 和 cleavage 视图。
+* `front\src\features\prsm\MatchedPeaksTable.tsx`：TD matched peaks 表格。
+* `front\src\features\prsm\SpectrumModal.tsx`：谱图全屏弹层。
+* `front\src\features\bu\components\spectrum\BuInteractivePlot.tsx`：BU 通用交互图，供 XIC 和 chromatogram 复用。
+* `front\src\features\bu\components\spectrum\BuSpectrumChart.tsx`：BU MS1/MS2 谱图和 live fragment annotation。
+* `front\src\features\bu\components\spectrum\BuXicChart.tsx`：precursor XIC 图。
+* `front\src\features\bu\components\spectrum\BuProductIonXicChart.tsx`：product ion XIC 图。
+* `front\src\features\bu\components\spectrum\BuChromatogramChart.tsx`：TIC/BPC chromatogram 图。
+* `front\src\features\bu\components\match-detail\BuPfmbHeatmap.tsx`：PFMB RT slot 与 fragment intensity heatmap。
+* `front\src\features\bu\components\sequence\SequenceCoverage.tsx`：BU 蛋白序列覆盖。
+* `front\src\features\lcms3d\ThreeLcmsScene.tsx`：Three.js LCMS 3D 场景。
+
+## 4.核心数据流
+
+1. 页面通过 API client 请求谱图、XIC、chromatogram 或 PFMB matrix。
+2. 后端返回 mz/intensity、RT/intensity、matched ions、PFMB slots 或 coverage DTO。
+3. 前端 view model 或 parser 将 DTO 归一化为 chart peaks、traces、heatmap cells 或 sequence segments。
+4. D3/SVG 组件处理坐标、brush、wheel、tooltip、label 和 click。
+5. Three.js 组件处理 3D 场景、相机控制和 WebGL 渲染。
+
+## 5.渲染技术细节
+
+二维谱图、XIC 和 chromatogram 的主路径是 React 组件内用 D3 操作 SVG，包括 `brushX`、wheel、mousemove、click 和 dblclick 等交互；当前未确认 Canvas 是二维主图表实现。LCMS 3D 使用 Three.js 的 `WebGLRenderer`、`OrbitControls`、`BufferGeometry` 和 `CanvasTexture`。PFMB heatmap 使用 PFMB annotation matrix 或相关后端接口返回的数据，不等同于 live mzML MS2。
+
+## 6.关键API或关键组件
+
+* TD：`SpectrumChart`、`FragmentationView`、`SequenceView`、`MatchedPeakSpectrumPanel`。
+* BU：`BuSpectrumChart`、`BuInteractivePlot`、`BuXicChart`、`BuProductIonXicChart`、`BuChromatogramChart`、`BuPfmbHeatmap`。
+* spectra-only：`SpectraOnlyPage` 下的 `SpectrumPanel`、`ChromatogramPanel`、`ScanListPanel`。
+* LCMS 3D：`ThreeLcmsScene`、`Lcms3DPanel`。
+* 后端数据来源：mzML spectra API、BU match spectrum API、XIC API、PFMB annotation API、chromatogram API。
+
+## 7.和其他模块的关系
+
+Visualization 依赖 UI 负责页面挂载，依赖 BackendAPI 提供数据接口，依赖 BottomUp、TopDown、SpectrumDataAccess、DerivedDataIndex 和 BinaryFormat 提供具体数据。它不负责导入、索引生成或数据库查询。
+
+参见：`BottomUp.md`、`TopDown.md`、`BinaryFormat.md`。
+
+## 8.扩展和维护建议
+
+新增二维图表时优先复用 `BuInteractivePlot` 或既有 `SpectrumChart` 的交互模式。新增 PFMB 可视化时必须先明确数据来自 PFMB sidecar 还是 live mzML。新增 3D 视图应放在 `front\src\features\lcms3d`，并保持数据获取和渲染分离。
+
+## 9.当前限制和注意事项
+
+* 当前未找到 Plotly 或 ECharts 作为主图表库。
+* PFMB annotation 是预计算 fragment match sidecar；live mzML MS2 是从原始 mzML scan 读取并实时匹配的证据，两者不能写成等价数据源。
+* PFMB 中的峰语义和 mzML 原始峰语义不同，不能用 mzML 峰数直接推断 PFMB 未匹配峰。
+* RT-mz 当前主要在 BU overview 中作为小型 heatmap 展示，未找到独立大型 RT-mz 页面。
+* 大数据性能依赖后端 scan index、chromatogram summary、PFMB matrix 和前端抽样/降采样，不能把所有谱峰全量渲染当作默认路径。
+## 10.可复用入口
+
+TD 图表和 parser：
+
+* `front\src\features\prsm\SpectrumChart.tsx::SpectrumChart`
+* `front\src\features\prsm\FragmentationView.tsx::FragmentationView`
+* `front\src\features\prsm\SequenceView.tsx::SequenceView`
+* `front\src\features\prsm\MatchedPeaksTable.tsx::MatchedPeaksTable`
+* `front\src\features\prsm\MatchedPeakSpectrumPanel.tsx::MatchedPeakSpectrumPanel`
+* `front\src\features\prsm\SpectrumModal.tsx::SpectrumModal`
+* `front\src\features\prsm\parse.ts::parseMsPeaks`
+* `front\src\features\prsm\parse.ts::parseRawSpectrum`
+* `front\src\features\prsm\parse.ts::findMatchedEnvelope`
+* `front\src\features\prsm\parse.ts::splitDataForDetail`
+
+BU 图表：
+
+* `front\src\features\bu\components\spectrum\BuInteractivePlot.tsx::BuInteractivePlot`
+* `front\src\features\bu\components\spectrum\BuSpectrumChart.tsx::BuSpectrumChart`
+* `front\src\features\bu\components\spectrum\BuXicChart.tsx::BuXicChart`
+* `front\src\features\bu\components\spectrum\BuProductIonXicChart.tsx::BuProductIonXicChart`
+* `front\src\features\bu\components\spectrum\BuChromatogramChart.tsx::BuChromatogramChart`
+* `front\src\features\bu\components\match-detail\BuPfmbHeatmap.tsx::BuPfmbHeatmap`
+* `front\src\features\bu\components\spectrum\BuPfmbSpectrumChart.tsx::BuPfmbSpectrumChart`
+* `front\src\features\bu\components\spectrum\MzMobilityScatter.tsx::MzMobilityScatter`
+* `front\src\features\bu\components\spectrum\DiaWindowMap.tsx::DiaWindowMap`
+
+3D：
+
+* `front\src\features\lcms3d\Lcms3DPanel.tsx::Lcms3DPanel`
+* `front\src\features\lcms3d\ThreeLcmsScene.tsx::ThreeLcmsScene`
+* `front\src\features\lcms3d\types.ts::Peak`
+
+## 11.调用链
+
+TD PrSM detail 图表：
+
+1. `front\src\pages\PrsmDetailPage.tsx` 调用 `front\src\api\client.ts::fetchPrsm`。
+2. `front\src\features\prsm\parse.ts::splitDataForDetail` 分离 `PrsmDetailOut`。
+3. `parseMsPeaks` 解析 matched peaks。
+4. `parseRawSpectrum` 解析 MS1/MS2 raw spectrum。
+5. `SpectrumChart`、`FragmentationView`、`SequenceView`、`MatchedPeaksTable` 和 `MatchedPeakSpectrumPanel` 渲染 TD 详情。
+
+BU evidence 图表：
+
+1. `front\src\features\bu\pages\BuMatchDetailPage.tsx::BuMatchDetailPage` 通过 `buClient.ts` 拉取 match、MS1、MS2、XIC、product XIC 和 PFMB annotation。
+2. `BuXicChart`、`BuSpectrumChart`、`BuProductIonXicCard` 和 `BuPfmbHeatmap` 分别渲染对应证据。
+3. PFMB overlay 通过 `front\src\features\bu\components\spectrum\pfmbSpectrumOverlay.ts::buildPfmbSpectrumOverlay` 转换后传入 `BuSpectrumChart`。
+
+spectra-only 图表：
+
+1. `SpectraOnlyPage` 调用 `fetchSpectraFullScanIndex`。
+2. `SpectrumPanel` 调用 `fetchSpectraSpectrum` 渲染单谱。
+3. `ChromatogramPanel` 调用 `fetchSpectraChromatogram` 渲染 TIC/BPC。
+4. scan 关系由 `front\src\features\spectra-only\utils\scanRelations.ts` 基于完整 scan index 计算。
+
+LCMS3D：
+
+1. `PrsmDetailPage` 把谱峰数据传给 `Lcms3DPanel`。
+2. `Lcms3DPanel` 清洗 `Peak[]` 后传给 `ThreeLcmsScene`。
+3. `ThreeLcmsScene` 负责 Three.js scene、camera、renderer、controls 和资源释放。
+
+## 12.新增功能接入方式
+
+新增 BU 二维图：
+
+1. 优先复用 `BuInteractivePlot`，保持 zoom、brush、tooltip 行为一致。
+2. 图表样式复用 `front\src\features\bu\components\spectrum\chartTheme.ts::BU_CHART`、`DEFAULT_ZOOM`、`formatIntensity`。
+3. 常用尺度和格式化 helper 优先复用 `front\src\features\bu\components\spectrum\chartUtils.ts`。
+
+新增 BU 谱图：
+
+1. 优先复用 `BuSpectrumChart` 的 `BuSpectrumV1` 数据结构。
+2. live annotation 和 PFMB annotation 不混成同一来源；PFMB overlay 先走 `buildPfmbSpectrumOverlay`。
+3. product ion 选择优先复用 `front\src\features\bu\components\match-detail\productIonSelection.ts` 和 `productIonBatch.ts`。
+
+新增 TD 谱图：
+
+1. 先确认数据能进入 `parseMsPeaks` 或 `parseRawSpectrum`。
+2. 优先复用 `SpectrumChart` 和 `MatchedPeakSpectrumPanel`。
+3. 不要复制 `PrsmDetailPage` 内的解析链路到新页面。
+
+新增 PFMB 可视化：
+
+1. 先确认数据来自 `ms2_annotation_svc.py::get_annotation_matrix` 还是 live mzML MS2。
+2. matrix 类视图优先复用 `BuPfmbHeatmap`。
+3. 单谱 overlay 优先复用 `buildPfmbSpectrumOverlay` 和 `BuSpectrumChart`。
+
+新增 LCMS3D 能力：
+
+1. 通过 `Lcms3DPanel` 或 `ThreeLcmsScene` 接入。
+2. 不要在 Three.js 组件里直接拉后端数据。
+3. 修改 `ThreeLcmsScene` 时保持 `disposeObject`、renderer dispose 和 controls dispose 的清理逻辑。
+
+## 13.内部实现边界
+
+以下为内部实现或局部图表 helper，不建议跨模块直接调用：
+
+* `front\src\features\lcms3d\ThreeLcmsScene.tsx::computeMzRange`、`computeIntensityMax`、`makeStickPlot`、`makeAxes`、`makeTextSprite`、`viridis`、`makeTickValues`、`formatTick`、`scale`、`disposeObject`。
+* `front\src\features\bu\components\spectrum\spectrumLabelLayout.ts::layoutSpectrumLabels` 是 BU spectrum label 布局 helper，跨模块复用前应确认 label 模型一致。
+* `front\src\features\bu\components\spectrum\chartTheme.ts`、`chartUtils.ts` 是 BU 图表局部工具，不是全项目 chart framework。
+* `front\src\features\bu\components\spectrum\pfmbSpectrumOverlay.ts::buildPfmbSpectrumOverlay` 只服务 PFMB annotation 到 BU spectrum overlay 的映射。
+* `front\src\features\prsm\SpectrumChart.tsx::downsampleForRender`、`lowerBound`、`colorFor` 是 `SpectrumChart` 内部 helper。
+* `front\src\features\prsm\FragmentationView.tsx::calibrateOffset`、`LadderRow` 是 `FragmentationView` 内部实现。
+
+## 14.不要绕过的层
+
+* 不要直接在页面里复制一套 D3 坐标轴、brush 和 zoom 逻辑；BU 二维图优先用 `BuInteractivePlot`。
+* 不要把 PFMB annotation 当作 live mzML MS2；PFMB 数据来自 annotation sidecar/matrix，live MS2 来自谱图 API。
+* 不要把 `chartTheme.ts`、`chartUtils.ts`、`spectrumLabelLayout.ts` 当成跨模块公开 API。
+* 不要在 `ThreeLcmsScene` 中直接调用后端 client；数据应由页面或 panel 传入。
+* 不要用 scan index 代替谱峰数组；scan index 只提供 scan metadata。
+
+## 15.常见修改场景
+
+调整 BU XIC 图：
+
+1. 数据入口先看 `front\src\features\bu\api\buClient.ts::fetchBuMatchXic` 或 `fetchBuMatchProductXics`。
+2. 视图优先改 `BuXicChart`、`BuProductIonXicChart` 或 `BuProductIonXicCard`。
+3. 状态文案优先复用 `PlotStatus` 和 `parseApiError`。
+
+调整 TD PrSM detail 图：
+
+1. DTO 来自 `front\src\api\types.ts::PrsmDetailOut`。
+2. 解析逻辑优先改 `front\src\features\prsm\parse.ts`。
+3. 视图分别落到 `SpectrumChart`、`FragmentationView`、`SequenceView`、`MatchedPeaksTable`。
+
+新增 3D 展示：
+
+1. 数据转换放在调用方或 `Lcms3DPanel`。
+2. `ThreeLcmsScene` 只处理 Three.js 渲染。
+3. 检查资源清理，不把 renderer、geometry、material 留在未释放状态。
+
+## 16.相关测试
+
+本节列出开发时应参考或补充的测试入口；当前任务不运行这些测试。
+
+* BU match detail 图表：`front\tests\bu-match-detail.spec.ts`。
+* BU PFMB 可视化：`front\tests\bu-pfmb-visuals.spec.ts`、`front\tests\bu-pfmb-annotation.spec.ts`、`front\tests\bu-pfmb-quality.spec.ts`。
+* BU RT linkage：`front\tests\bu-rt-linkage.spec.ts`。
+* BU overview chart state：`front\tests\bu-overview-chart-states.spec.ts`。
+* BU spectrum label layout：`front\tests\bu-spectrum-label-layout.spec.ts`。
+* spectra-only 图表和关系：`front\tests\spectra-only-scan-relations.spec.ts`、`front\tests\spectra-only-peak-annotations.spec.ts`。

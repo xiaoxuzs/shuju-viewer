@@ -1,0 +1,154 @@
+{
+  "generated_at": "2026-07-07T06:03:01.755Z",
+  "frontend_url": "http://127.0.0.1:5173",
+  "api_base": "http://127.0.0.1:8000/api/v1",
+  "discovery": {
+    "dataset_count": 4,
+    "spectra_dataset": {
+      "id": 13,
+      "slug": "raw",
+      "run_id": 15
+    },
+    "bottom_up_dataset": {
+      "id": 11,
+      "slug": "dia-shuju",
+      "run_id": 13,
+      "has_ms2_pfmb": true
+    },
+    "bottom_up_match": {
+      "id": 880232,
+      "run_id": 13,
+      "sequence": "AAAAASAAGPGGLVAGK"
+    }
+  },
+  "screenshots": [
+    {
+      "generated_at": "2026-07-07T06:03:09.144Z",
+      "file": "home-or-dataset-list.png",
+      "module": "数据集列表模块",
+      "success": true,
+      "route": "/datasets",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:10.912Z",
+      "file": "raw-or-mzml-import.png",
+      "module": "RAW或mzML导入模块",
+      "success": true,
+      "route": "/datasets",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:14.131Z",
+      "file": "dataset-detail.png",
+      "module": "数据集详情模块",
+      "success": true,
+      "route": "/datasets/raw",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:16.805Z",
+      "file": "spectra-only-page.png",
+      "module": "spectra-only谱图浏览模块",
+      "success": true,
+      "route": "/datasets/raw",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:20.246Z",
+      "file": "chromatogram-page.png",
+      "module": "chromatogram模块",
+      "success": true,
+      "route": "/datasets/raw",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:23.160Z",
+      "file": "ms1-spectrum.png",
+      "module": "MS1谱图模块",
+      "success": true,
+      "route": "/datasets/raw",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:27.263Z",
+      "file": "ms2-spectrum.png",
+      "module": "MS2谱图模块",
+      "success": true,
+      "route": "/datasets/raw",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:29.905Z",
+      "file": "bu-overview.png",
+      "module": "BU Overview模块",
+      "success": true,
+      "route": "/datasets/dia-shuju",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:32.359Z",
+      "file": "bu-protein-or-peptide-list.png",
+      "module": "BU蛋白或肽段列表模块",
+      "success": true,
+      "route": "/datasets/dia-shuju/proteins",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:43.931Z",
+      "file": "bu-match-detail.png",
+      "module": "BU Match Detail模块",
+      "success": true,
+      "route": "/datasets/dia-shuju/matches/880232",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:03:57.407Z",
+      "file": "evidence-summary.png",
+      "module": "Evidence Summary模块",
+      "success": true,
+      "route": "/datasets/dia-shuju/matches/880232",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:04:10.834Z",
+      "file": "precursor-xic.png",
+      "module": "Precursor XIC模块",
+      "success": true,
+      "route": "/datasets/dia-shuju/matches/880232",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:04:23.638Z",
+      "file": "ms2-fragment-evidence.png",
+      "module": "MS2 Fragment Evidence模块",
+      "success": true,
+      "route": "/datasets/dia-shuju/matches/880232",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:04:37.167Z",
+      "file": "product-ion-xic.png",
+      "module": "Product ion XIC模块",
+      "success": true,
+      "route": "/datasets/dia-shuju/matches/880232",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:04:48.652Z",
+      "file": "fragment-table.png",
+      "module": "Fragment table模块",
+      "success": true,
+      "route": "/datasets/dia-shuju/matches/880232",
+      "reason": null
+    },
+    {
+      "generated_at": "2026-07-07T06:05:01.654Z",
+      "file": "pfmb-heatmap.png",
+      "module": "PFMB Heatmap模块",
+      "success": true,
+      "route": "/datasets/dia-shuju/matches/880232",
+      "reason": null
+    }
+  ]
+}

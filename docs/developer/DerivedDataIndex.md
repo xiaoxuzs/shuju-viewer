@@ -1,0 +1,215 @@
+# DerivedDataIndex
+
+## 1.模块定位
+
+DerivedDataIndex 模块负责从 mzML 源文件生成轻量派生索引，并在 API 和业务服务中读取这些索引。当前主要派生文件包括 mzML scan index 和 BU chromatogram summary。
+
+## 2.核心职责
+
+* 为 mzML run 生成 scan metadata index。
+* 为 BU/mzML run 生成 TIC/BPC chromatogram summary。
+* 在导入后触发派生数据生成。
+* 在 API 读取时判断派生数据是否 missing、stale 或 unsupported。
+* 为 XIC、MS1/MS2 定位、scan list、chromatogram 展示提供轻量数据。
+
+## 3.关键目录和文件
+
+* `back\app\services\mzml_scan_index.py`：scan index 生成、写入、读取、查询和 stale 判断。
+* `back\app\bu\services\chromatogram_summary.py`：chromatogram summary 生成、写入、读取和 stale 判断。
+* `back\app\services\post_import_derived_data.py`：导入完成后触发派生数据生成。
+* `back\app\services\derived_data_backfill.py`：派生数据 backfill 主逻辑。
+* `back\scripts\backfill_dataset_derived_data.py`：手动 backfill 脚本入口。
+* `.viewer-derived\mzml-scan-index`：scan index 派生目录。
+* `.viewer-derived\bu-chromatograms`：chromatogram summary 派生目录。
+
+## 4.核心数据流
+
+1. Import 完成后调用 `build_post_import_derived_data(dataset_id)`。
+2. `backfill_dataset_derived_data` 选择 dataset 下的 mzML run。
+3. `_generate_scan_index` 调用 `generate_scan_index_from_mzml` 并写入 `.npz + .json`。
+4. `_generate_chromatogram` 调用 `generate_summary_from_mzml` 并写入 `.npz + .json`。
+5. API 读取时通过 `load_scan_index` 或 `load_summary` 加载派生文件。
+6. loader 根据 source path、size、mtime、version、fields 判断是否 stale。
+7. missing/stale 时 API 返回可用于 backfill 的错误信息或命令提示。
+
+scan index 和 chromatogram summary 生成时都通过 pyteomics 读取 mzML。`.npz` 使用 NumPy 写入和读取，源码中对应 `numpy.savez_compressed` 和 `numpy.load`；`.json` 保存 metadata，用于 version、source path、source size、mtime 和 fields 等 stale 判断。
+
+## 5.关键API或关键组件
+
+* `scan_index_paths`
+* `generate_scan_index_from_mzml`
+* `write_scan_index`
+* `load_scan_index`
+* `summary_paths`
+* `generate_summary_from_mzml`
+* `write_summary`
+* `load_summary`
+* `build_post_import_derived_data`
+* `backfill_dataset_derived_data`
+
+派生文件：
+
+* `.viewer-derived\mzml-scan-index\{dataset_id}\{run_id}\scan-index-v1.npz`
+* `.viewer-derived\mzml-scan-index\{dataset_id}\{run_id}\scan-index-v1.json`
+* `.viewer-derived\bu-chromatograms\{dataset_id}\{run_id}\summary-v1.npz`
+* `.viewer-derived\bu-chromatograms\{dataset_id}\{run_id}\summary-v1.json`
+
+## 6.和其他模块的关系
+
+DerivedDataIndex 被 Import 在导入后触发，被 SpectrumDataAccess、BottomUp、spectra-only 和 Visualization 读取。DataModelStorage 提供 run metadata 和 source path。RawFile 转换出的 mzML 也会进入派生索引流程。
+
+参见：`DataModelStorage.md`、`SpectrumDataAccess.md`。
+
+## 7.扩展和维护建议
+
+新增派生索引时应同时定义路径、版本、metadata JSON、stale 判断、backfill 入口和 API 错误返回。派生文件应保持可重建，不应成为唯一数据真源。不要把派生文件写成数据库表或业务主表。
+
+相关测试入口以 `Testing.md` 的完整分层为准；本模块重点参考 `back\tests\test_mzml_scan_index.py`、`back\tests\test_bu_chromatogram_summary.py`、`back\tests\test_chromatogram_route_matching.py`。
+
+## 8.当前限制和注意事项
+
+* 派生文件格式是 `.npz + .json`。
+* stale 判断依赖 source path、size、mtime、version、fields。
+* RT-mz 聚合在 BU overview service 中通过数据库 bin 聚合，不是 `.viewer-derived` 文件。
+* scan index 不保存完整谱峰数组。
+* 本轮文档创建不运行 backfill，不生成任何派生数据。
+## 9.可复用入口
+
+scan index：
+
+* `back\app\services\mzml_scan_index.py::scan_index_paths`
+* `back\app\services\mzml_scan_index.py::generate_scan_index_from_mzml`
+* `back\app\services\mzml_scan_index.py::write_scan_index`
+* `back\app\services\mzml_scan_index.py::load_scan_index`
+* `back\app\services\mzml_scan_index.py::find_scan_by_number`
+* `back\app\services\mzml_scan_index.py::find_nearest_ms1_scan`
+* `back\app\services\mzml_scan_index.py::find_ms1_scans_in_rt_range`
+* `back\app\services\mzml_scan_index.py::find_ms2_scans_in_rt_range`
+* `back\app\services\mzml_scan_index.py::find_product_xic_ms2_scans`
+
+chromatogram summary：
+
+* `back\app\bu\services\chromatogram_summary.py::summary_paths`
+* `back\app\bu\services\chromatogram_summary.py::generate_summary_from_mzml`
+* `back\app\bu\services\chromatogram_summary.py::write_summary`
+* `back\app\bu\services\chromatogram_summary.py::load_summary`
+* `back\app\bu\services\chromatogram_summary.py::ChromatogramSummaryMissingError`
+* `back\app\bu\services\chromatogram_summary.py::ChromatogramSummaryStaleError`
+
+post-import 和 backfill：
+
+* `back\app\services\post_import_derived_data.py::build_post_import_derived_data`
+* `back\app\services\derived_data_backfill.py::backfill_dataset_derived_data`
+* `back\app\services\derived_data_backfill.py::DerivedDataRunResult`
+* `back\app\services\derived_data_backfill.py::DerivedDataBackfillResult`
+* `back\scripts\backfill_dataset_derived_data.py::main`
+
+## 10.调用链
+
+导入完成后生成：
+
+1. `back\app\services\import_jobs.py::run_path_import_job` 完成 adapter 和 finalize。
+2. `run_path_import_job` 调内部 helper `_run_post_import_derived_data`。
+3. `_run_post_import_derived_data` 调 `build_post_import_derived_data(dataset_id)`。
+4. `build_post_import_derived_data` 打开 DB session 后调用 `backfill_dataset_derived_data`。
+5. `backfill_dataset_derived_data` 选择 dataset runs，对 mzML run 分别检查 scan index 和 chromatogram summary 状态。
+6. 需要生成时调用 `_generate_scan_index` 和 `_generate_chromatogram`。
+
+手动 backfill：
+
+1. `back\scripts\backfill_dataset_derived_data.py::main` 解析 `--dataset-id`、`--run-id`、`--force`、`--check-only`。
+2. CLI 调 `backfill_dataset_derived_data`。
+3. `check_only=True` 只检查状态，不生成文件。
+4. `force=True` 会重新生成 ready 数据。
+
+API 读取：
+
+1. scan index API 调 `mzml_scan_index.py::load_scan_index`。
+2. BU chromatogram API 调 `chromatogram_summary.py::load_summary`。
+3. missing/stale 时抛 `ScanIndexMissingError`、`ScanIndexStaleError`、`ChromatogramSummaryMissingError` 或 `ChromatogramSummaryStaleError`。
+4. route/service 把错误映射为需要 backfill 的响应信息，而不是在业务请求里临时生成。
+
+## 11.新增派生索引接入方式
+
+新增派生索引应包含：
+
+1. 路径函数，例如 `scan_index_paths` 或 `summary_paths`。
+2. data 文件，例如 `.npz`。
+3. metadata JSON。
+4. `version` 字段。
+5. `source_path`。
+6. `source_size`。
+7. `source_mtime`。
+8. `fields` 或 schema 描述。
+9. `generate_*` 函数。
+10. `write_*` 函数。
+11. `load_*` 函数。
+12. missing/stale 错误类型。
+13. post-import 接入。
+14. backfill 接入。
+15. tests。
+
+新增索引的推荐落点：
+
+* mzML run 派生索引可放 `back\app\services` 或 BU 专属 service。
+* BU 专属 chromatogram 类索引可参考 `back\app\bu\services\chromatogram_summary.py`。
+* CLI backfill 接入口统一参考 `back\scripts\backfill_dataset_derived_data.py::main`。
+
+## 12.内部实现边界
+
+以下为内部实现或 backfill 局部 helper，不建议跨模块直接调用：
+
+* `back\app\services\derived_data_backfill.py::_scan_index_state`
+* `back\app\services\derived_data_backfill.py::_chromatogram_state`
+* `back\app\services\derived_data_backfill.py::_generate_scan_index`
+* `back\app\services\derived_data_backfill.py::_generate_chromatogram`
+* `back\app\services\derived_data_backfill.py::_run_metadata`
+* `back\app\services\derived_data_backfill.py::_is_mzml`
+* `back\app\services\derived_data_backfill.py::_chromatogram_enabled`
+* `back\app\services\mzml_scan_index.py::_derived_root`
+* `back\app\services\mzml_scan_index.py::_resolve_source_path`
+* `back\app\services\mzml_scan_index.py::_metadata_at`
+* `back\app\bu\services\chromatogram_summary.py::_derived_root`
+
+## 13.不要绕过的层
+
+* 不要在业务 route 中临时生成 scan index 或 chromatogram summary。
+* 不要绕过 `load_scan_index` 直接读取 `.npz` 私有结构。
+* 不要绕过 `load_summary` 直接读取 chromatogram `.npz`。
+* 不要混淆 `check_only` 和强制生成；`check_only=True` 不应写派生文件。
+* 不要把 RT-mz heatmap 写成 `.viewer-derived` 文件；当前 `overview_service.py::get_rt_mz_heatmap` 仍是数据库 bin 聚合。
+* 不要把 `.viewer-derived` 写成数据库表；它是磁盘目录。
+
+## 14.常见修改场景
+
+新增 scan metadata 字段：
+
+1. 修改 `build_scan_index_from_spectra` 和 `write_scan_index`。
+2. 更新 metadata `fields` 或 version。
+3. 更新 `load_scan_index` 的 stale/field 校验。
+4. 同步 API DTO 和前端读取位置。
+
+新增 chromatogram summary 字段：
+
+1. 修改 `generate_summary_from_mzml` 或 `calculate_summary_from_spectra`。
+2. 修改 `write_summary` 和 `load_summary`。
+3. 评估 `ChromatogramSummaryStaleError` 是否需要触发。
+4. 更新 `chromatogram_service.get_chromatogram` 输出。
+
+调整 post-import 生成策略：
+
+1. 修改 `backfill_dataset_derived_data` 的 run 选择或状态判断。
+2. 保持 `_run_post_import_derived_data` 只做导入后的薄编排。
+3. 错误应作为 recoverable warning 或 backfill 提示，不让导入结果被误写成完整失败，除非业务明确要求。
+
+## 15.相关测试
+
+本节列出开发时应参考或补充的测试入口；当前任务不运行这些测试。
+
+* scan index：`back\tests\test_mzml_scan_index.py`。
+* scan index API：`back\tests\test_mzml_spectra_api.py`。
+* chromatogram summary：`back\tests\test_bu_chromatogram_summary.py`。
+* chromatogram route：`back\tests\test_chromatogram_route_matching.py`。
+* post-import derived data：`back\tests\test_import_jobs_derived_data.py`。
+* backfill service：`back\tests\test_backfill_dataset_derived_data.py`。
+* frontend stale/missing 展示：`front\tests\api-error.spec.ts`、`front\tests\bu-overview-chart-states.spec.ts`。

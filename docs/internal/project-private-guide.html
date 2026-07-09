@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Viewer 内部项目说明和使用文档</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fc;
+      --panel: #ffffff;
+      --text: #152033;
+      --muted: #58667a;
+      --line: #dce3ee;
+      --accent: #1e64d6;
+      --accent-soft: #e8f0ff;
+      --warn: #8a4b00;
+      --warn-bg: #fff7df;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", Arial, sans-serif; line-height: 1.65; }
+    a { color: var(--accent); text-decoration: none; }
+    code { padding: 0.1rem 0.35rem; border-radius: 4px; background: #eef2f8; font-family: Consolas, "SFMono-Regular", monospace; }
+    pre { overflow-x: auto; padding: 1rem; border-radius: 8px; border: 1px solid var(--line); background: #101828; color: #edf2ff; }
+    .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; max-width: 1540px; margin: 0 auto; padding: 24px; }
+    aside { position: sticky; top: 18px; align-self: start; max-height: calc(100vh - 36px); overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    aside h2 { margin: 0 0 12px; font-size: 18px; }
+    aside ol { margin: 0; padding-left: 1.2rem; }
+    aside li { margin: 0.35rem 0; font-size: 14px; }
+    main { min-width: 0; }
+    header.hero { padding: 28px; border: 1px solid var(--line); border-radius: 8px; background: linear-gradient(180deg, #fff, #f8fbff); }
+    h1 { margin: 0 0 8px; font-size: 30px; line-height: 1.25; }
+    h2 { margin: 34px 0 12px; padding-top: 8px; font-size: 23px; border-top: 1px solid var(--line); }
+    h3 { margin: 22px 0 8px; font-size: 18px; }
+    section { margin: 18px 0; }
+    .note { padding: 12px 14px; border: 1px solid #f0d48a; border-radius: 8px; background: var(--warn-bg); color: var(--warn); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+    .card { padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    .card h3 { margin-top: 0; }
+    .table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    table { width: 100%; border-collapse: collapse; min-width: 820px; font-size: 14px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+    th { background: #eef3fb; color: #38465b; font-weight: 700; }
+    tr:last-child td { border-bottom: 0; }
+    figure { margin: 18px 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; }
+    figcaption { margin-top: 8px; color: var(--muted); font-size: 13px; }
+    .status-ok { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #e8f7ef; color: #14743c; font-size: 12px; font-weight: 700; }
+    .missing { color: #9b1c1c; }
+    @media (max-width: 980px) { .layout { display: block; padding: 14px; } aside { position: static; margin-bottom: 16px; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <h2>目录</h2>
+      <ol>
+        <li><a href="#doc-note">文档说明</a></li><li><a href="#overview">项目总览</a></li><li><a href="#audience">适用读者</a></li><li><a href="#capabilities">当前支持的数据和能力</a></li><li><a href="#startup">启动和访问方式</a></li><li><a href="#workflows">典型操作流程</a></li><li><a href="#modules">主要模块说明</a></li><li><a href="#relationships">模块对应关系说明</a></li><li><a href="#concepts">重要概念解释</a></li><li><a href="#boundaries">当前边界和注意事项</a></li><li><a href="#faq">常见问题</a></li><li><a href="#screenshots">截图清单</a></li><li><a href="#appendix">本次调查依据</a></li>
+      </ol>
+    </aside>
+    <main>
+      <header class="hero">
+        <h1>Viewer 内部项目说明和使用文档</h1>
+        <p>内部私有文档。用于项目介绍、使用说明、模块交接和截图索引。请勿作为公开产品文档或对外承诺材料直接分发。</p>
+        <p>生成时间：2026年7月7日 14:15:48；截图 manifest：<code>docs/internal/screenshot-manifest.json</code></p>
+      </header>
+
+      <section id="doc-note">
+        <h2>1. 文档说明</h2>
+        <p>文档只说明当前仓库和当前运行环境能确认的页面、接口、数据链路和限制；未确认或未发现实现的能力会明确标注。</p>
+        <p>本次任务只新增内部文档、截图和文档生成脚本；不修改业务代码、前端源码、后端源码、数据库结构、数据库数据、配置、依赖、锁文件或测试文件。</p>
+      </section>
+
+      <section id="overview">
+        <h2>2. 项目总览</h2>
+        <p>Viewer 是质谱数据可视化和分析辅助系统。当前源码支持 Top-Down、Bottom-Up 和 spectra-only 三类数据浏览，其中本次运行环境自动发现的可用数据主要是 Bottom-Up DIA-NN 数据集和 mzML/RAW 转换后的 spectra-only 数据集。</p>
+        <p>项目主链路是：前端 React/Vite 页面通过 <code>/api/v1</code> 调用 FastAPI；后端从 PostgreSQL 读取 dataset/run/match 等 metadata 和路径；谱图、色谱、PFMB 和 scan-index 等大数据或派生数据仍保存在磁盘上。数据库保存 metadata、路径和关系，不保存 RAW/mzML/PFMB 文件本体。</p>
+        <div class="cards">
+          <div class="card"><h3>spectra-only</h3><p>数据集：<code>raw</code><br>run_id：<code>15</code></p></div>
+          <div class="card"><h3>Bottom-Up</h3><p>数据集：<code>dia-shuju</code><br>run_id：<code>13</code></p></div>
+          <div class="card"><h3>match</h3><p>match_id：<code>880232</code><br>sequence：<code>AAAAASAAGPGGLVAGK</code></p></div>
+        </div>
+      </section>
+
+      <section id="audience">
+        <h2>3. 适用读者</h2>
+        <ul><li>老师或领导：快速了解项目能做什么、当前已有数据和页面截图。</li><li>团队成员：理解前端、后端、数据库和磁盘派生文件之间的边界。</li><li>后续接手开发人员：定位关键源码、API、数据链路和限制。</li><li>测试人员：根据截图清单、典型流程和已知边界设计验收用例。</li></ul>
+      </section>
+
+      <section id="capabilities">
+        <h2>4. 当前支持的数据和能力</h2>
+        <div class="table-wrap"><table><thead><tr><th>能力</th><th>当前状态</th><th>已确认依据</th><th>限制或注意事项</th></tr></thead><tbody><tr><td>RAW文件</td><td>部分实现</td><td>Thermo RAW 可经 ThermoRawFileParser 转为 uncompressed indexed mzML；当前未确认所有厂商 RAW。</td><td>依赖外部转换器、路径配置和 indexed mzML 校验。</td></tr><tr><td>mzML文件</td><td>已经实现</td><td>mzML-only 和 RAW 转换后 mzML 可导入为 spectra-only run。</td><td>gzip mzML 不支持 indexed random access 和 scan index。</td></tr><tr><td>spectra-only谱图浏览</td><td>已经实现</td><td>`/datasets/:slug` 在 spectra-only dataset 上展示 scan list、TIC/BPC 和 MS1/MS2 谱图。</td><td>依赖 scan-index、chromatogram summary 和可读 mzML。</td></tr><tr><td>chromatogram查看</td><td>已经实现</td><td>spectra-only 与 BU overview 均可查看 TIC/BPC。</td><td>依赖 `.viewer-derived` chromatogram summary；缺失或 stale 时需 backfill。</td></tr><tr><td>Bottom-Up结果查看</td><td>已经实现</td><td>DIA-NN Bottom-Up dataset 支持 overview、protein、peptide、match detail。</td><td>当前主路径是 `front/src/features/bu`。</td></tr><tr><td>Precursor XIC</td><td>已经实现</td><td>BU match detail 通过 MS1 scan index 提取前体离子 XIC。</td><td>无 scan-index 或无信号时页面可能为空。</td></tr><tr><td>Product ion XIC</td><td>已经实现</td><td>BU match detail 可选择 live MS2 匹配碎片并查看 product ion XIC。</td><td>依赖 MS2 scan、scan-index 和 product ion m/z；部分离子可能无信号。</td></tr><tr><td>MS1谱图</td><td>已经实现</td><td>spectra-only 和 BU match detail 均可从 mzML 读取 MS1。</td><td>RAW 本身不直接在浏览器解析。</td></tr><tr><td>MS2谱图</td><td>已经实现</td><td>spectra-only 可按 scan 读取 MS2；BU match detail 可显示 live mzML MS2 fragment matching。</td><td>live MS2 与 PFMB 预计算证据来源不同。</td></tr><tr><td>PFMB预计算证据</td><td>依赖数据或索引</td><td>`dia-shuju` 当前发现 `has_ms2_pfmb=true`，截图中 PFMB heatmap 可用。</td><td>PFMB sidecar 缺失时 BU 可降级为没有 Fragment Match。</td></tr><tr><td>scan-index或派生索引文件</td><td>依赖数据或索引</td><td>scan-index 与 chromatogram summary 存在于 `.viewer-derived`，格式为 `.npz + .json`。</td><td>派生文件可重建，不应视为数据库表。</td></tr><tr><td>Top-Down能力</td><td>部分实现</td><td>源码存在 Top-Down proteins/proteoforms/PrSM 路由和组件。</td><td>本次自动发现的当前数据集中未发现 Top-Down dataset，因此未生成 Top-Down 页面截图。</td></tr><tr><td>DIA能力扩展</td><td>部分实现/后续规划</td><td>当前 BU DIA-NN 链路可用，Bruker `.d` 部分路径存在。</td><td>通用 DIA 或更多厂商数据仍需按 adapter 和 reader 扩展。</td></tr></tbody></table></div>
+      </section>
+
+      <section id="startup">
+        <h2>5. 启动和访问方式</h2>
+        <h3>后端</h3>
+        <p>当前后端是 FastAPI + SQLAlchemy + PostgreSQL，后端 README 中确认的常规启动方式如下：</p>
+        <pre><code>cd back
+uv sync
+Copy-Item .env.example .env -ErrorAction SilentlyContinue
+uv run uvicorn app.main:app --reload --port 8000</code></pre>
+        <p>浏览器访问 <code>http://localhost:8000/docs</code> 可查看 OpenAPI。数据库表结构以 <code>docs/universal_schema.sql</code> 为真源。首次使用前需要准备 PostgreSQL、<code>back/.env</code> 中的 <code>DATABASE_URL</code>，以及可被后端访问的数据目录。</p>
+        <p class="note">本次截图为了严格避免数据库结构修改，未使用带 bootstrap 写入风险的默认启动方式，而是以数据库只读事务参数启动后端。启动期 <code>CREATE/ALTER ... IF NOT EXISTS</code> 被数据库只读事务拦截，服务仍可提供 GET 页面/API 读取能力。</p>
+        <h3>前端</h3>
+        <pre><code>cd front
+pnpm run dev</code></pre>
+        <p>如本机没有 pnpm，<code>start-front.bat</code> 会回退到 <code>npm run dev</code>。Vite 配置中 <code>/api</code> 代理到 <code>http://127.0.0.1:8000</code>，默认访问地址是 <code>http://localhost:5173</code> 或 <code>http://127.0.0.1:5173</code>。</p>
+        <h3>派生数据准备</h3>
+        <p>spectra-only、chromatogram、BU XIC 和 live MS1/MS2 通常依赖 <code>.viewer-derived</code> 下的 scan-index 和 chromatogram summary。导入完成后会尝试触发派生数据生成；已有数据缺失或 stale 时，需要按页面提示或后端脚本执行 backfill。</p>
+      </section>
+
+      <section id="workflows">
+        <h2>6. 典型操作流程</h2>
+        <h3>流程1：查看RAW或mzML中的原始谱图</h3><p>在数据集列表选择 spectra-only 数据集，如 `raw`；进入 `/datasets/raw` 后选择 run；在 scan list 中选择 MS1 或 MS2 scan；右侧查看 chromatogram、acquisition context 和谱图。RAW 数据需要先转换为 mzML 或已有 converted mzML，页面实际读取的是 mzML。</p><h3>流程2：查看整体色谱图</h3><p>进入 spectra-only 页面或 BU overview；在 Run Chromatogram 中查看 TIC/BPC；必要时切换 TIC/BPC。若派生 chromatogram summary 缺失或 stale，页面会提示需要 backfill。</p><h3>流程3：查看Bottom-Up鉴定结果</h3><p>在数据集列表选择 BU 数据集，如 `dia-shuju`；进入 overview 查看总览和 run；进入 proteins/peptides/matches 列表；打开 match detail；查看 Precursor XIC、live MS1/MS2、Product ion XIC、Evidence Summary 和 PFMB heatmap。</p>
+      </section>
+
+      <section id="modules">
+        <h2>7. 主要模块说明</h2>
+        <div class="table-wrap"><table><thead><tr><th>模块名称</th><th>模块作用</th><th>用户可以做什么</th><th>对应截图</th><th>截图重点区域</th><th>前端位置</th><th>后端接口或服务</th><th>当前限制和注意事项</th></tr></thead><tbody><tr><td>数据集列表模块</td><td>列出已导入 dataset 并提供 folder import 入口。</td><td>选择 dataset、查看模式/状态、打开导入对话框。</td><td>home-or-dataset-list.png（已生成）</td><td>卡片中的 dataset mode、Ready 状态、run/format/source 统计。</td><td>`front/src/pages/DatasetsPage.tsx`</td><td>`GET /api/v1/datasets`、`POST /api/v1/imports`、`POST /api/v1/imports/pick-folder`</td><td>删除按钮存在；本文档任务未触发删除或导入。</td></tr><tr><td>数据集详情模块</td><td>按 dataset mode 分流到 spectra-only、BU 或 TD 页面。</td><td>进入具体数据集并查看 run、scan 或 BU overview。</td><td>dataset-detail.png（已生成）</td><td>spectra-only run summary、scan list、chromatogram 入口。</td><td>`front/src/App.tsx`、`DatasetModeGate`、`SpectraOnlyPage`、`BuOverviewPage`</td><td>`GET /api/v1/datasets/{slug}`</td><td>同一路由 `/datasets/:slug` 在不同 dataset mode 下显示不同页面。</td></tr><tr><td>RAW或mzML导入模块</td><td>从服务器本机目录创建导入任务。</td><td>粘贴或选择目录、填写 slug/name/description、轮询导入状态。</td><td>raw-or-mzml-import.png（已生成）</td><td>导入对话框、folder path、slug、name 和 RAW 转换说明。</td><td>`front/src/pages/DatasetsPage.tsx`</td><td>`POST /api/v1/imports`、`GET /api/v1/imports/{job_id}`</td><td>本次只截图导入入口，未提交导入任务。</td></tr><tr><td>spectra-only谱图浏览模块</td><td>无鉴定结果时浏览原始 mzML scan。</td><td>选择 run、筛选 MS1/MS2、选择 scan、查看谱图。</td><td>spectra-only-page.png（已生成）</td><td>run summary、scan list、TIC/BPC、谱图区域。</td><td>`front/src/features/spectra-only/pages/SpectraOnlyPage.tsx`</td><td>`GET /api/v1/datasets/{dataset_id}/runs/{run_id}/scan-index`</td><td>需要 scan-index；缺失时页面会提示 backfill。</td></tr><tr><td>chromatogram模块</td><td>展示 run 级 TIC/BPC 色谱。</td><td>切换 TIC/BPC，观察 RT 维度整体信号。</td><td>chromatogram-page.png（已生成）</td><td>Run Chromatogram 图、点数和 TIC/BPC toggle。</td><td>`ChromatogramPanel`、`BuChromatogramChart`</td><td>`GET /api/v1/datasets/{dataset_id}/runs/{run_id}/chromatogram`、BU 同名路由</td><td>依赖 chromatogram summary；不是实时读完整 RAW。</td></tr><tr><td>MS1谱图模块</td><td>显示选中 MS1 scan 的 mz/intensity 谱图。</td><td>从 scan list 选择 MS1，查看峰图、RT、base peak 等信息。</td><td>ms1-spectrum.png（已生成）</td><td>MS1 spectrum card 与二维谱图。</td><td>`SpectrumPanel`、`BuSpectrumChart`</td><td>`GET /api/v1/datasets/{dataset_id}/runs/{run_id}/spectra/{scan_number}`、BU match MS1 API</td><td>需要 indexed mzML random access。</td></tr><tr><td>MS2谱图模块</td><td>显示选中 MS2 scan 的原始峰和标注。</td><td>选择 MS2 scan，查看 precursor、parent MS1 和 MS2 peaks。</td><td>ms2-spectrum.png（已生成）</td><td>Selected MS2 Spectrum 和 peak annotation。</td><td>`SpectrumPanel`</td><td>`GET /api/v1/datasets/{dataset_id}/runs/{run_id}/spectra/{scan_number}`</td><td>spectra-only MS2 是 scan 视角，不等同于 BU match evidence。</td></tr><tr><td>Precursor XIC模块</td><td>在 BU match detail 中展示前体离子 XIC。</td><td>查看鉴定 RT、XIC 信号和当前 inspected RT。</td><td>precursor-xic.png（已生成）</td><td>Precursor XIC 卡片、RT 窗口和 MS1 信号。</td><td>`BuMatchDetailPage`、`BuXicChart`</td><td>`GET /api/v1/datasets/{slug}/matches/{match_id}/xic`</td><td>无信号时页面显示 no signal。</td></tr><tr><td>Product ion XIC模块</td><td>比较选定碎片离子的 product ion XIC。</td><td>点击 live MS2 matched fragment 或 Add top 3 fragments 后查看 traces。</td><td>product-ion-xic.png（已生成）</td><td>Product ion XIC comparison 控件与 traces/empty 状态。</td><td>`BuProductIonXicCard`、`BuProductIonXicChart`</td><td>`GET /product-xic`、`POST /product-xics`</td><td>批量接口用于计算，不应理解为写入数据库。</td></tr><tr><td>BU Overview模块</td><td>展示 BU 数据集总览、QC、run chromatogram 和 RT-m/z。</td><td>确认 match/protein/peptide 数量，查看 run 级质量信息。</td><td>bu-overview.png（已生成）</td><td>Summary cards、QC stats、Run Chromatogram。</td><td>`front/src/features/bu/pages/BuOverviewPage.tsx`</td><td>`GET /api/v1/datasets/{slug}/overview`、`/overview/rt-mz`、`/runs/{run_id}/chromatogram`</td><td>RT-mz heatmap 当前是 overview 小图，不是独立大型页面。</td></tr><tr><td>BU蛋白或肽段列表模块</td><td>分页浏览 BU proteins、peptides 或 matches。</td><td>搜索、分页、进入 protein/peptide/match detail。</td><td>bu-protein-or-peptide-list.png（已生成）</td><td>protein 列表、peptide/match 数量和 q-value。</td><td>`BuProteinsPage`、`BuPeptidesPage`、`BuMatchesPage`</td><td>`GET /api/v1/datasets/{slug}/proteins|peptides|matches`</td><td>列表内容取决于导入的 DIA-NN parquet 字段。</td></tr><tr><td>BU Match Detail模块</td><td>汇总单个 BU match 的序列、前体、RT、蛋白和证据入口。</td><td>查看 match 元数据、Evidence Summary、XIC、MS1/MS2、PFMB。</td><td>bu-match-detail.png（已生成）</td><td>match metadata 与页面上方证据概览。</td><td>`BuMatchDetailPage`</td><td>`GET /api/v1/datasets/{slug}/matches/{match_id}`</td><td>match 的 `scan_number=-1` 仍可通过 RT/scan-index 找最近谱图。</td></tr><tr><td>Evidence Summary模块</td><td>把 identification、XIC、live MS2、PFMB 等证据分块汇总。</td><td>快速判断当前证据是否可用、是否有匹配或缺失。</td><td>evidence-summary.png（已生成）</td><td>Evidence Summary 中各来源指标。</td><td>`BuEvidenceSummary`、`evidenceSummaryModel.ts`</td><td>由 match detail、XIC、MS2、PFMB API 组合得到</td><td>这些指标不是统一鉴定分数。</td></tr><tr><td>MS2 Fragment Evidence模块</td><td>显示 live mzML MS2 峰和实时 b/y fragment matching。</td><td>查看 matched ions，并选择碎片进入 product ion XIC。</td><td>ms2-fragment-evidence.png（已生成）</td><td>Live mzML MS2 Evidence、MS2 spectrum、fragment table。</td><td>`BuSpectrumChart`、`BuFragmentTable`</td><td>`GET /api/v1/datasets/{slug}/matches/{match_id}/spectrum/ms2`</td><td>live 匹配和 PFMB 预计算匹配不能直接等同。</td></tr><tr><td>PFMB Heatmap模块</td><td>展示预计算 Fragment Match 在不同 RT slot 下的强度矩阵。</td><td>选择 slot、查看 fragment coverage、matched rows 和 heatmap 联动。</td><td>pfmb-heatmap.png（已生成）</td><td>Fragment Match heatmap、slot selection、PFMB fragment table。</td><td>`BuPfmbAnnotationCard`、`BuPfmbHeatmap`</td><td>`GET /ms2-slots`、`GET /ms2-annotation/{prsm_index}`、`GET /ms2-annotation-matrix`</td><td>PFMB sidecar 缺失时不会有该模块证据。</td></tr></tbody></table></div>
+      </section>
+
+      <section id="relationships">
+        <h2>8. 模块对应关系说明</h2>
+        <div class="table-wrap"><table><thead><tr><th>模块</th><th>对应关系</th></tr></thead><tbody><tr><td>数据集列表</td><td>负责进入不同 dataset，并暴露导入入口。</td></tr><tr><td>数据集详情</td><td>负责按 dataset mode 展示 run、状态和后续入口。</td></tr><tr><td>spectra-only</td><td>负责无鉴定结果时查看原始 mzML scan、MS1/MS2 和 chromatogram。</td></tr><tr><td>chromatogram</td><td>负责查看 TIC/BPC，帮助判断整体色谱质量和 RT 范围。</td></tr><tr><td>BU Viewer</td><td>负责 Bottom-Up 结果的 overview、列表和 match detail。</td></tr><tr><td>Precursor XIC</td><td>负责前体离子色谱证据，通常来自 MS1 scan。</td></tr><tr><td>Product ion XIC</td><td>负责碎片离子色谱证据，来自 selected matched fragment m/z。</td></tr><tr><td>MS1/MS2谱图</td><td>负责从 indexed mzML live 读取谱峰并展示。</td></tr><tr><td>PFMB Evidence</td><td>负责预计算碎片匹配证据展示。</td></tr><tr><td>Heatmap</td><td>负责不同 RT slot 下证据强度和选择联动。</td></tr></tbody></table></div>
+      </section>
+
+      <section id="concepts">
+        <h2>9. 重要概念解释</h2>
+        <div class="table-wrap"><table><thead><tr><th>概念</th><th>内部解释</th></tr></thead><tbody><tr><td>RAW</td><td>质谱厂商原始文件。浏览器通常不能直接完整解析，Viewer 当前确认 Thermo RAW 通过外部转换器转成 mzML 后进入可视化链路。</td></tr><tr><td>mzML</td><td>开放的质谱数据格式，Viewer 用它读取 scan、MS1/MS2 谱图、TIC/BPC 和 XIC。</td></tr><tr><td>indexed mzML</td><td>带索引且未压缩的 mzML，可按 scan 随机读取；这是当前谱图浏览和 scan-index 的关键前提。</td></tr><tr><td>spectra-only</td><td>没有鉴定结果或不展示鉴定实体时，直接围绕 run、scan、MS1/MS2 和 chromatogram 浏览原始谱图。</td></tr><tr><td>MS1</td><td>一级质谱扫描，通常用于母离子/前体离子信号和 XIC。</td></tr><tr><td>MS2</td><td>二级质谱扫描，通常用于碎片离子和序列证据。</td></tr><tr><td>TIC</td><td>Total Ion Chromatogram，总离子流色谱，展示每个 RT 点的总强度。</td></tr><tr><td>BPC</td><td>Base Peak Chromatogram，基峰色谱，展示每个 RT 点最高峰强度。</td></tr><tr><td>XIC</td><td>Extracted Ion Chromatogram，在指定 m/z 窗口内提取离子强度随 RT 的变化。</td></tr><tr><td>Precursor XIC</td><td>围绕前体 m/z 的 XIC，常用于检查鉴定对应的色谱峰。</td></tr><tr><td>Product ion XIC</td><td>围绕碎片离子 m/z 的 XIC，用于观察碎片证据在 RT 维度上的一致性。</td></tr><tr><td>Bottom-Up</td><td>蛋白被酶切成肽段后进行鉴定和定量的流程；本项目当前 BU 主链路来自 DIA-NN。</td></tr><tr><td>match detail</td><td>单个鉴定匹配的详情页，聚合 peptide、protein、RT、XIC、MS1/MS2 和 PFMB 证据。</td></tr><tr><td>PFMB证据</td><td>预计算 Fragment Match Binary sidecar 中的碎片匹配证据，不是 live mzML scan 本身。</td></tr><tr><td>scan-index</td><td>从 mzML 派生出的 scan metadata 索引，保存 scan number、MS level、RT、TIC、BPC、precursor 等，不保存完整谱峰数组。</td></tr><tr><td>RT</td><td>Retention Time，保留时间，文档和页面中通常以分钟为单位。</td></tr><tr><td>precursor m/z</td><td>前体离子的质荷比，用于 MS1/XIC 和 MS2 关联。</td></tr><tr><td>fragment ion</td><td>MS2 中的碎片离子，例如 b/y 系列，用于序列和匹配证据。</td></tr></tbody></table></div>
+      </section>
+
+      <section id="boundaries">
+        <h2>10. 当前边界和注意事项</h2>
+        <ul><li>RAW文件通常不能直接在浏览器中完整解析，需要转换为 mzML 或内部索引后用于可视化。</li><li>mzML谱图查看和 BU 鉴定结果查看是两条不同链路：前者按 run/scan，后者按 protein/peptide/match。</li><li>live mzML MS2 和 PFMB 预计算证据来源不同，不能简单当成同一份谱图直接比较。</li><li>缺少 scan-index 或派生文件时，部分功能可能无法展示，需要先生成对应索引。</li><li>Top-Down 和 Bottom-Up 流程不能只靠 RAW 文件自动判断，需要结合导入文件、用户选择和鉴定流程。</li><li>不同数据集可能缺少不同类型的证据，因此页面展示内容可能不同。</li><li>本次截图服务以数据库只读事务参数启动，启动期 schema bootstrap 被只读事务拦截，避免改数据库结构。</li></ul>
+      </section>
+
+      <section id="faq">
+        <h2>11. 常见问题</h2>
+        <h3>为什么有些截图没有生成？</h3><p>本次 16 张建议截图全部生成成功。后续如果某数据集、路由、元素或服务不可用，manifest 会记录未生成原因。</p><h3>为什么有些页面没有数据？</h3><p>页面内容依赖当前数据库记录、磁盘源文件、scan-index、chromatogram summary 和 PFMB sidecar；缺少任一条件都可能显示 empty 或 error。</p><h3>为什么MS1或MS2打不开？</h3><p>常见原因是 mzML 不可读、不是 indexed/uncompressed、scan-index 缺失或 run metadata 指向的文件不存在。</p><h3>为什么XIC为空？</h3><p>指定 m/z/RT 范围内可能没有信号，也可能缺少 scan-index 或 mzML 访问失败。</p><h3>为什么BU页面和spectra-only页面看到的内容不同？</h3><p>BU 页面围绕鉴定结果和 match evidence；spectra-only 页面围绕 run/scan 原始谱图。两者使用不同入口和数据组织。</p><h3>为什么PFMB和live MS2不能直接等同？</h3><p>PFMB 是预计算 sidecar 的 fragment match 证据；live MS2 是从 mzML scan 读取原始峰并即时匹配，来源和字段语义不同。</p><h3>新数据集导入后为什么需要生成索引或派生文件？</h3><p>scan-index 和 chromatogram summary 能让页面快速定位 scan、XIC 和 TIC/BPC，避免每次在前端或接口里全量扫描大 mzML。</p>
+      </section>
+
+      <section id="screenshots">
+        <h2>12. 截图清单</h2>
+        <div class="table-wrap"><table><thead><tr><th>截图文件名</th><th>对应模块</th><th>是否生成成功</th><th>失败原因</th><th>页面或路由</th><th>生成时间</th></tr></thead><tbody><tr><td>home-or-dataset-list.png</td><td>数据集列表模块</td><td>成功</td><td>-</td><td>/datasets</td><td>2026-07-07T06:03:09.144Z</td></tr><tr><td>raw-or-mzml-import.png</td><td>RAW或mzML导入模块</td><td>成功</td><td>-</td><td>/datasets</td><td>2026-07-07T06:03:10.912Z</td></tr><tr><td>dataset-detail.png</td><td>数据集详情模块</td><td>成功</td><td>-</td><td>/datasets/raw</td><td>2026-07-07T06:03:14.131Z</td></tr><tr><td>spectra-only-page.png</td><td>spectra-only谱图浏览模块</td><td>成功</td><td>-</td><td>/datasets/raw</td><td>2026-07-07T06:03:16.805Z</td></tr><tr><td>chromatogram-page.png</td><td>chromatogram模块</td><td>成功</td><td>-</td><td>/datasets/raw</td><td>2026-07-07T06:03:20.246Z</td></tr><tr><td>ms1-spectrum.png</td><td>MS1谱图模块</td><td>成功</td><td>-</td><td>/datasets/raw</td><td>2026-07-07T06:03:23.160Z</td></tr><tr><td>ms2-spectrum.png</td><td>MS2谱图模块</td><td>成功</td><td>-</td><td>/datasets/raw</td><td>2026-07-07T06:03:27.263Z</td></tr><tr><td>bu-overview.png</td><td>BU Overview模块</td><td>成功</td><td>-</td><td>/datasets/dia-shuju</td><td>2026-07-07T06:03:29.905Z</td></tr><tr><td>bu-protein-or-peptide-list.png</td><td>BU蛋白或肽段列表模块</td><td>成功</td><td>-</td><td>/datasets/dia-shuju/proteins</td><td>2026-07-07T06:03:32.359Z</td></tr><tr><td>bu-match-detail.png</td><td>BU Match Detail模块</td><td>成功</td><td>-</td><td>/datasets/dia-shuju/matches/880232</td><td>2026-07-07T06:03:43.931Z</td></tr><tr><td>evidence-summary.png</td><td>Evidence Summary模块</td><td>成功</td><td>-</td><td>/datasets/dia-shuju/matches/880232</td><td>2026-07-07T06:03:57.407Z</td></tr><tr><td>precursor-xic.png</td><td>Precursor XIC模块</td><td>成功</td><td>-</td><td>/datasets/dia-shuju/matches/880232</td><td>2026-07-07T06:04:10.834Z</td></tr><tr><td>ms2-fragment-evidence.png</td><td>MS2 Fragment Evidence模块</td><td>成功</td><td>-</td><td>/datasets/dia-shuju/matches/880232</td><td>2026-07-07T06:04:23.638Z</td></tr><tr><td>product-ion-xic.png</td><td>Product ion XIC模块</td><td>成功</td><td>-</td><td>/datasets/dia-shuju/matches/880232</td><td>2026-07-07T06:04:37.167Z</td></tr><tr><td>fragment-table.png</td><td>Fragment table模块</td><td>成功</td><td>-</td><td>/datasets/dia-shuju/matches/880232</td><td>2026-07-07T06:04:48.652Z</td></tr><tr><td>pfmb-heatmap.png</td><td>PFMB Heatmap模块</td><td>成功</td><td>-</td><td>/datasets/dia-shuju/matches/880232</td><td>2026-07-07T06:05:01.654Z</td></tr></tbody></table></div>
+        <h3>截图索引</h3>
+        <figure><img src="assets/screenshots/home-or-dataset-list.png" alt="数据集列表模块"><figcaption>home-or-dataset-list.png：数据集列表模块</figcaption></figure><figure><img src="assets/screenshots/raw-or-mzml-import.png" alt="RAW或mzML导入模块"><figcaption>raw-or-mzml-import.png：RAW或mzML导入模块</figcaption></figure><figure><img src="assets/screenshots/dataset-detail.png" alt="数据集详情模块"><figcaption>dataset-detail.png：数据集详情模块</figcaption></figure><figure><img src="assets/screenshots/spectra-only-page.png" alt="spectra-only谱图浏览模块"><figcaption>spectra-only-page.png：spectra-only谱图浏览模块</figcaption></figure><figure><img src="assets/screenshots/chromatogram-page.png" alt="chromatogram模块"><figcaption>chromatogram-page.png：chromatogram模块</figcaption></figure><figure><img src="assets/screenshots/ms1-spectrum.png" alt="MS1谱图模块"><figcaption>ms1-spectrum.png：MS1谱图模块</figcaption></figure><figure><img src="assets/screenshots/ms2-spectrum.png" alt="MS2谱图模块"><figcaption>ms2-spectrum.png：MS2谱图模块</figcaption></figure><figure><img src="assets/screenshots/bu-overview.png" alt="BU Overview模块"><figcaption>bu-overview.png：BU Overview模块</figcaption></figure><figure><img src="assets/screenshots/bu-protein-or-peptide-list.png" alt="BU蛋白或肽段列表模块"><figcaption>bu-protein-or-peptide-list.png：BU蛋白或肽段列表模块</figcaption></figure><figure><img src="assets/screenshots/bu-match-detail.png" alt="BU Match Detail模块"><figcaption>bu-match-detail.png：BU Match Detail模块</figcaption></figure><figure><img src="assets/screenshots/evidence-summary.png" alt="Evidence Summary模块"><figcaption>evidence-summary.png：Evidence Summary模块</figcaption></figure><figure><img src="assets/screenshots/precursor-xic.png" alt="Precursor XIC模块"><figcaption>precursor-xic.png：Precursor XIC模块</figcaption></figure><figure><img src="assets/screenshots/ms2-fragment-evidence.png" alt="MS2 Fragment Evidence模块"><figcaption>ms2-fragment-evidence.png：MS2 Fragment Evidence模块</figcaption></figure><figure><img src="assets/screenshots/product-ion-xic.png" alt="Product ion XIC模块"><figcaption>product-ion-xic.png：Product ion XIC模块</figcaption></figure><figure><img src="assets/screenshots/fragment-table.png" alt="Fragment table模块"><figcaption>fragment-table.png：Fragment table模块</figcaption></figure><figure><img src="assets/screenshots/pfmb-heatmap.png" alt="PFMB Heatmap模块"><figcaption>pfmb-heatmap.png：PFMB Heatmap模块</figcaption></figure>
+      </section>
+
+      <section id="appendix">
+        <h2>13. 本次调查依据</h2>
+        <ul><li>启动方式：back/README.zh-CN.md、back/README.md、front/package.json、front/vite.config.ts、start-back.bat、start-front.bat。</li><li>前端路由：front/src/App.tsx。</li><li>前端页面和组件：front/src/pages/DatasetsPage.tsx、front/src/features/spectra-only/**、front/src/features/bu/**。</li><li>后端 API：back/app/api/v1/**。</li><li>数据模型和存储边界：docs/universal_schema.sql、docs/developer/*.md。</li><li>本次截图数据来源：运行中的 http://127.0.0.1:8000/api/v1/datasets 自动发现结果。</li></ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,200 @@
+# DataModelStorage
+
+## 1.模块定位
+
+DataModelStorage 模块说明 Viewer 的 PostgreSQL schema、业务表关系、JSONB metadata、磁盘源文件和派生文件的映射关系。它是导入、API、谱图访问和可视化的共同数据基础。
+
+## 2.核心职责
+
+* 定义 dataset、run、protein、peptide、proteoform、identification_match 等核心对象。
+* 保存源文件路径、能力声明、导入状态和运行 metadata。
+* 保存 BU/TD 实体关系和 match 关系。
+* 通过 JSONB 保存外部格式特有 metadata。
+* 用磁盘路径连接 DB metadata 与 RAW、mzML、PFMB、PrSM detail、`.viewer-derived` 文件。
+
+## 3.关键目录和文件
+
+* `docs\universal_schema.sql`：数据库结构真源。
+* `back\app\core\db.py`：数据库 engine、Session 和 session_scope。
+* `back\migrations\20260522_bu_identification_match_indexes.sql`：BU identification match 相关索引迁移。
+* `back\app\api\v1\datasets.py`：dataset 输出中组装 runs、cutoffs 和 capabilities。
+* `back\app\services\import_jobs.py`：导入 finalize 时写 `source_root`、`source_dataset_fingerprint` 和 `run_metadata`。
+* `back\app\ingest\*.py`：各 ingest adapter 写入业务表。
+
+数据库连接配置来自 `back\app\core\config.py`，默认 URL 使用 `postgresql+psycopg`。schema 中大量扩展字段使用 PostgreSQL JSONB，例如 `datasets.capabilities`、`datasets.extra_metadata`、`runs.run_metadata` 和 `identification_matches.extra_metadata`。
+
+## 4.核心数据流
+
+1. ingest adapter 创建或替换 `datasets` 记录。
+2. adapter 为每个谱图文件或 run 写入 `runs`。
+3. TD adapter 写入 `proteins`、`proteoforms`、`identification_matches` 和 `protein_relation_mapping`。
+4. BU adapter 写入 `proteins`、`peptides`、`identification_matches` 和 `protein_relation_mapping`。
+5. 编排层补写 `datasets.source_root`、`datasets.source_dataset_fingerprint`、`runs.run_metadata`。
+6. API route 通过 raw SQL 或 SQLAlchemy `text` 查询这些表。
+7. 谱图和派生文件读取根据 DB 中的路径字段定位磁盘文件。
+
+## 5.关键API或关键组件
+
+主要表和字段：
+
+* `datasets.dataset_id`、`slug`、`analysis_mode`、`source_root`、`source_dataset_fingerprint`、`capabilities`、`extra_metadata`。
+* `runs.run_id`、`dataset_id`、`file_path`、`file_name`、`run_metadata`。
+* `proteins`：蛋白实体。
+* `proteoforms`：TopDown proteoform 实体。
+* `peptides`：BottomUp peptide 实体。
+* `identification_matches`：统一 match 表，覆盖 BU PSM/match 和 TD PrSM。
+* `protein_relation_mapping`：protein 到 peptide/proteoform 的关系。
+* `import_jobs`：导入任务状态表。
+
+磁盘相关：
+
+* RAW/mzML 文件路径在 `runs.file_path` 或 `runs.run_metadata`。
+* PrSM detail path 在 `identification_matches.detail_path`。
+* PFMB sidecar 路径在 dataset metadata 和 match extra metadata 中关联。
+* `.viewer-derived` 保存 scan index 和 chromatogram summary。
+
+## 6.和其他模块的关系
+
+DataModelStorage 被 Import 写入，被 BackendAPI 和业务 service 查询，被 SpectrumDataAccess 用于定位谱图文件，被 DerivedDataIndex 用于定位源 mzML 和写派生 metadata，被 Visualization 间接消费。
+
+参见：`DerivedDataIndex.md`。
+
+## 7.扩展和维护建议
+
+新增字段前先检查 `docs\universal_schema.sql`、bootstrap SQL、adapter 写入逻辑、API response schema 和前端 DTO 是否都需要同步。格式特有信息优先放入 `capabilities` 或 `extra_metadata`，但稳定查询字段应考虑 schema/index。不要把大文件本体或完整谱峰数组写入数据库。
+
+## 8.当前限制和注意事项
+
+* 当前业务 ORM 模型较少，大量后端逻辑使用 raw SQL 或 SQLAlchemy `text`。
+* 文件本体不入库，DB 保存 metadata 和路径。
+* `.viewer-derived`、PFMB、mzML、RAW 都是磁盘文件或目录，不是数据库表。
+* `source_dataset_fingerprint` 是 metadata manifest MD5，不是全文件内容哈希。
+* 删除 dataset 当前主要是 DB cascade，不删除磁盘源目录。
+
+## 9.可复用入口
+
+schema 和 DB session：
+
+* `docs\universal_schema.sql`：数据库结构真源，新增稳定字段前先更新此文件。
+* `back\app\core\db.py::engine`：SQLAlchemy engine。
+* `back\app\core\db.py::SessionLocal`：Session factory。
+* `back\app\core\db.py::session_scope`：脚本或 service 中的事务上下文入口。
+
+导入写入入口：
+
+* `back\app\ingest\universal_toppic_adapter.py::ingest_universal_toppic`
+* `back\app\ingest\universal_toppic_adapter.py::assign_toppic_runs_from_prsm_headers`
+* `back\app\ingest\universal_prsm_js_adapter.py::ingest_universal_prsm_js`
+* `back\app\ingest\mzml_only_adapter.py::ingest_mzml_only`
+* `back\app\ingest\bu\universal_diann_adapter.py::ingest_universal_diann`
+* `back\app\services\import_jobs.py::ensure_dataset_fingerprint_schema`
+* `back\app\services\import_jobs.py::ensure_runs_metadata_schema`
+* `back\app\services\import_jobs.py::run_path_import_job`
+* `back\app\services\import_jobs.py::delete_dataset`
+
+读取和懒更新入口：
+
+* `back\app\api\v1\datasets.py::list_datasets`
+* `back\app\api\v1\datasets.py::get_dataset_detail`
+* `back\app\api\v1\universal_compat.py::require_dataset`
+* `back\app\api\v1\universal_compat.py::require_cutoff`
+* `back\app\api\v1\universal_compat.py::load_prsm_detail`
+* `back\app\services\mzml_scan_reader.py::resolve_run_mzml_path`
+* `back\app\bu\services\lists_service.py::list_matches`
+* `back\app\bu\services\overview_service.py::get_overview`
+* `back\app\bu\services\spectrum_facade.py::get_match_ms2`
+* `back\app\bu\services\xic_service.py::get_match_xic`
+* `back\app\bu\services\product_xic_service.py::get_match_product_xics`
+
+## 10.调用链
+
+导入写库链路：
+
+1. `back\app\services\import_jobs.py::run_path_import_job` 根据 planner 结果调用 adapter。
+2. TD TopPIC HTML 走 `ingest_universal_toppic`，写 `datasets`、`runs`、`proteins`、`proteoforms`、`identification_matches`、`protein_relation_mapping`。
+3. TD PrSM bundle 走 `ingest_universal_prsm_js`，写相同 universal TD 表，并把 PrSM detail 路径写入 `identification_matches.detail_path`。
+4. mzML-only/RAW-only 走 `ingest_mzml_only`，写 `datasets` 和 `runs`。
+5. BU DIA-NN 走 `ingest_universal_diann`，写 `datasets`、`runs`、`proteins`、`peptides`、`identification_matches`、`protein_relation_mapping`。
+6. `run_path_import_job` 在 adapter 之后补写 `datasets.source_root`、`datasets.source_dataset_fingerprint`、`datasets.extra_metadata`、`runs.run_metadata`。
+7. 谱图访问通过 `runs.file_path` 和 `runs.run_metadata.mzml_file_path` 定位磁盘 mzML。
+
+API 读取链路：
+
+1. datasets API 从 `datasets` 读取 `analysis_mode`、`capabilities`、`extra_metadata`，并从 `runs` 组装 run summary。
+2. TD API 通过 `proteins`、`proteoforms`、`identification_matches`、`protein_relation_mapping` 查询 cutoff 下的实体和 match。
+3. BU API 通过 `back\app\bu\services\lists_service.py`、`overview_service.py`、`protein_detail_service.py` 查询 BU 实体。
+4. BU spectrum/XIC 服务读取 `identification_matches.extra_metadata` 和 `runs.run_metadata`，再交给 SpectrumDataAccess。
+5. `load_prsm_detail` 读取 `identification_matches.detail_path` 指向的磁盘 detail 文件。
+
+## 11.字段 ownership
+
+| 表/字段 | 写入位置 | 读取位置 | 说明 |
+|---|---|---|---|
+| `datasets.slug`、`name`、`analysis_mode` | TopPIC、PrSM、DIA-NN、mzML-only adapters | `datasets.py::list_datasets`、`datasets.py::get_dataset_detail`、`require_dataset` | dataset 身份、展示名称和分析模式 |
+| `datasets.source_root` | adapters 初始写入；`import_jobs.py::run_path_import_job` finalize 更新 | `require_dataset`、谱图/导入后续路径解析 | 源目录定位；不要误读为 `run_path_import_job` 写 `slug/name/analysis_mode` |
+| `datasets.source_dataset_fingerprint` | `ensure_dataset_fingerprint_schema` 创建列，`run_path_import_job` 写值 | `find_dataset_with_fingerprint` | metadata manifest MD5，32 位小写 hex，不是文件内容哈希 |
+| `datasets.capabilities` | adapters、`import_jobs.py`、`mzml_scan_reader.py::resolve_run_mzml_path` | datasets API、BU/TD mode gate、BU services | 能力声明，例如 has_ms1、has_ms2、has_ms2_pfmb |
+| `datasets.extra_metadata` | adapters、`import_jobs.py`、PFMB sidecar 准备链路 | BU services、PFMB locator、datasets API | 格式特有 metadata，不适合频繁过滤的字段不要长期只放这里 |
+| `runs.file_path` | adapters 的 `_insert_runs` 或 `_RunRegistry._insert_run` | spectrum API、BU services、chromatogram service | 服务器磁盘源文件路径或标准化文件路径 |
+| `runs.run_metadata` | `ensure_runs_metadata_schema` 创建列，adapters、`import_jobs.py`、`resolve_run_mzml_path` 写入 | `mzml_scan_reader.py`、BU spectrum/XIC/chromatogram services、datasets API | 存 `raw_format`、`mzml_file_path` 等 run 级扩展信息 |
+| `identification_matches.detail_path` | TD adapters、BU adapter 可写 NULL | `load_prsm_detail`、PrSM detail API | TD PrSM detail 文件路径；文件本体不入库 |
+| `identification_matches.extra_metadata` | TD/BU adapters | TD route、BU list/detail/spectrum/PFMB services | 存 source_cutoff、source_prsm_id、scan、PFMB baked block 等 |
+| `proteins.extra_metadata` | adapters、BU sequence backfill services | TD/BU list/detail services | source sequence、protein group、FASTA 补全等 |
+| `protein_relation_mapping.extra_metadata` | adapters | TD/BU detail services | protein 到 proteoform/peptide 的关系扩展 |
+
+## 12.新增功能接入方式
+
+新增稳定字段：
+
+1. 先在 `docs\universal_schema.sql` 增加字段、注释、必要索引。
+2. 更新写入 adapter，例如 `universal_diann_adapter.py::_insert_matches` 或 `universal_toppic_adapter.py::_insert_proteoform`。
+3. 更新 API schema，例如 `back\app\schemas\dataset.py`、`protein.py` 或 `bu.py`。
+4. 更新 route/service 查询 SQL，避免只改前端 DTO。
+5. 更新前端 DTO：`front\src\api\types.ts`、`front\src\features\bu\types.ts` 或 `front\src\features\spectra-only\types.ts`。
+6. 补充测试，覆盖 DB row 到 API response 的契约。
+
+新增 JSONB metadata：
+
+1. 判断是否需要过滤、排序或 join。需要高频查询时优先考虑 schema 字段或索引，不要长期只塞 JSONB。
+2. 写入点应集中在 adapter 或明确的 backfill/service 中。
+3. 文档里写明 JSON path，例如 `identification_matches.extra_metadata.source_cutoff`、`runs.run_metadata.mzml_file_path`。
+4. 前端只消费 API schema，不应直接依赖 DB JSONB 结构。
+
+新增磁盘文件引用：
+
+1. DB 只保存路径或 metadata，不保存文件本体。
+2. run 级谱图文件优先放 `runs.file_path` 或 `runs.run_metadata.mzml_file_path`。
+3. match detail 文件使用 `identification_matches.detail_path`。
+4. 派生文件使用 `.viewer-derived`，并由 DerivedDataIndex 文档说明生成和校验。
+
+## 13.内部实现边界
+
+以下为内部实现，不建议跨模块直接调用：
+
+* `back\app\ingest\universal_toppic_adapter.py::_create_dataset`、`_insert_protein`、`_insert_proteoform`、`_insert_relation`、`_import_fast_prsm_summaries`。
+* `back\app\ingest\universal_toppic_adapter.py::_RunRegistry` 和 `_RunRegistry._insert_run`。
+* `back\app\ingest\universal_prsm_js_adapter.py::_json`、`_accession_from_sequence_name`。
+* `back\app\ingest\mzml_only_adapter.py::_create_dataset`、`_insert_runs`。
+* `back\app\ingest\bu\universal_diann_adapter.py::_create_dataset`、`_insert_runs`、`_collect_entities_and_matches`、`_insert_proteins`、`_insert_peptides`、`_insert_matches`、`_insert_relations`。
+* `back\app\api\v1\datasets.py::_cutoffs_payload`、`_runs_by_dataset`、`_bu_runs_by_dataset`、`_dataset_out`。
+* `back\app\services\mzml_scan_index.py::_resolve_source_path` 是 scan index 路径解析内部实现；跨模块读取单谱路径时使用 `back\app\services\mzml_scan_reader.py::resolve_run_mzml_path`。
+
+## 14.不要绕过的层
+
+* 不要绕过 adapter 直接在 API route 中写业务表。
+* 不要绕过 `session_scope` 或 FastAPI `get_db` 自己管理裸连接生命周期。
+* 不要把 RAW、mzML、PFMB、PrSM detail 或完整谱峰数组写入数据库。
+* 不要把需要过滤/排序的稳定业务字段只写进 JSONB。
+* 不要把 `source_dataset_fingerprint` 当作全文件内容哈希；它是 metadata manifest MD5。
+* 不要假设删除 dataset 会删除磁盘源目录；当前 `import_jobs.delete_dataset` 是 DB 侧删除。
+* 不要让前端组件依赖 DB 表字段名；前端只能依赖 API response schema 和 DTO。
+
+## 15.相关测试
+
+本节列出开发时应参考或补充的测试入口；当前任务不运行这些测试。
+
+* dataset API 和 run summary：`back\tests\test_datasets_api_modes.py`。
+* import schema/bootstrap/fingerprint：`back\tests\test_import_jobs_raw_conversion.py`、`back\tests\test_import_planner.py`。
+* mzML run metadata 和 scan index：`back\tests\test_mzml_scan_reader.py`、`back\tests\test_mzml_scan_index.py`、`back\tests\test_mzml_spectra_api.py`。
+* BU list/detail/spectrum JSONB 消费：`back\tests\test_bu_runtime_api.py`、`back\tests\test_bu_spectrum_api.py`、`back\tests\test_bu_product_xic_indexed.py`。
+* PFMB metadata 消费：`back\tests\test_bu_ms2_annotation.py`。

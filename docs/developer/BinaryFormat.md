@@ -1,0 +1,183 @@
+# BinaryFormat
+
+## 1.模块定位
+
+BinaryFormat 模块说明 Viewer 中与二进制文件相关的实现。当前重点是 BottomUp PFMB 预计算 fragment match sidecar，以及 `.npz + .json` 派生索引。当前未找到通用 Viewer 专属二进制格式实现。
+
+PFMB 术语需要区分 runtime binary 和导入侧车 metadata：`back\app\pfmb\reader.py` 注释确认 runtime reader 是外部 `pfm` 模块的薄包装，读取 PFMB v3 binary bundle，其中记录是 PFM2 records；`back\app\pfmb\sidecar_prepare.py` 中的 `pfmb_schema_version=2` 和 v2 reference sidecar 是导入侧车 metadata 语义，不应和 runtime binary bundle 版本混为一谈。
+
+## 2.核心职责
+
+* 说明 PFMB `results.pfmb` 的读取和使用方式。
+* 说明 PFMB `index.json`、DB baked metadata 与 runtime reader 的关系。
+* 说明 scan index 和 chromatogram summary 的 `.npz + .json` 派生格式。
+* 明确 RAW、mzML 不是项目自定义二进制格式。
+
+## 3.关键目录和文件
+
+* `back\app\pfmb\reader.py`：PFMB binary sidecar runtime reader，封装外部 `pfm` reader。
+* `back\app\pfmb\index_reader.py`：读取 PFMB `index.json`，提供 source row 和 slot 查找。
+* `back\app\pfmb\index_builder.py`：从 `*.pos.pkl` 构建 Viewer 使用的 PFMB `index.json`。
+* `back\app\pfmb\sidecar_prepare.py`：导入时查找、引用或生成 PFMB sidecar。
+* `back\app\bu\services\ms2_annotation_svc.py`：运行时使用 PFMB sidecar 提供 annotation API。
+* `Hela_DIA_v2_PFMB_delivery_20260629\docs\DEVELOPER_PFMB.md`：PFMB/PFM 二进制格式说明。
+* `back\app\services\mzml_scan_index.py`：scan-index `.npz + .json` 格式实现。
+* `back\app\bu\services\chromatogram_summary.py`：chromatogram summary `.npz + .json` 格式实现。
+
+`back\app\pfmb\index_reader.py` 只读取 plain `index.json`，刻意不依赖外部 `pfm` binary reader；真正读取 `results.pfmb` record 的路径在 `PfmbAnnotationReader`。
+
+## 4.核心数据流
+
+1. BU 导入前或导入中准备 PFMB sidecar。
+2. `index.json` 将 DIA-NN match 信息映射到 PFMB `source_row`、slot 和 `prsm_index`。
+3. `universal_diann_adapter` 将匹配到的 PFMB slots 烤入 `identification_matches.extra_metadata.pfmb`。
+4. 前端请求 PFMB annotation API。
+5. `ms2_annotation_svc` 根据 match metadata 找到合法 `prsm_index`。
+6. `PfmbAnnotationReader` 从 `results.pfmb` 读取指定 record。
+7. API 返回 matched ions 或 matrix 给前端 heatmap/table。
+
+## 5.关键API或关键组件
+
+* `PfmbAnnotationReader`
+* `IndexReader`
+* `read_pfmb_record_count`
+* `prepare_bu_pfmb_sidecar`
+* `get_slots`
+* `get_annotation`
+* `get_annotation_matrix`
+* `GET /api/v1/datasets/{slug}/matches/{match_id}/ms2-slots`
+* `GET /api/v1/datasets/{slug}/matches/{match_id}/ms2-annotation/{prsm_index}`
+* `GET /api/v1/datasets/{slug}/matches/{match_id}/ms2-annotation-matrix`
+
+## 6.和其他模块的关系
+
+BinaryFormat 被 BottomUp 的 PFMB evidence 使用，也与 DerivedDataIndex 的 `.npz` 派生文件相关。Visualization 使用 PFMB API 结果展示 heatmap 和 annotation，但不直接解析二进制文件。
+
+## 7.扩展和维护建议
+
+新增 PFMB 版本或新的二进制 sidecar 时应先扩展 reader、index reader、schema 版本和验证脚本，再接入导入 adapter 和 API。不要让前端直接读取二进制文件。派生索引的格式变化必须同步更新 version 和 stale 判断。
+
+相关测试入口以 `Testing.md` 的完整分层为准；本模块重点参考 `back\tests\test_pfmb_sidecar_prepare.py`、`back\tests\test_bu_ms2_annotation.py`、`back\tests\test_mzml_scan_index.py`、`back\tests\test_bu_chromatogram_summary.py`。
+
+## 8.当前限制和注意事项
+
+* 当前未找到通用 Viewer 专属二进制格式实现。
+* 当前重点是 PFMB binary sidecar、`index.json` 和 `.npz + .json` 派生索引。
+* RAW 和 mzML 是外部数据格式，不是项目自定义二进制格式。
+* PFMB annotation 和 live mzML MS2 不等价，字段语义不能混用。
+* PFMB sidecar 缺失时 BU 可以没有预计算 Fragment Match。
+
+## 9.可复用入口
+
+PFMB runtime reader：
+
+* `back\app\pfmb\reader.py::PfmbAnnotationReader`：读取 `results.pfmb` record 的 runtime reader。
+* `back\app\pfmb\reader.py::MatchedIon`：PFMB matched ion 数据结构。
+* `back\app\pfmb\reader.py::PfmbAnnotation`：单个 PFMB annotation record 的结构。
+
+PFMB index：
+
+* `back\app\pfmb\index_reader.py::IndexReader`：读取 PFMB `index.json`，按 `source_row` 查 slots。
+* `back\app\pfmb\index_reader.py::SlotItem`：`index.json` 中单个 slot 的运行时结构。
+* `back\app\pfmb\index_builder.py::build_index_json_from_pos_pkl`：从 `*.pos.pkl` 构建 Viewer `index.json`。
+* `back\app\pfmb\index_builder.py::read_pfmb_record_count`：读取 `results.pfmb` record count。
+
+PFMB sidecar：
+
+* `back\app\pfmb\sidecar_prepare.py::prepare_bu_pfmb_sidecar`：BU 导入时准备 PFMB sidecar 的主入口。
+* `back\app\pfmb\sidecar_prepare.py::generate_pfmb_sidecar`：调用 PFMB bridge 并生成 sidecar。
+* `back\app\pfmb\sidecar_prepare.py::find_existing_sidecar_dir`：在输入数据附近查找已有 sidecar。
+* `back\app\pfmb\locator.py::detect_sidecar`：导入期检测显式 sidecar 目录。
+* `back\app\pfmb\locator.py::resolve_sidecar`：运行期从 DB baked metadata 解析 sidecar 路径。
+
+BU annotation service、route 和前端：
+
+* `back\app\bu\services\ms2_annotation_svc.py::get_slots`、`get_annotation`、`get_annotation_matrix`：PFMB annotation service 入口。
+* `back\app\api\v1\bu\ms2_annotations.py::match_ms2_slots`：`GET /api/v1/datasets/{slug}/matches/{match_id}/ms2-slots`。
+* `back\app\api\v1\bu\ms2_annotations.py::match_ms2_annotation`：`GET /api/v1/datasets/{slug}/matches/{match_id}/ms2-annotation/{prsm_index}`。
+* `back\app\api\v1\bu\ms2_annotations.py::match_ms2_annotation_matrix`：`GET /api/v1/datasets/{slug}/matches/{match_id}/ms2-annotation-matrix`。
+* `back\app\schemas\bu.py::BuMs2SlotItem`、`BuMs2SlotListOut`、`BuMs2AnnotationOut`、`BuMs2AnnotationMatrixOut`：PFMB API response schema。
+* `front\src\features\bu\api\buClient.ts::fetchBuMatchMs2Slots`、`fetchBuMatchMs2Annotation`、`fetchBuMatchMs2AnnotationMatrix`：PFMB API client。
+* `front\src\features\bu\components\match-detail\useBuPfmbEvidence.ts::useBuPfmbEvidence`：PFMB evidence hook。
+* `front\src\features\bu\components\match-detail\BuPfmbHeatmap.tsx::BuPfmbHeatmap`：PFMB matrix/slot heatmap 组件。
+
+参考格式说明：
+
+* `Hela_DIA_v2_PFMB_delivery_20260629\docs\DEVELOPER_PFMB.md`：外部 PFMB/PFM 交付文档，用于确认 binary bundle 和 record 字段语义。
+
+## 10.调用链
+
+导入准备链路：
+
+1. 导入编排层先调用 `back\app\pfmb\sidecar_prepare.py::prepare_bu_pfmb_sidecar` 准备 sidecar。
+2. `prepare_bu_pfmb_sidecar` 优先查找已有 sidecar：`find_existing_sidecar_dir` 和 `back\app\pfmb\locator.py::detect_sidecar`；若需要生成，则调用 `generate_pfmb_sidecar`，再由 `build_index_json_from_pos_pkl` 生成 Viewer 使用的 `index.json`。
+3. `back\app\ingest\bu\universal_diann_adapter.py` 接收 `pfmb_sidecar_dir`，adapter 内部再用 `back\app\pfmb\locator.py::detect_sidecar` 和 `back\app\pfmb\index_reader.py::IndexReader` 读取 sidecar 与 index；adapter 不直接负责生成 sidecar。
+4. dataset 级 sidecar 路径和相关信息写入 `datasets.extra_metadata.ms2_annotation`。
+5. match 级 PFMB 匹配块写入 `identification_matches.extra_metadata.pfmb`，其中包含导入期烤入的 `source_row`、`apex_slot`、`slots` 等 slot metadata。
+
+运行期 annotation 链路：
+
+1. 前端 `BuMatchDetailPage` 或 `BuEvidenceSummary` 使用 `useBuPfmbEvidence` 请求 PFMB slots、annotation 或 matrix。
+2. `front\src\features\bu\api\buClient.ts` 调用 `fetchBuMatchMs2Slots`、`fetchBuMatchMs2Annotation`、`fetchBuMatchMs2AnnotationMatrix`。
+3. 后端进入 `match_ms2_slots`、`match_ms2_annotation` 或 `match_ms2_annotation_matrix`。
+4. route 只负责 dataset/match lookup 和 response，PFMB 读取逻辑进入 `back\app\bu\services\ms2_annotation_svc.py`。
+5. `back\app\bu\services\ms2_annotation_svc.py::get_slots` 从 `match.extra_metadata.pfmb.slots` 返回已烤入 slots，运行期不重新加载 `index.json`。
+6. `get_annotation` 和 `get_annotation_matrix` 通过 `resolve_sidecar` 找到 dataset 级 `ms2_annotation` sidecar，再通过 `PfmbAnnotationReader` 读取 `results.pfmb` record；运行期 annotation service 不把 `IndexReader` 当作 slots 读取入口。
+7. 前端 `BuPfmbHeatmap` 使用 `BuMs2AnnotationMatrixOut` 和 `BuMs2SlotItem` 渲染 heatmap，不直接读取二进制文件。
+
+## 11.新增功能接入方式
+
+新增 PFMB 字段：
+
+* 先改 `back\app\pfmb\reader.py::MatchedIon` 或 `PfmbAnnotation`，明确字段来自 `results.pfmb` record。
+* 如果字段需要 slot/index 支持，同步改 `back\app\pfmb\index_builder.py::build_index_json_from_pos_pkl` 和 `back\app\pfmb\index_reader.py::SlotItem` / `IndexReader`。
+* 如果字段来自导入侧车 metadata，同步改 `back\app\pfmb\sidecar_prepare.py::prepare_bu_pfmb_sidecar` 或 `generate_pfmb_sidecar`。
+* service 层同步改 `back\app\bu\services\ms2_annotation_svc.py::get_annotation` 或 `get_annotation_matrix`。
+* API response 同步改 `back\app\schemas\bu.py::BuMs2AnnotationOut` 或 `BuMs2AnnotationMatrixOut`。
+* 前端 type 同步改 `front\src\features\bu\types.ts`，client 仍走 `front\src\features\bu\api\buClient.ts`。
+* 视觉展示同步改 `BuPfmbHeatmap`、`BuPfmbAnnotationCard`、`BuPfmbFragmentTable` 或 `BuEvidenceSummary`。
+
+新增 PFMB 版本：
+
+* 先明确术语：runtime PFMB reader、PFMB v3 binary bundle、PFM2 records、`pfmb_schema_version=2`、v2 reference sidecar 是当前项目中的不同边界，不要强行合并。
+* reader 变化优先放在 `back\app\pfmb\reader.py`。
+* index 结构变化优先放在 `index_builder.py` 和 `index_reader.py`。
+* sidecar 发现或生成变化优先放在 `sidecar_prepare.py` 和 `locator.py`。
+* BU route 不直接读二进制，仍通过 `ms2_annotation_svc.py` 暴露 annotation。
+* 前端不假设 PFMB annotation 等价于 live mzML MS2，新增字段需在 UI 文案和 type 中保持来源明确。
+* 同步补 `back\tests\test_pfmb_sidecar_prepare.py`、`back\tests\test_bu_ms2_annotation.py`、`front\tests\bu-pfmb-annotation.spec.ts` 或 `front\tests\bu-pfmb-visuals.spec.ts`。
+
+## 12.内部实现边界
+
+* `back\app\pfmb\reader.py::_ensure_pfm_importable`、`_to_matched_ion` 是 reader 内部实现，不建议跨模块直接调用。
+* `back\app\pfmb\index_reader.py::IndexReader._ensure_loaded`、`_apex_rt` 是 index reader 内部实现，不建议跨模块直接调用。
+* `back\app\pfmb\index_builder.py::_iter_pos_rows`、`_columnar_rows`、`_is_row_sequence`、`_get_any`、`_required_str`、`_required_int`、`_required_float_list`、`_apex_slot` 是 index builder 内部实现，不建议业务 route 直接调用。
+* `back\app\pfmb\sidecar_prepare.py::_run_generation_commands`、`_run_bridge`、`_looks_like_numba_cache_failure`、`_safe_slug`、`_write_generation_manifest` 是 sidecar generation 内部实现，不建议跨模块直接调用。
+* `back\app\bu\services\ms2_annotation_svc.py::_has_pfmb`、`_pfmb_block`、`_reader` 是 BU annotation service 内部实现，不建议跨模块直接调用。
+* `front\src\features\bu\components\match-detail\BuPfmbHeatmap.tsx` 内部 tooltip、series label 和颜色映射只服务该组件，不是跨模块 chart API。
+
+## 13.不要绕过的层
+
+* BU route 不应直接读取 `results.pfmb` 或 `index.json`，应走 `back\app\bu\services\ms2_annotation_svc.py`。
+* service 不应重新扫描任意 sidecar 目录，应通过 `back\app\pfmb\locator.py::resolve_sidecar` 使用导入期保存的 metadata。
+* 前端不应直接读取 PFMB 二进制，也不应把 PFMB annotation 当作 live mzML MS2。
+* `index_reader.py` 只读取 plain `index.json`，不要在这里引入外部 `pfm` binary reader。
+* 不要把 PFMB 写成通用 Viewer 二进制格式；当前项目只确认 BU PFMB sidecar 和 derived `.npz + .json`。
+* RAW 和 mzML 是外部数据格式，不属于 Viewer 自定义二进制格式。
+
+## 14.常见修改场景
+
+* PFMB heatmap 新增一个 cell 指标：先确认 `BuMs2AnnotationMatrixOut` 是否已有字段；没有则改 `reader.py`、`ms2_annotation_svc.py`、`back\app\schemas\bu.py`、`front\src\features\bu\types.ts` 和 `BuPfmbHeatmap.tsx`。
+* PFMB slots 选择逻辑变化：导入期 source row 和 slots 烤入逻辑改 `IndexReader.get_slots` 的使用方；运行期 slots 返回和前端选择状态分别改 `ms2_annotation_svc.py::get_slots` 和 `useBuPfmbEvidence`。
+* 支持新的 sidecar 目录结构：改 `back\app\pfmb\locator.py::detect_sidecar` 和 `sidecar_prepare.py::find_existing_sidecar_dir`，并补 `test_pfmb_sidecar_prepare.py`。
+* PFMB bridge 生成参数变化：改 `sidecar_prepare.py::generate_pfmb_sidecar` 和 `_run_generation_commands`，注意下划线 helper 是内部实现，不作为 route 入口。
+* API response 增加字段：改 `back\app\schemas\bu.py`、`front\src\features\bu\types.ts`、`front\src\features\bu\api\buClient.ts` 的返回类型和对应组件。
+
+## 15.相关测试
+
+* `back\tests\test_pfmb_sidecar_prepare.py`：覆盖 sidecar detection、generation、index building 和 stale generated sidecar。
+* `back\tests\test_bu_ms2_annotation.py`：覆盖 BU PFMB annotation service 和 API response 语义。
+* `back\tests\test_pfmb_v2_reference.py`：在 Hela reference 存在时验证 v2 reference sidecar 与 DIA 数据匹配。
+* `cs\test_pfmb_reader.py`、`cs\test_index_reader.py`、`cs\test_ms2_annotation.py`：偏能力验收或 reference 验证，不替代普通 pytest。
+* `cs\PFMB矩阵接口验证.py`、`cs\PFMB接口性能测验.py`、`cs\PFMB字段语义验证.py`：真实数据或人工验收入口，运行前需确认数据和环境。
+* `front\tests\bu-pfmb-annotation.spec.ts`、`front\tests\bu-pfmb-visuals.spec.ts`、`front\tests\bu-pfmb-quality.spec.ts`、`front\tests\bu-evidence-summary.spec.ts`：前端 PFMB route mock 和视觉行为回归。

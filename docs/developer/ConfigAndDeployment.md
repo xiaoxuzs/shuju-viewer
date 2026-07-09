@@ -1,0 +1,194 @@
+# ConfigAndDeployment
+
+## 1.模块定位
+
+ConfigAndDeployment 模块说明 Viewer 本地开发相关配置、环境变量、启动脚本、前端代理和依赖声明。当前仓库中未找到 Docker 或生产部署说明。
+
+## 2.核心职责
+
+* 说明后端配置来源和环境变量。
+* 说明前端 Vite dev proxy。
+* 说明本地启动脚本和日志行为。
+* 说明 Python/Node 依赖声明位置。
+* 说明 RAW 转换和 PFMB 相关配置项。
+
+## 3.关键目录和文件
+
+* `back\app\core\config.py`：后端 `Settings`，从 `back\.env` 和环境变量读取配置。
+* `back\.env.example`：后端环境变量示例。
+* `front\vite.config.ts`：Vite 配置，设置 `@` alias 和 `/api` proxy。
+* `start-back.bat`：启动 FastAPI dev server，并写 `logs\back-*.log`。
+* `start-front.bat`：启动前端 dev server，并写 `logs\front-*.log`。
+* `start-all.bat`：分别打开后端和前端启动窗口。
+* `back\pyproject.toml`：后端 Python 依赖、pytest 配置、ruff 配置。
+* `front\package.json`：前端依赖和 npm/pnpm scripts。
+
+后端配置系统使用 `pydantic-settings`：`Settings` 继承 `BaseSettings`，并通过 `SettingsConfigDict` 声明 `.env` 等配置元信息。前端 `/api` 代理仍由 `front\vite.config.ts` 管理。
+
+## 4.核心数据流
+
+1. 后端启动时 `Settings` 读取 `back\.env` 和环境变量。
+2. `database_url` 配置 PostgreSQL 连接。
+3. `data_root` 配置默认数据根目录。
+4. 前端 dev server 通过 `front\vite.config.ts` 将 `/api` 代理到 `http://127.0.0.1:8000`。
+5. 启动脚本进入对应目录，调用 uvicorn 或前端 dev script，并写入 `logs`。
+
+## 5.关键API或关键组件
+
+关键配置项：
+
+当前配置章节是开发者概览，不是完整配置参考手册；完整配置以 `back\app\core\config.py` 和 `back\.env.example` 为准。
+
+* `DATABASE_URL`
+* `DATA_ROOT`
+* `API_CORS_ORIGINS`
+* `IMPORT_PATH_MUST_BE_UNDER_DATA_ROOT` / `import_path_must_be_under_data_root`
+* `IMPORT_NATIVE_FOLDER_PICKER`
+* `IMPORT_PICKER_LOOPBACK_ONLY`
+* `BU_UNIPROT_ENABLED`
+* `THERMO_RAW_FILE_PARSER_EXE`
+* `RAW_CONVERSION_TIMEOUT_SECONDS`
+* `RAW_CONVERSION_OUTPUT_DIR`
+* `RAW_CONVERSION_FORCE`
+* `PFMB_BRIDGE_EXE` / `pfmb_bridge_exe`
+* `PFMB_BRIDGE_DISABLE_JIT` / `pfmb_bridge_disable_jit`
+* `PFMB_V2_REFERENCE_ROOTS`
+* `PFMB_V2_BRIDGE_EXE`
+
+关键方法：
+
+* `Settings.cors_origin_list`
+* `Settings.resolved_data_root`
+* `Settings.resolved_pfmb_bridge_exe`
+* `Settings.pfmb_v2_reference_root_list`
+
+## 6.和其他模块的关系
+
+ConfigAndDeployment 被 BackendAPI、Import、RawFile、BottomUp PFMB、SpectrumDataAccess 使用。UI 依赖 Vite proxy 和前端依赖配置。Testing 依赖 `back\pyproject.toml` 和 `front\package.json` 的测试配置。
+
+## 7.扩展和维护建议
+
+新增配置项应先放入 `back\app\core\config.py`，再更新 `back\.env.example` 和对应模块文档。不要在业务代码中写死本机盘符或工具路径。新增启动方式应说明是否会写日志、缓存或派生数据。
+
+## 8.当前限制和注意事项
+
+* 当前未找到 Docker 或生产部署说明，不能编造生产部署流程。
+* 启动脚本会创建/写入 `logs`，本轮文档创建不运行这些脚本。
+* `BU_UNIPROT_ENABLED` 默认关闭；开启后可能涉及外部网络请求。
+* ThermoRawFileParser 和 PFMB bridge 都是外部工具路径，实际可用性依赖本机环境。
+* `back\.env.example` 是示例，不代表当前本机真实数据库凭据。
+
+## 9.Settings字段表
+
+本表是代表性配置字段，不是完整配置参考；完整字段以 `back\app\core\config.py::Settings` 和 `back\.env.example` 为准。当前配置入口是 `back\app\core\config.py::settings = Settings()` singleton。
+
+| Settings字段 | 环境变量 | 默认值或来源 | 使用位置 | 影响范围 |
+|---|---|---|---|---|
+| `database_url` | `DATABASE_URL` | `postgresql+psycopg://postgres:postgres@localhost:5432/histone_viewer`；`.env.example` 给出本地示例 | `back\app\core\db.py` | 后端 PostgreSQL 连接 |
+| `data_root` | `DATA_ROOT` | `BACKEND_ROOT.parent / "shuju"`；`.env.example` 示例为 `../shuju` | `back\app\services\import_jobs.py`、`back\app\services\spectrum_cache.py`、其他依赖 `Settings.resolved_data_root` 的路径解析逻辑 | 数据集选择、路径导入和 data root 约束 |
+| `api_cors_origins` | `API_CORS_ORIGINS` | `http://localhost:5173`；`.env.example` 同时列出 localhost 和 127.0.0.1 | `back\app\main.py` 通过 `settings.cors_origin_list` | FastAPI CORS |
+| `log_level` | `LOG_LEVEL` | `INFO` | `back\app\core\logging.py` | 后端日志等级 |
+| `spectrum_cache_size` | `SPECTRUM_CACHE_SIZE` | `256` | `back\app\services\spectrum_cache.py` | mzML spectrum cache 容量 |
+| `bu_fragment_match_root` | `BU_FRAGMENT_MATCH_ROOT` | `BACKEND_ROOT.parent / "BU- Fragment Match"` | `back\app\pfmb\sidecar_prepare.py` | BU PFMB generated sidecar 根目录 |
+| `pfmb_bridge_exe` | `PFMB_BRIDGE_EXE` | `BACKEND_ROOT.parent / "Hela_DIA_v2_PFMB_delivery_20260629" / "pfmb_bridge.exe"` | `back\app\pfmb\sidecar_prepare.py`、`Settings.resolved_pfmb_bridge_exe` | PFMB v1 bridge 路径 |
+| `pfmb_bridge_disable_jit` | `PFMB_BRIDGE_DISABLE_JIT` | `False` | `back\app\pfmb\sidecar_prepare.py` | PFMB bridge JIT/cache fallback 行为 |
+| `pfmb_v2_reference_roots` | `PFMB_V2_REFERENCE_ROOTS` | 默认指向 `Hela_DIA_v2_PFMB_delivery_20260629`；`.env.example` 有注释示例 | `Settings.pfmb_v2_reference_root_list`、PFMB reference sidecar 查找 | PFMB v2 reference sidecar roots |
+| `pfmb_v2_bridge_exe` | `PFMB_V2_BRIDGE_EXE` | `None`；`.env.example` 有注释示例 | `Settings.resolved_pfmb_bridge_exe` | full_rt-capable PFMB v2 bridge 可选覆盖 |
+| `thermo_raw_file_parser_exe` | `THERMO_RAW_FILE_PARSER_EXE` | `None`；`.env.example` 建议可放项目本地工具目录或显式路径 | `back\app\raw_conversion\tool_discovery.py` | Thermo RAW 转 mzML 工具定位 |
+| `raw_conversion_output_dir` | `RAW_CONVERSION_OUTPUT_DIR` | `None`；`.env.example` 示例为 `.viewer-derived/raw-converted-mzml` | `back\app\raw_conversion\service.py`、`back\app\services\import_jobs.py` | RAW 转换输出目录 |
+| `raw_conversion_timeout_seconds` | `RAW_CONVERSION_TIMEOUT_SECONDS` | `3600` | `back\app\raw_conversion\thermo_raw_file_parser.py`、`service.py` | 单文件 RAW 转换超时 |
+| `raw_conversion_force` | `RAW_CONVERSION_FORCE` | `False` | `back\app\services\import_jobs.py` | 是否强制重转 same-stem RAW/mzML |
+| `import_path_must_be_under_data_root` | `IMPORT_PATH_MUST_BE_UNDER_DATA_ROOT` | `False` | `back\app\services\import_jobs.py`、导入根路径校验 | 是否强制导入路径位于 `resolved_data_root` 下 |
+
+## 10.可复用配置入口
+
+后端配置：
+
+* `back\app\core\config.py::Settings`：Pydantic Settings 定义，读取 `back\.env` 和环境变量。
+* `back\app\core\config.py::settings = Settings()`：当前源码中的配置 singleton。
+* `back\app\core\config.py::Settings.cors_origin_list`：将 `api_cors_origins` 拆分为 CORS origin list。
+* `back\app\core\config.py::Settings.resolved_data_root`：解析相对 `data_root`。
+* `back\app\core\config.py::Settings.resolved_pfmb_bridge_exe`：解析 PFMB bridge 路径，优先使用 `pfmb_v2_bridge_exe`。
+* `back\app\core\config.py::Settings.pfmb_v2_reference_root_list`：将逗号分隔的 PFMB v2 reference roots 转为 `Path` list。
+* `back\.env.example`：本地开发环境变量示例，不代表真实凭据。
+
+前端和本地启动：
+
+* `front\vite.config.ts`：`@` 指向 `src`，`/api` proxy 指向 `http://127.0.0.1:8000`，与 `front\src\api\client.ts` 的 `baseURL: "/api/v1"` 配合。
+* `start-back.bat`：进入 `back`，执行 `python -m uvicorn app.main:app --reload --port 8000`，并写 `logs\back-YYYYMMDD-HHMMSS.log`。
+* `start-front.bat`：进入 `front`，优先 `pnpm run dev`，否则 `npm run dev`，并写 `logs\front-YYYYMMDD-HHMMSS.log`。
+* `start-all.bat`：组合打开后端和前端启动窗口。
+* `back\pyproject.toml`：后端依赖、dev 依赖、pytest `pythonpath` 和 ruff 配置。
+* `front\package.json`：前端 `dev`、`build`、`test:e2e` 和依赖声明。
+
+## 11.调用链
+
+后端配置加载链路：
+
+1. 后端模块 import `back\app\core\config.py::settings`。
+2. `Settings` 通过 `SettingsConfigDict(env_file=BACKEND_ROOT / ".env", case_sensitive=False, extra="ignore")` 读取 `.env` 和环境变量。
+3. `back\app\core\db.py` 使用 `settings.database_url` 创建数据库连接。
+4. `back\app\main.py` 使用 `settings.cors_origin_list` 配置 CORS。
+5. 导入、RAW、PFMB、spectrum cache 等模块各自读取 `settings` 中对应字段。
+
+前端本地请求链路：
+
+1. `front\src\api\client.ts` 使用 axios `baseURL: "/api/v1"`。
+2. Vite dev server 由 `front\vite.config.ts` 把 `/api` 代理到 FastAPI `http://127.0.0.1:8000`。
+3. 本地开发时 `start-back.bat` 启动后端，`start-front.bat` 启动 Vite，`start-all.bat` 组合打开两者。
+
+外部工具配置链路：
+
+* Thermo RAW 转换入口读取 `settings.thermo_raw_file_parser_exe`、`raw_conversion_timeout_seconds`、`raw_conversion_output_dir`、`raw_conversion_force`，再由 `back\app\raw_conversion\tool_discovery.py` 和 `thermo_raw_file_parser.py` 做 discovery/validation。
+* PFMB sidecar generation 读取 `settings.bu_fragment_match_root`、`pfmb_bridge_exe`、`pfmb_v2_bridge_exe`、`pfmb_bridge_disable_jit`、`pfmb_v2_reference_roots`，再由 `back\app\pfmb\sidecar_prepare.py` 和 `reference_sidecar.py` 使用。
+
+## 12.新增配置项接入方式
+
+新增后端配置字段：
+
+1. 在 `back\app\core\config.py::Settings` 增加字段，使用明确类型和默认值。
+2. 同步更新 `back\.env.example`，说明本地示例值或注释掉的可选值。
+3. 修改使用方，优先通过 `from app.core.config import settings` 读取，不要在 service 或 route 中临时调用 `os.environ`。
+4. 如果是路径字段，必要时增加类似 `resolved_data_root`、`resolved_pfmb_bridge_exe` 的解析 helper。
+5. 如果影响外部工具路径，补 discovery 或 validation，例如 RAW converter 应在 `back\app\raw_conversion\tool_discovery.py` 或 `thermo_raw_file_parser.py` 中处理。
+6. 同步更新相关模块文档和 `Testing.md` 的测试建议。
+
+新增前端代理或启动配置：
+
+* Vite dev proxy 改 `front\vite.config.ts`，不要在页面或 client 函数中硬编码后端 host。
+* 前端脚本改 `front\package.json`。
+* 本地 bat 脚本改 `start-back.bat`、`start-front.bat` 或 `start-all.bat`，并明确是否会写 `logs`。
+
+## 13.内部实现边界
+
+* `back\app\core\config.py::Settings` 是配置 schema；不要在业务模块复制同名环境变量解析。
+* `back\app\core\config.py::settings` 是当前 singleton 入口；不要在业务模块复制同名环境变量解析。
+* `Settings.resolved_data_root`、`resolved_pfmb_bridge_exe`、`pfmb_v2_reference_root_list` 是配置解析 helper，调用方应读取解析结果，不要重复实现相对路径规则。
+* `start-back.bat`、`start-front.bat`、`start-all.bat` 是本地开发脚本，不是生产部署抽象。
+* `.env.example` 是示例模板，不是当前机器真实配置来源。
+
+## 14.不要绕过的层
+
+* 不要在 route、service 或 adapter 内直接 `os.environ[...]` 读取已有 Settings 字段。
+* 不要在前端业务代码中硬编码 `http://127.0.0.1:8000`；本地开发请求应走 Vite `/api` proxy。
+* 不要把 `start-*.bat` 描述为生产部署流程；当前未找到 Docker、systemd、Nginx 或生产部署说明。
+* 不要把 `.env.example` 中的示例数据库 URL 当作真实环境凭据。
+* RAW 转换强制重转配置以 `raw_conversion_force` 为准。
+
+## 15.常见修改场景
+
+* 新增数据库连接相关配置：改 `Settings` 和 `.env.example`，再检查 `back\app\core\db.py` 是否需要使用。
+* 新增导入路径限制：优先扩展 `Settings`，再改 `back\app\services\import_jobs.py` 或 `back\app\dataset_ingest_root\resolver.py`，不要把策略写进 API route。
+* 新增 RAW converter 配置：改 `Settings`、`.env.example`、`back\app\raw_conversion\tool_discovery.py` 或 `thermo_raw_file_parser.py`，并更新 `RawFile.md`。
+* 新增 PFMB bridge 配置：改 `Settings`、`.env.example`、`back\app\pfmb\sidecar_prepare.py` 或 `reference_sidecar.py`，并更新 `BinaryFormat.md`。
+* 改前端 API dev target：改 `front\vite.config.ts` 的 `/api` proxy，同时确认 `front\src\api\client.ts` 仍使用相对 `baseURL`。
+* 改本地启动脚本：更新对应 `start-*.bat`，说明是否写 `logs`，不要顺带改依赖或生产部署描述。
+
+## 16.相关测试
+
+* `back\tests\test_raw_converter_discovery.py`：覆盖 ThermoRawFileParser 配置路径优先级、默认 discovery 和缺失错误。
+* `back\tests\test_raw_conversion_discovery.py`、`back\tests\test_raw_conversion_thermo.py`：覆盖 RAW converter 行为和 indexed mzML 校验。
+* `back\tests\test_import_jobs_raw_conversion.py`：覆盖 `import_jobs` 使用 `settings.raw_conversion_force` 等 RAW conversion 配置。
+* `back\tests\test_pfmb_sidecar_prepare.py`、`back\tests\test_pfmb_v2_reference.py`：覆盖 PFMB bridge/reference sidecar 配置相关行为。
+* `front\playwright.config.ts` 和 `front\tests`：前端 route mock 依赖 Vite/Playwright 测试配置。
+* 当前未找到专门覆盖 `back\app\core\config.py::Settings` 的单元测试；新增关键配置字段时建议补最小 Settings 解析测试。

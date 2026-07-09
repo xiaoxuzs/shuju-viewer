@@ -1,0 +1,230 @@
+# SpectrumDataAccess
+
+## 1.模块定位
+
+SpectrumDataAccess 模块负责从 mzML、TopFD JS、scan index 和旧 memory/cache 路径中读取谱图相关数据。它连接 DataModelStorage 中的 run metadata 和 Visualization 所需的谱图 DTO。
+
+## 2.核心职责
+
+* 根据 dataset/run/scan 定位 mzML 文件。
+* 使用 indexed mzML reader 按 scan number 读取单张谱图。
+* 通过 scan index 查询最近 MS1、MS2、RT 范围和 product ion XIC 候选 scan。
+* 提供 spectra-only、TD 和 BU 证据页所需谱图数据。
+* 维护部分旧 TopFD JS 和 mzML memory/cache 兼容路径。
+
+## 3.关键目录和文件
+
+* `back\app\services\mzml_scan_reader.py`：indexed mzML 单谱读取、reader scope、path resolution。
+* `back\app\api\v1\mzml_spectra.py`：mzML scan、chromatogram、scan-index HTTP API。
+* `back\app\services\mzml_scan_index.py`：scan metadata 派生索引和查询函数。
+* `back\app\services\spectrum_cache.py`：TopFD JS MS1/MS2 spectrum 文件 LRU cache。
+* `back\app\spectrum_memory\eviction_coordinator.py`：旧 whole-dataset mzML memory pool 协调器。
+* `back\app\services\spectrum_memory_wiring.py`：DB 到 mzML memory spec 的 wiring。
+* `front\src\features\spectra-only\api\spectraClient.ts`：spectra-only 前端 scan index、chromatogram、spectrum client。
+
+`mzml_scan_reader.py` 使用 `pyteomics.mzml.PreIndexedMzML` 的严格包装读取 indexed mzML；gzip mzML 会在打开 reader 前被拒绝。`mzml_scan_index.py` 使用 NumPy 数组和 `.npz` 派生文件保存 scan metadata。
+
+## 4.核心数据流
+
+1. API 或 BU service 根据 dataset/run/match 确定 run。
+2. `resolve_run_mzml_path` 从 `runs.run_metadata.mzml_file_path` 或 mapping 逻辑定位 mzML。
+3. 对单谱请求，`read_indexed_spectrum` 打开 indexed mzML 并读取指定 scan。
+4. 对 XIC 或 evidence 请求，先 `load_scan_index` 读取 `.viewer-derived` scan index。
+5. service 使用 `find_nearest_ms1_scan`、`find_nearest_ms2_scan`、`find_ms1_scans_in_rt_range`、`find_product_xic_ms2_scans` 找候选 scan。
+6. `indexed_reader_scope` 在一次请求内复用 reader。
+7. 前端收到谱图或 scan metadata 后交给图表组件。
+
+`read_indexed_spectrum` 是单谱读取核心函数，`indexed_reader_scope` 负责同一请求内复用 reader，`load_scan_index` 负责读取 `.viewer-derived` 下的 NumPy scan index。XIC 和 product ion XIC 先用 scan index 定位候选 scan，再按需读取 mzML 谱峰。
+
+## 5.关键API或关键组件
+
+关键函数：
+
+* `resolve_run_mzml_path`
+* `indexed_reader_scope`
+* `read_indexed_spectrum`
+* `get_spectrum_by_scan`
+* `load_scan_index`
+* `find_nearest_ms1_scan`
+* `find_nearest_ms2_scan`
+* `find_ms1_scans_in_rt_range`
+* `find_product_xic_ms2_scans`
+
+关键 API：
+
+* `GET /api/v1/datasets/{dataset_id}/runs/{run_id}/spectra/{scan_number}`
+* `GET /api/v1/datasets/{dataset_id}/runs/{run_id}/chromatogram`
+* `GET /api/v1/datasets/{dataset_id}/runs/{run_id}/scan-index`
+* TopFD JS：`GET /api/v1/datasets/{slug}/spectra/ms1/{spec_id}`、`GET /api/v1/datasets/{slug}/spectra/ms2/{spec_id}`
+
+## 6.和其他模块的关系
+
+SpectrumDataAccess 依赖 DataModelStorage 提供 run metadata，依赖 DerivedDataIndex 提供 scan index，服务 BottomUp、TopDown、spectra-only 和 Visualization。RawFile 产出的 converted mzML 最终由本模块读取。
+
+## 7.扩展和维护建议
+
+新增谱图访问方式时先确定是否能映射到 run 和 scan number。新增 XIC 类功能应优先复用 scan index 找候选 scan，再用 indexed reader 读取谱峰。不要为单个图表全量加载大 mzML 文件。旧 memory 路径和当前 indexed reader 路径要明确区分。
+
+相关测试入口以 `Testing.md` 的完整分层为准；本模块重点参考 `back\tests\test_mzml_spectra_api.py`、`back\tests\test_mzml_scan_index.py`、`back\tests\test_bu_spectrum_api.py`、`back\tests\test_bu_product_xic_indexed.py`。
+
+## 8.当前限制和注意事项
+
+* 当前很多路径是 indexed single-spectrum reader，不是整文件常驻内存。
+* `resolve_run_mzml_path` 可能在读取路径补写 DB mapping；这不是纯只读函数。
+* gzip mzML 不支持 indexed random access 和 scan index。
+* scan index 只保存 scan metadata，不保存完整 mz/intensity arrays。
+* `mzml_memory` 是历史/兼容命名，不能简单理解为所有 mzML 读取都走整文件内存池。
+
+## 9.可复用入口
+
+indexed mzML 单谱读取：
+
+* `back\app\services\mzml_scan_reader.py::resolve_run_mzml_path`：根据 `dataset_id`、`run_id` 定位 mzML；可能补写 `runs.run_metadata.mzml_file_path` 和 `datasets.capabilities`。
+* `back\app\services\mzml_scan_reader.py::parse_native_scan_number`：解析 native id 中的 scan number。
+* `back\app\services\mzml_scan_reader.py::indexed_reader_scope`：在一次请求内复用 reader。
+* `back\app\services\mzml_scan_reader.py::read_indexed_spectrum`：按 scan number 读取单张谱图。
+* `back\app\services\mzml_scan_reader.py::get_spectrum_by_scan`：API/service 层最常用的单谱入口。
+
+scan index 读取和查询入口：
+
+* `back\app\services\mzml_scan_index.py::scan_index_paths`
+* `back\app\services\mzml_scan_index.py::normalize_source_path`
+* `back\app\services\mzml_scan_index.py::load_scan_index`
+* `back\app\services\mzml_scan_index.py::find_scan_by_number`
+* `back\app\services\mzml_scan_index.py::find_nearest_ms1_scan`
+* `back\app\services\mzml_scan_index.py::find_ms1_scans_in_rt_range`
+* `back\app\services\mzml_scan_index.py::find_ms2_scans_in_rt_range`
+* `back\app\services\mzml_scan_index.py::find_ms2_scans_by_rt_and_isolation`
+* `back\app\services\mzml_scan_index.py::find_product_xic_ms2_scans`
+* `back\app\services\mzml_scan_index.py::find_nearest_ms2_scan`
+
+scan index 派生索引生成和写入入口，不属于普通业务读路径：
+
+* `back\app\services\mzml_scan_index.py::build_scan_index_from_spectra`
+* `back\app\services\mzml_scan_index.py::generate_scan_index_from_mzml`
+* `back\app\services\mzml_scan_index.py::write_scan_index`
+
+HTTP API：
+
+* `back\app\api\v1\mzml_spectra.py::mzml_spectrum`：`GET /api/v1/datasets/{dataset_id}/runs/{run_id}/spectra/{scan_number}`。
+* `back\app\api\v1\mzml_spectra.py::mzml_run_chromatogram`：`GET /api/v1/datasets/{dataset_id:int}/runs/{run_id:int}/chromatogram`。
+* `back\app\api\v1\mzml_spectra.py::mzml_run_scan_index`：`GET /api/v1/datasets/{dataset_id}/runs/{run_id}/scan-index`。
+
+TopFD JS legacy cache：
+
+* `back\app\services\spectrum_cache.py::resolve_ms1_spectrum_path`
+* `back\app\services\spectrum_cache.py::resolve_ms2_spectrum_path`
+* `back\app\services\spectrum_cache.py::get_ms1_spectrum`
+* `back\app\services\spectrum_cache.py::get_ms2_spectrum`
+* `back\app\services\spectrum_cache.py::clear_cache`
+
+BU service：
+
+* `back\app\bu\services\spectrum_facade.py::ensure_mzml_match`
+* `back\app\bu\services\spectrum_facade.py::get_match_ms2`
+* `back\app\bu\services\spectrum_facade.py::get_match_ms1`
+* `back\app\bu\services\spectrum_facade.py::spectrum_v1`
+* `back\app\bu\services\xic_service.py::get_match_xic`
+* `back\app\bu\services\product_xic_service.py::get_match_product_xic`
+* `back\app\bu\services\product_xic_service.py::get_match_product_xics`
+
+spectra-only 前端：
+
+* `front\src\features\spectra-only\api\spectraClient.ts::fetchSpectraChromatogram`
+* `front\src\features\spectra-only\api\spectraClient.ts::fetchSpectraScanIndex`
+* `front\src\features\spectra-only\api\spectraClient.ts::fetchSpectraFullScanIndex`
+* `front\src\features\spectra-only\api\spectraClient.ts::fetchSpectraSpectrum`
+* `front\src\features\spectra-only\utils\scanRelations.ts`
+* `front\src\features\spectra-only\utils\scanPagination.ts`
+* `front\src\features\spectra-only\utils\peakAnnotations.ts`
+
+## 10.调用链
+
+mzML 单谱：
+
+1. 前端 `fetchMzmlSpectrum` 或 `fetchSpectraSpectrum` 请求 `GET /api/v1/datasets/{dataset_id}/runs/{run_id}/spectra/{scan_number}`。
+2. `back\app\api\v1\mzml_spectra.py::mzml_spectrum` 调用 `get_spectrum_by_scan`。
+3. `get_spectrum_by_scan` 调用 `resolve_run_mzml_path` 定位 mzML。
+4. `resolve_run_mzml_path` 优先使用 `runs.run_metadata.mzml_file_path`，必要时根据 dataset/run metadata 做 mapping，并可能补写 DB。
+5. `read_indexed_spectrum` 使用 indexed reader 读取指定 scan。
+6. 如路径补写发生，`mzml_spectrum` 调用 `app.spectrum_memory.release_dataset` 释放旧 whole-dataset memory。
+
+scan index：
+
+1. 前端 `fetchSpectraScanIndex` 或 `fetchSpectraFullScanIndex` 请求 `GET /api/v1/datasets/{dataset_id}/runs/{run_id}/scan-index`。
+2. `mzml_run_scan_index` 调用 `load_scan_index`。
+3. `load_scan_index` 从 `.viewer-derived` 下加载 NumPy `.npz` scan metadata。
+4. API 按 `ms_level`、`offset`、`limit` 返回分页 scan metadata。
+5. 前端 `scanRelations.ts` 基于完整 scan index 计算 MS1/MS2 parent-child 关系；不要基于当前分页结果计算关系。
+
+BU MS1/MS2/XIC：
+
+1. BU route `back\app\api\v1\bu\matches.py::match_ms2` 调用 `spectrum_facade.get_match_ms2`。
+2. `get_match_ms2` 通过 match metadata、scan index 和 `get_spectrum_by_scan` 找 MS2 谱图。
+3. `match_ms1` 调用 `spectrum_facade.get_match_ms1`，优先通过 `find_nearest_ms1_scan` 找最近 MS1。
+4. `match_xic` 调用 `xic_service.get_match_xic`，先用 `find_ms1_scans_in_rt_range` 找候选 scan，再按需读取谱峰。
+5. `match_product_xic` 和 `match_product_xics` 调用 `product_xic_service`，先用 `find_product_xic_ms2_scans` 找候选 MS2 scan，再读取谱峰。
+
+chromatogram：
+
+1. spectra-only 走 `mzml_run_chromatogram`，BU run 走 `back\app\api\v1\bu\chromatogram.py::chromatogram`。
+2. 两条路径都复用 chromatogram summary，而不是按请求遍历完整 mzML。
+3. 缺失或 stale 时返回带 `backfill_command` 的 `HTTPException.detail`，由前端错误解析展示。
+
+## 11.新增功能接入方式
+
+新增单谱类 API：
+
+1. 如果输入是 dataset/run/scan，优先调用 `get_spectrum_by_scan`。
+2. 如果需要同一请求读取多张谱图，用 `indexed_reader_scope` 包裹，避免重复打开 reader。
+3. response schema 如需要稳定前端契约，应新增 Pydantic schema；兼容旧格式才返回 `dict[str, Any]`。
+4. 前端新增 client 函数到 `front\src\api\client.ts` 或 `spectraClient.ts`。
+
+新增 XIC 或 RT 范围类功能：
+
+1. 先用 `load_scan_index` 读取 scan metadata。
+2. 用 `find_ms1_scans_in_rt_range`、`find_ms2_scans_in_rt_range`、`find_product_xic_ms2_scans` 找候选 scan。
+3. 只对候选 scan 调用 `get_spectrum_by_scan` 或 `read_indexed_spectrum`。
+4. 不要为单个图表全量加载 mzML。
+
+新增 spectra-only 前端能力：
+
+1. API 请求放到 `front\src\features\spectra-only\api\spectraClient.ts`。
+2. DTO 放到 `front\src\features\spectra-only\types.ts`。
+3. scan 关系放到 `utils\scanRelations.ts`，分页放到 `utils\scanPagination.ts`，peak annotation 放到 `utils\peakAnnotations.ts`。
+4. `SpectraOnlyPage` 负责组织状态和数据流，展示组件如 `SpectrumPanel`、`ScanListPanel`、`ChromatogramPanel` 不应重新请求 API。
+
+## 12.内部实现边界
+
+以下为内部实现，不建议跨模块直接调用：
+
+* `back\app\services\mzml_scan_reader.py::_ReaderRecord`、`_StrictPreIndexedMzML`、`_cache_key`、`_require_embedded_index`、`_get_cached_scan_index`、`_store_scan_index`、`_close_reader`、`_get_reader_record`、`_build_scan_index`。
+* `back\app\services\mzml_scan_index.py::_derived_root`、`_optional_float`、`_resolve_source_path`、`_optional_value`、`_metadata_at`。
+* `back\app\api\v1\mzml_spectra.py::_run_row`、`_run_metadata`、`_backfill_detail`、`_downsample`、`_finite_or_none`、`_scan_index_summary`。
+* `back\app\services\spectrum_cache.py::_slug_dir_name`、`_candidate_roots`、`_load_spectrum`、`_resolve_spectrum`。
+* `back\app\bu\services\spectrum_facade.py::_get_indexed_spectrum`、`_get_indexed_ms2`、`_scan_index_error`、`_precursor_payload`。
+* `back\app\bu\services\xic_service.py::_rt_window`、`_best_intensities`、`_scan_index_http_error`、`_indexed_ms1_spectrum`。
+* `back\app\bu\services\product_xic_service.py::_rt_window`、`_best_intensities`、`_scan_index_http_error`、`_indexed_ms2_spectrum`、`_extract_product_xics`。
+
+`resolve_run_mzml_path` 是公开入口，但要注意它可能补写 DB mapping；如果调用方需要严格只读语义，不能把它当作纯函数。
+
+## 13.不要绕过的层
+
+* 不要绕过 `load_scan_index` 直接读取 `.npz` 私有结构。
+* 不要绕过 `get_spectrum_by_scan` 在 route 中直接创建 pyteomics reader。
+* 不要绕过 indexed mzML 校验和 `indexListOffset` 检查去支持 gzip 或无索引 mzML。
+* 不要绕过 BU `spectrum_facade`、`xic_service`、`product_xic_service`，在 route 中重复实现 scan 查找。
+* 不要把 scan index 当作完整谱峰数据；它只保存 scan metadata，不保存 mz/intensity arrays。
+* 不要在 spectra-only 前端用分页后的 scan rows 计算 parent-child 关系，应使用 `fetchSpectraFullScanIndex` 拉取完整 scan index。
+
+## 14.相关测试
+
+本节列出开发时应参考或补充的测试入口；当前任务不运行这些测试。
+
+* indexed reader：`back\tests\test_mzml_scan_reader.py`。
+* scan index：`back\tests\test_mzml_scan_index.py`。
+* mzML spectra API：`back\tests\test_mzml_spectra_api.py`。
+* BU spectrum/XIC/product XIC：`back\tests\test_bu_spectrum_api.py`、`back\tests\test_bu_product_xic_indexed.py`、`back\tests\test_bu_xic_isotopes.py`。
+* chromatogram route：`back\tests\test_chromatogram_route_matching.py`。
+* spectra-only scan relation：`front\tests\spectra-only-scan-relations.spec.ts`。
+* spectra-only peak annotation：`front\tests\spectra-only-peak-annotations.spec.ts`。
