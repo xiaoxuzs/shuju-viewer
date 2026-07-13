@@ -7,6 +7,9 @@ from pathlib import Path
 
 _BU_REPORT_NAMES = ("all_report.parquet", "target_report.parquet")
 
+_SPECTRA_ONLY_LABEL = "mzML/RAW spectra"
+"""Weakest layout signal: recursive mzML/RAW file search, easily true for wrapper dirs."""
+
 
 def _has_mzml_or_raw_file(path: Path) -> bool:
     for candidate in path.rglob("*"):
@@ -66,20 +69,24 @@ def _matching_layouts(path: Path) -> list[tuple[str, Path]]:
     if has_bu:
         matches.append(("DIA-NN", path))
     if not has_td and not has_bu and has_spectra:
-        matches.append(("mzML/RAW spectra", path))
+        matches.append((_SPECTRA_ONLY_LABEL, path))
     return matches
 
 
 def find_ingest_root(extract_dir: Path) -> Path:
     """Return the dataset folder to pass to ``plan_zip_ingest`` / ingest adapters.
 
-    If *extract_dir* itself matches :func:`has_dataset_layout`, it is returned.
-    Otherwise exactly one direct subdirectory must match; multiple matches
-    raise ``ValueError``.
+    If *extract_dir* itself matches TopPIC or DIA-NN layout, it is returned directly.
+    ``mzML/RAW spectra`` is the weakest signal (recursive file search, easily true for a
+    wrapper directory whose real dataset lives one level deeper), so a spectra-only match
+    at *extract_dir* is only accepted once no direct subdirectory has a stronger TopPIC/DIA-NN
+    match; otherwise exactly one direct subdirectory must match, and multiple matches raise
+    ``ValueError``.
     """
     extract_dir = extract_dir.resolve()
     root_matches = _matching_layouts(extract_dir)
-    if len(root_matches) == 1:
+    root_is_spectra_only = len(root_matches) == 1 and root_matches[0][0] == _SPECTRA_ONLY_LABEL
+    if len(root_matches) == 1 and not root_is_spectra_only:
         return extract_dir
     subdirs = [p for p in extract_dir.iterdir() if p.is_dir()]
     matches: list[tuple[str, Path]] = []
@@ -92,6 +99,8 @@ def find_ingest_root(extract_dir: Path) -> Path:
             "Multiple dataset folders found under the selected path; keep a single TopPIC, DIA-NN, mzML-only, "
             "or Thermo RAW-only dataset folder."
         )
+    if root_is_spectra_only:
+        return extract_dir
     raise ValueError(
         "Could not find a supported dataset folder (expect TopPIC topfd/toppic_*_cutoff, DIA-NN "
         "all_report.parquet plus mzML/.raw/.d, mzML-only files, or Thermo RAW-only files)."

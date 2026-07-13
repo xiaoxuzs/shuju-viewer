@@ -85,6 +85,23 @@ def test_resolve_mzml_with_thermo_parser_json_root(tmp_path: Path) -> None:
     assert resolve_ingest_root(root) == root.resolve()
 
 
+def test_resolve_prefers_nested_toppic_over_wrapper_mzml(tmp_path: Path) -> None:
+    """Regression: a wrapper dir with no layout markers of its own, whose mzML lives deep
+    inside the real (nested) TopPIC dataset dir, must resolve to the nested dir, not the
+    wrapper — even though the wrapper alone looks like a spectra-only match (mzML found via
+    recursive search)."""
+    outer = tmp_path / "xzx_PXD045330"
+    inner = outer / "xzx_PXD045330"
+    _mkdir(inner / "data" / "prsms")
+    (inner / "data" / "prsms" / "prsm1.js").write_text("{}", encoding="utf-8")
+    mzml_dir = inner / "run.mzML"
+    _mkdir(mzml_dir)
+    (mzml_dir / "run.mzML").write_text("<mzML />", encoding="utf-8")
+
+    assert has_spectra_only_layout(outer) is True
+    assert resolve_ingest_root(outer) == inner.resolve()
+
+
 def test_bruker_d_only_is_not_spectra_only(tmp_path: Path) -> None:
     root = tmp_path / "bruker"
     (root / "sample.d").mkdir(parents=True)
