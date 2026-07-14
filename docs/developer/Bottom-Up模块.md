@@ -62,13 +62,13 @@ BU parquet 读取由 `pyarrow.parquet.ParquetFile.iter_batches` 流式完成，�
 
 BottomUp 依赖 ImportMiddleware 写入数据，依赖 DataModelStorage 存储关系，依赖 SpectrumDataAccess 读取 mzML，依赖 DerivedDataIndex 查询 scan index 和 chromatogram summary，依赖 BinaryFormat 读取 PFMB，依赖 Visualization 展示证据。
 
-参见：`Visualization.md`、`BinaryFormat.md`、`SpectrumDataAccess.md`。
+参见：`可视化模块.md`、`二进制与侧车格式.md`、`谱图数据访问.md`。
 
 ## 7.扩展和维护建议
 
 新增 BU 数据源时优先新增 ingest adapter 和 field mapping，不要把解析逻辑写进 route。新增 match 证据时先判断数据来自 live mzML、scan index、chromatogram summary 还是 PFMB sidecar，再选择 service 层扩展。前端新增 BU 页应放在 `front\src\features\bu`，不要默认使用 `front\src\features\bu-viewer`。
 
-相关测试入口以 `Testing.md` 的完整分层为准；本模块重点参考 `back\tests\test_bu_spectrum_api.py`、`back\tests\test_bu_product_xic_indexed.py`、`back\tests\test_bu_ms2_annotation.py`、`back\tests\test_bu_chromatogram_summary.py`。
+相关测试入口以 `测试模块.md` 的完整分层为准；本模块重点参考 `back\tests\test_bu_spectrum_api.py`、`back\tests\test_bu_product_xic_indexed.py`、`back\tests\test_bu_ms2_annotation.py`、`back\tests\test_bu_chromatogram_summary.py`。
 
 ## 8.当前限制和注意事项
 

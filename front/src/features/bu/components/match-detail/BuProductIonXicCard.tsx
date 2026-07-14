@@ -25,6 +25,7 @@ import {
 } from "@/features/bu/components/match-detail/productIonBatch";
 
 const PRODUCT_XIC_STALE_TIME_MS = 5 * 60_000;
+const PRODUCT_XIC_RT_PADDING_MINUTES = 0.1 / 60;
 
 export function BuProductIonXicCard({
   datasetId,
@@ -76,9 +77,24 @@ export function BuProductIonXicCard({
     colorAssignmentsRef.current = result.assignments;
     return result.colors;
   }, [selections]);
+  const rtWindowOverride = useMemo(() => {
+    if (
+      rtWindow.start === null
+      || rtWindow.stop === null
+      || !Number.isFinite(rtWindow.start)
+      || !Number.isFinite(rtWindow.stop)
+      || rtWindow.stop < rtWindow.start
+    ) {
+      return null;
+    }
+    return {
+      start: Math.max(0, rtWindow.start - PRODUCT_XIC_RT_PADDING_MINUTES),
+      end: rtWindow.stop + PRODUCT_XIC_RT_PADDING_MINUTES,
+    };
+  }, [rtWindow.start, rtWindow.stop]);
   const request = useMemo(
-    () => buildProductIonBatchRequest(selections, ppm, null),
-    [ppm, selections],
+    () => buildProductIonBatchRequest(selections, ppm, rtWindowOverride),
+    [ppm, rtWindowOverride, selections],
   );
   const queryKey = useMemo(
     () =>
@@ -90,9 +106,9 @@ export function BuProductIonXicCard({
         ms2Scan,
         selections,
         tolerancePpm: ppm,
-        rtWindowOverride: null,
+        rtWindowOverride,
       }),
-    [datasetId, matchId, ms2Scan, ppm, runId, selections, slug],
+    [datasetId, matchId, ms2Scan, ppm, rtWindowOverride, runId, selections, slug],
   );
   const batchQuery = useQuery({
     queryKey,

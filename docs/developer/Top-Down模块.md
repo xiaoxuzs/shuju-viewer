@@ -57,7 +57,7 @@ TD 查询逻辑当前主要位于 `back\app\api\v1\proteins.py`、`back\app\api\
 
 当前 TD 查询实现主要是 FastAPI route 加 `universal_compat` 兼容层，查询使用 SQLAlchemy `text`/raw SQL，并大量读取 JSONB `extra_metadata` 字段。PrSM detail 读取通过 `detail_path` 调用 `prsm_files`/`universal_compat.load_prsm_detail`，TopPIC/TopFD JS 数据解析路径包括 `universal_toppic_adapter.py` 和 `back\app\services\js_parser.py`。这些是当前实现状态，不代表推荐把未来 TD 逻辑继续堆在 route 中。
 
-参见：`SpectrumDataAccess.md`、`Visualization.md`。
+参见：`谱图数据访问.md`、`可视化模块.md`。
 
 ## 7.扩展和维护建议
 

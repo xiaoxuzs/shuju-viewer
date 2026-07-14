@@ -56,13 +56,13 @@ RawFile 没有独立 HTTP API，通过 `POST /api/v1/imports` 触发。关键函
 
 RawFile 被 Import 调用，输出 mzML 文件路径和 conversion metadata。SpectrumDataAccess 只读取 mzML，不读取 RAW。DerivedDataIndex 基于 converted mzML 生成 scan index 和 chromatogram summary。
 
-参见：`SpectrumDataAccess.md`、`Import.md`。
+参见：`谱图数据访问.md`、`数据导入模块.md`。
 
 ## 7.扩展和维护建议
 
 新增厂商 RAW 支持时应新增 vendor-specific conversion adapter，并扩展 planner/vendor detection，不要把所有 RAW 逻辑写入 Thermo adapter。same-stem reuse、输出校验、metadata 写入应保持统一契约。不要绕过 indexed mzML 校验直接进入谱图读取链路。
 
-相关测试入口以 `Testing.md` 的完整分层为准；本模块重点参考 `back\tests\test_import_planner_raw.py`、`back\tests\test_import_jobs_raw_conversion.py`、`back\tests\test_raw_conversion_thermo.py`、`back\tests\test_raw_mzml_mapping.py`。
+相关测试入口以 `测试模块.md` 的完整分层为准；本模块重点参考 `back\tests\test_import_planner_raw.py`、`back\tests\test_import_jobs_raw_conversion.py`、`back\tests\test_raw_conversion_thermo.py`、`back\tests\test_raw_mzml_mapping.py`。
 
 ## 8.当前限制和注意事项
 

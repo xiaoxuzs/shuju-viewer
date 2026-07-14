@@ -327,8 +327,15 @@ test("precursor XIC selects MS2 and matched ion toggles product XIC comparison",
   const productRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
     if (!url.pathname.endsWith("/product-xics")) return false;
-    const body = request.postDataJSON() as { ions: Array<{ mz: number }>; rt_window?: unknown };
-    return body.rt_window === undefined && body.ions.some((ion) => ion.mz === 175.119);
+    const body = request.postDataJSON() as {
+      ions: Array<{ mz: number }>;
+      rt_window?: { start: number; end: number };
+    };
+    const paddingMinutes = 0.1 / 60;
+    return body.rt_window !== undefined
+      && Math.abs(body.rt_window.start - (92.15 - paddingMinutes)) < 1e-9
+      && Math.abs(body.rt_window.end - (93.08 + paddingMinutes)) < 1e-9
+      && body.ions.some((ion) => ion.mz === 175.119);
   });
   await clickMs2Peak(page, 67727, 175.119);
   await productRequest;
