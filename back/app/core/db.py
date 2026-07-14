@@ -6,19 +6,26 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
 
 
-engine = create_engine(
-    settings.database_url,
-    echo=False,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-    future=True,
-)
+def create_database_engine(database_url: str, **overrides: object) -> Engine:
+    """Create an Engine with pool options appropriate for its database dialect."""
+    options: dict[str, object] = {
+        "echo": False,
+        "pool_pre_ping": True,
+        "future": True,
+    }
+    if make_url(database_url).get_backend_name() != "sqlite":
+        options.update(pool_size=10, max_overflow=20)
+    options.update(overrides)
+    return create_engine(database_url, **options)
+
+
+engine = create_database_engine(settings.database_url)
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
 

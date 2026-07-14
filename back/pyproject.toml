@@ -41,3 +41,6 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+    "postgres: requires an isolated PostgreSQL 16 test server",
+]

@@ -2,13 +2,66 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
+_ALLOWED_VIEWER_ENVIRONMENTS = {"development", "test", "production"}
+_REQUIRED_TEST_ENVIRONMENT_VARIABLES = ("DATABASE_URL", "DATA_ROOT")
+
+
+def _viewer_environment() -> str:
+    value = os.environ.get("VIEWER_ENV", "development").strip().lower()
+    if value not in _ALLOWED_VIEWER_ENVIRONMENTS:
+        allowed = ", ".join(sorted(_ALLOWED_VIEWER_ENVIRONMENTS))
+        raise RuntimeError(f"VIEWER_ENV must be one of: {allowed}")
+    return value
+
+
+def _resolved_test_data_root(path: Path) -> Path:
+    try:
+        resolved = path.expanduser().resolve(strict=True)
+    except OSError as exc:
+        raise RuntimeError(f"Test DATA_ROOT must be an existing directory: {path}") from exc
+    if not resolved.is_dir():
+        raise RuntimeError(f"Test DATA_ROOT must be a directory: {resolved}")
+
+    temp_root = Path(tempfile.gettempdir()).resolve(strict=True)
+    try:
+        resolved.relative_to(temp_root)
+    except ValueError as exc:
+        raise RuntimeError(f"Test DATA_ROOT must be inside the system temporary directory: {temp_root}") from exc
+    if resolved == temp_root:
+        raise RuntimeError("Test DATA_ROOT must be an isolated directory, not the system temporary root itself")
+    return resolved
+
+
+def _validate_test_database_url(database_url: str) -> None:
+    url = make_url(database_url)
+    database_name = (url.database or "").strip()
+    if database_name.casefold() == "universal_viewer":
+        raise RuntimeError("VIEWER_ENV=test refuses to use the Universal_Viewer database")
+
+    if url.get_backend_name() != "sqlite":
+        return
+    if not database_name or database_name == ":memory:":
+        raise RuntimeError("VIEWER_ENV=test requires a file-based SQLite database")
+
+    database_path = Path(database_name).expanduser()
+    if not database_path.is_absolute():
+        raise RuntimeError("Test SQLite DATABASE_URL must use an absolute path")
+    database_parent = database_path.parent.resolve(strict=True)
+    temp_root = Path(tempfile.gettempdir()).resolve(strict=True)
+    try:
+        database_parent.relative_to(temp_root)
+    except ValueError as exc:
+        raise RuntimeError(f"Test SQLite database must be inside the system temporary directory: {temp_root}") from exc
 
 
 class Settings(BaseSettings):
@@ -93,4 +146,23 @@ class Settings(BaseSettings):
         return root
 
 
-settings = Settings()
+def load_settings() -> Settings:
+    """Load application settings, failing closed for explicitly isolated tests."""
+    if _viewer_environment() != "test":
+        return Settings(_env_file=BACKEND_ROOT / ".env")
+
+    missing = [
+        name
+        for name in _REQUIRED_TEST_ENVIRONMENT_VARIABLES
+        if not os.environ.get(name, "").strip()
+    ]
+    if missing:
+        raise RuntimeError(f"VIEWER_ENV=test requires explicit environment variables: {', '.join(missing)}")
+
+    loaded = Settings(_env_file=None)
+    _validate_test_database_url(loaded.database_url)
+    loaded.data_root = _resolved_test_data_root(loaded.data_root)
+    return loaded
+
+
+settings = load_settings()
