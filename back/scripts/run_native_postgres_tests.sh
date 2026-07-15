@@ -215,28 +215,149 @@ validate_production_pgdata_files() {
     read_production_postmaster_pid >/dev/null
 }
 
-validate_production_postgres_cmdline() {
+validate_postgres_process_owner() {
     local pid="$1"
-    local expected_pgdata="$2"
-    local argument candidate_real
-    local match_count=0
-    local index
-    local -a arguments=()
+    local process_user expected_uid actual_uid
 
-    [[ -r "/proc/$pid/cmdline" ]] || return 1
-    mapfile -d '' -t arguments <"/proc/$pid/cmdline" || return 1
-    ((${#arguments[@]} > 0)) || return 1
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    [[ -d "/proc/$pid" ]] || return 1
+    process_user="$(ps -o user= -p "$pid")" || return 1
+    process_user="$(printf '%s' "$process_user" | tr -d '[:space:]')"
+    [[ "$process_user" == "postgres" ]] || return 1
+    expected_uid="$(id -u postgres)" || return 1
+    actual_uid="$(stat -c '%u' "/proc/$pid")" || return 1
+    [[ "$expected_uid" =~ ^[0-9]+$ && "$actual_uid" =~ ^[0-9]+$ ]] || return 1
+    ((actual_uid == expected_uid))
+}
 
-    for ((index = 0; index < ${#arguments[@]}; index += 1)); do
-        argument="${arguments[$index]}"
-        [[ "$argument" == "-D" ]] || continue
-        ((index + 1 < ${#arguments[@]})) || return 1
-        [[ "${arguments[$((index + 1))]}" == /* ]] || return 1
-        candidate_real="$(realpath -e -- "${arguments[$((index + 1))]}")" || return 1
-        [[ "$candidate_real" == "$expected_pgdata" ]] || return 1
-        ((match_count += 1))
+read_postgres_proc_identity() {
+    local pid="$1"
+    local expected_postgres_exe="$2"
+    local expected_pgdata="$3"
+
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+    [[ "$expected_postgres_exe" == /* && -f "$expected_postgres_exe" ]] || return 1
+    [[ "$expected_pgdata" == /* && -d "$expected_pgdata" ]] || return 1
+    pg_run python3 - "$pid" "$expected_postgres_exe" "$expected_pgdata" <<'PY'
+import os
+import sys
+
+
+def fail(message: str) -> None:
+    print(f"proc identity validation failed: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def read_start_time(stat_path: str) -> int:
+    try:
+        with open(stat_path, encoding="utf-8") as stat_file:
+            raw_stat = stat_file.read()
+    except OSError:
+        fail("unable to read process stat")
+    right_parenthesis = raw_stat.rfind(")")
+    if right_parenthesis < 1 or right_parenthesis + 2 >= len(raw_stat):
+        fail("invalid process stat format")
+    fields_after_comm = raw_stat[right_parenthesis + 2 :].split()
+    if len(fields_after_comm) <= 19:
+        fail("process stat does not contain starttime")
+    start_time_text = fields_after_comm[19]
+    if not start_time_text.isascii() or not start_time_text.isdecimal():
+        fail("invalid process starttime")
+    start_time = int(start_time_text)
+    if start_time <= 0:
+        fail("invalid process starttime")
+    return start_time
+
+
+if len(sys.argv) != 4:
+    fail("invalid helper arguments")
+pid_text, expected_exe_argument, expected_pgdata_argument = sys.argv[1:]
+if not pid_text.isascii() or not pid_text.isdecimal() or int(pid_text) <= 0:
+    fail("invalid process id")
+if not os.path.isabs(expected_exe_argument) or not os.path.isabs(expected_pgdata_argument):
+    fail("expected paths must be absolute")
+
+proc_directory = f"/proc/{pid_text}"
+exe_path = f"{proc_directory}/exe"
+cmdline_path = f"{proc_directory}/cmdline"
+stat_path = f"{proc_directory}/stat"
+
+start_time_before = read_start_time(stat_path)
+try:
+    actual_exe = os.path.realpath(os.readlink(exe_path))
+except OSError:
+    fail("unable to read process executable")
+expected_exe = os.path.realpath(expected_exe_argument)
+if actual_exe != expected_exe:
+    fail("process executable does not match PostgreSQL 16")
+
+try:
+    with open(cmdline_path, "rb") as cmdline_file:
+        raw_cmdline = cmdline_file.read()
+except OSError:
+    fail("unable to read process command line")
+raw_arguments = raw_cmdline.split(b"\0")
+if raw_arguments and raw_arguments[-1] == b"":
+    raw_arguments.pop()
+if not raw_arguments or any(argument == b"" for argument in raw_arguments):
+    fail("invalid process command line")
+arguments = [os.fsdecode(argument) for argument in raw_arguments]
+pgdata_indexes = [index for index, argument in enumerate(arguments) if argument == "-D"]
+if len(pgdata_indexes) != 1:
+    fail("process command line must contain one independent -D argument")
+pgdata_index = pgdata_indexes[0]
+if pgdata_index + 1 >= len(arguments) or not os.path.isabs(arguments[pgdata_index + 1]):
+    fail("process -D argument is invalid")
+actual_pgdata = os.path.realpath(arguments[pgdata_index + 1])
+expected_pgdata = os.path.realpath(expected_pgdata_argument)
+if actual_pgdata != expected_pgdata:
+    fail("process PGDATA does not match the expected path")
+
+start_time_after = read_start_time(stat_path)
+if start_time_after != start_time_before:
+    fail("process identity changed while reading evidence")
+
+print(f"exe={actual_exe}")
+print(f"pgdata={actual_pgdata}")
+print(f"start_time={start_time_after}")
+PY
+}
+
+parse_postgres_proc_identity() {
+    local evidence="$1"
+    local expected_postgres_exe="$2"
+    local expected_pgdata="$3"
+    local line exe_value="" pgdata_value="" start_time_value=""
+    local exe_count=0 pgdata_count=0 start_time_count=0
+    local -a evidence_lines=()
+
+    mapfile -t evidence_lines <<<"$evidence"
+    ((${#evidence_lines[@]} == 3)) || return 1
+    for line in "${evidence_lines[@]}"; do
+        case "$line" in
+            exe=*)
+                ((exe_count += 1))
+                exe_value="${line#exe=}"
+                ;;
+            pgdata=*)
+                ((pgdata_count += 1))
+                pgdata_value="${line#pgdata=}"
+                ;;
+            start_time=*)
+                ((start_time_count += 1))
+                start_time_value="${line#start_time=}"
+                ;;
+            *)
+                return 1
+                ;;
+        esac
     done
-    ((match_count == 1))
+    ((exe_count == 1 && pgdata_count == 1 && start_time_count == 1)) || return 1
+    [[ "$exe_value" == "$expected_postgres_exe" ]] || return 1
+    [[ "$pgdata_value" == "$expected_pgdata" ]] || return 1
+    [[ "$start_time_value" =~ ^[1-9][0-9]*$ ]] || return 1
+    printf '%s' "$start_time_value"
 }
 
 optional_systemd_postgres_pid_cross_check() {
@@ -262,32 +383,33 @@ optional_systemd_postgres_pid_cross_check() {
 }
 
 production_postgres_pid_from_pgdata() {
-    local pid confirmed_pid process_user process_executable executable_directory postgres_executable
+    local pid intermediate_pid final_pid postgres_executable
+    local evidence_a evidence_b start_time_a start_time_b
 
     validate_production_pgdata_files || {
         error "Production PGDATA files failed validation"
         return 1
     }
     pid="$(read_production_postmaster_pid)" || return 1
-    kill -0 "$pid" 2>/dev/null || return 1
-    [[ -d "/proc/$pid" ]] || return 1
-
-    process_user="$(ps -o user= -p "$pid")" || return 1
-    process_user="$(printf '%s' "$process_user" | tr -d '[:space:]')"
-    [[ "$process_user" == "postgres" ]] || return 1
-
-    process_executable="$(realpath -e -- "/proc/$pid/exe")" || return 1
-    [[ "$(basename -- "$process_executable")" == "postgres" ]] || return 1
-    executable_directory="$(dirname -- "$process_executable")"
-    executable_directory="$(realpath -e -- "$executable_directory")" || return 1
-    [[ "$executable_directory" == "$PG_BINDIR" ]] || return 1
+    validate_postgres_process_owner "$pid" || return 1
     postgres_executable="$(realpath -e -- "$PG_POSTGRES")" || return 1
-    [[ "$process_executable" == "$postgres_executable" ]] || return 1
 
-    validate_production_postgres_cmdline "$pid" "$PRODUCTION_PGDATA" || return 1
+    evidence_a="$(read_postgres_proc_identity "$pid" "$postgres_executable" "$PRODUCTION_PGDATA")" || return 1
+    start_time_a="$(parse_postgres_proc_identity "$evidence_a" "$postgres_executable" "$PRODUCTION_PGDATA")" ||
+        return 1
     validate_production_pgdata_files || return 1
-    confirmed_pid="$(read_production_postmaster_pid)" || return 1
-    [[ "$confirmed_pid" == "$pid" ]] || return 1
+    intermediate_pid="$(read_production_postmaster_pid)" || return 1
+
+    evidence_b="$(read_postgres_proc_identity "$pid" "$postgres_executable" "$PRODUCTION_PGDATA")" || return 1
+    start_time_b="$(parse_postgres_proc_identity "$evidence_b" "$postgres_executable" "$PRODUCTION_PGDATA")" ||
+        return 1
+    validate_postgres_process_owner "$pid" || return 1
+    validate_production_pgdata_files || return 1
+    final_pid="$(read_production_postmaster_pid)" || return 1
+
+    [[ "$intermediate_pid" == "$pid" && "$final_pid" == "$pid" ]] || return 1
+    [[ "$start_time_a" == "$start_time_b" ]] || return 1
+    [[ "$evidence_a" == "$evidence_b" ]] || return 1
     optional_systemd_postgres_pid_cross_check "$pid" || return 1
     printf '%s' "$pid"
 }
@@ -408,7 +530,7 @@ preflight() {
     local command_name
     for command_name in \
         awk basename chmod chown date df dirname find flock grep id mkdir mv paste pgrep realpath readlink \
-        ps rm runuser sed sleep sort stat tail touch tr uname; do
+        ps python3 rm runuser sed sleep sort stat tail touch tr uname; do
         require_command "$command_name"
     done
     id postgres >/dev/null 2>&1 || die "The postgres operating-system user is unavailable"

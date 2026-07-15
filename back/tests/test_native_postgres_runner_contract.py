@@ -197,32 +197,115 @@ def test_runner_uses_full_pgdata_process_evidence_chain(runner_text: str) -> Non
     )
     assert evidence_function is not None
     evidence_body = evidence_function.group("body")
-    assert 'kill -0 "$pid"' in evidence_body
-    assert '[[ -d "/proc/$pid" ]]' in evidence_body
-    assert 'ps -o user= -p "$pid"' in evidence_body
-    assert '[[ "$process_user" == "postgres" ]]' in evidence_body
-    assert 'realpath -e -- "/proc/$pid/exe"' in evidence_body
-    assert '[[ "$(basename -- "$process_executable")" == "postgres" ]]' in evidence_body
-    assert '[[ "$executable_directory" == "$PG_BINDIR" ]]' in evidence_body
-    assert 'validate_production_postgres_cmdline "$pid" "$PRODUCTION_PGDATA"' in evidence_body
-    assert evidence_body.count("validate_production_pgdata_files") == 2
-    assert evidence_body.count("read_production_postmaster_pid") >= 2
+    assert evidence_body.count('validate_postgres_process_owner "$pid"') == 2
+    assert evidence_body.count('read_postgres_proc_identity "$pid"') == 2
+    assert 'realpath -e -- "/proc/$pid/exe"' not in evidence_body
+    assert 'mapfile -d \'\' -t arguments <"/proc/$pid/cmdline"' not in evidence_body
+    assert evidence_body.count("validate_production_pgdata_files") == 3
+    assert evidence_body.count("read_production_postmaster_pid") == 3
 
 
-def test_runner_parses_pgdata_from_nul_delimited_independent_arguments(runner_text: str) -> None:
-    cmdline_function = re.search(
-        r"validate_production_postgres_cmdline\(\) \{(?P<body>.*?)\n\}",
+def test_runner_reads_proc_evidence_as_postgres_with_embedded_python(runner_text: str) -> None:
+    helper_function = re.search(
+        r"read_postgres_proc_identity\(\) \{(?P<body>.*?)\n\}",
         runner_text,
         flags=re.DOTALL,
     )
-    assert cmdline_function is not None
-    cmdline_body = cmdline_function.group("body")
-    assert "mapfile -d '' -t arguments" in cmdline_body
-    assert '[[ "$argument" == "-D" ]]' in cmdline_body
-    assert 'candidate_real="$(realpath -e -- "${arguments[$((index + 1))]}")"' in cmdline_body
-    assert '[[ "$candidate_real" == "$expected_pgdata" ]]' in cmdline_body
-    assert '((match_count == 1))' in cmdline_body
-    assert "config_file" not in cmdline_body
+    assert helper_function is not None
+    helper_body = helper_function.group("body")
+    assert 'pg_run python3 - "$pid" "$expected_postgres_exe" "$expected_pgdata"' in helper_body
+    assert 'os.readlink(exe_path)' in helper_body
+    assert 'open(cmdline_path, "rb")' in helper_body
+    assert 'raw_cmdline.split(b"\\0")' in helper_body
+    assert 'argument == "-D"' in helper_body
+    assert 'actual_pgdata = os.path.realpath(arguments[pgdata_index + 1])' in helper_body
+    assert 'if actual_pgdata != expected_pgdata:' in helper_body
+    assert 'right_parenthesis = raw_stat.rfind(")")' in helper_body
+    assert 'fields_after_comm = raw_stat[right_parenthesis + 2 :].split()' in helper_body
+    assert 'start_time_text = fields_after_comm[19]' in helper_body
+    assert helper_body.count("read_start_time(stat_path)") == 2
+    assert 'start_time_after != start_time_before' in helper_body
+    assert "os.path.isdir(proc_directory)" not in helper_body
+    assert 'print(f"exe={actual_exe}")' in helper_body
+    assert 'print(f"pgdata={actual_pgdata}")' in helper_body
+    assert 'print(f"start_time={start_time_after}")' in helper_body
+
+
+def test_runner_validates_process_user_and_numeric_uid_before_proc_read(runner_text: str) -> None:
+    owner_function = re.search(
+        r"validate_postgres_process_owner\(\) \{(?P<body>.*?)\n\}",
+        runner_text,
+        flags=re.DOTALL,
+    )
+    assert owner_function is not None
+    owner_body = owner_function.group("body")
+    assert 'kill -0 "$pid"' in owner_body
+    assert 'ps -o user= -p "$pid"' in owner_body
+    assert '[[ "$process_user" == "postgres" ]]' in owner_body
+    assert 'expected_uid="$(id -u postgres)"' in owner_body
+    assert 'actual_uid="$(stat -c \'%u\' "/proc/$pid")"' in owner_body
+    assert '((actual_uid == expected_uid))' in owner_body
+
+    evidence_body = re.search(
+        r"production_postgres_pid_from_pgdata\(\) \{(?P<body>.*?)\n\}",
+        runner_text,
+        flags=re.DOTALL,
+    ).group("body")
+    first_owner = evidence_body.index('validate_postgres_process_owner "$pid"')
+    first_read = evidence_body.index('evidence_a="$(read_postgres_proc_identity')
+    second_read = evidence_body.index('evidence_b="$(read_postgres_proc_identity')
+    second_owner = evidence_body.index('validate_postgres_process_owner "$pid"', first_owner + 1)
+    assert first_owner < first_read < second_read < second_owner
+
+
+def test_runner_parses_exact_structured_proc_evidence(runner_text: str) -> None:
+    parser_function = re.search(
+        r"parse_postgres_proc_identity\(\) \{(?P<body>.*?)\n\}",
+        runner_text,
+        flags=re.DOTALL,
+    )
+    assert parser_function is not None
+    parser_body = parser_function.group("body")
+    assert '((${#evidence_lines[@]} == 3))' in parser_body
+    assert "exe=*)" in parser_body
+    assert "pgdata=*)" in parser_body
+    assert "start_time=*)" in parser_body
+    assert '((exe_count == 1 && pgdata_count == 1 && start_time_count == 1))' in parser_body
+    assert '[[ "$exe_value" == "$expected_postgres_exe" ]]' in parser_body
+    assert '[[ "$pgdata_value" == "$expected_pgdata" ]]' in parser_body
+    assert '[[ "$start_time_value" =~ ^[1-9][0-9]*$ ]]' in parser_body
+
+
+def test_runner_uses_three_pid_reads_and_two_stable_proc_snapshots(runner_text: str) -> None:
+    evidence_body = re.search(
+        r"production_postgres_pid_from_pgdata\(\) \{(?P<body>.*?)\n\}",
+        runner_text,
+        flags=re.DOTALL,
+    ).group("body")
+    initial_pid = evidence_body.index('pid="$(read_production_postmaster_pid)"')
+    first_owner = evidence_body.index('validate_postgres_process_owner "$pid"')
+    first_evidence = evidence_body.index('evidence_a="$(read_postgres_proc_identity')
+    intermediate_pid = evidence_body.index('intermediate_pid="$(read_production_postmaster_pid)"')
+    second_evidence = evidence_body.index('evidence_b="$(read_postgres_proc_identity')
+    second_owner = evidence_body.index('validate_postgres_process_owner "$pid"', first_owner + 1)
+    final_pid = evidence_body.index('final_pid="$(read_production_postmaster_pid)"')
+    comparisons = evidence_body.index('[[ "$intermediate_pid" == "$pid" && "$final_pid" == "$pid" ]]')
+    assert initial_pid < first_owner < first_evidence < intermediate_pid
+    assert intermediate_pid < second_evidence < second_owner < final_pid < comparisons
+    assert '[[ "$start_time_a" == "$start_time_b" ]]' in evidence_body
+    assert '[[ "$evidence_a" == "$evidence_b" ]]' in evidence_body
+
+
+def test_runner_has_no_root_proc_fallback_or_shell_nul_parsing(runner_text: str) -> None:
+    evidence_body = re.search(
+        r"production_postgres_pid_from_pgdata\(\) \{(?P<body>.*?)\n\}",
+        runner_text,
+        flags=re.DOTALL,
+    ).group("body")
+    assert '"/proc/$pid/exe"' not in evidence_body
+    assert '"/proc/$pid/cmdline"' not in evidence_body
+    assert "Permission denied" not in runner_text
+    assert "eval " not in runner_text
 
 
 def test_runner_treats_systemd_as_optional_cross_check(runner_text: str) -> None:
