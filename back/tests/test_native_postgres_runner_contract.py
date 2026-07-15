@@ -74,6 +74,7 @@ def test_runner_does_not_modify_or_connect_to_production_cluster(runner_text: st
     assert 'pg_run "$PG_ISREADY"' in production_ready_body
     assert '--port "$PRODUCTION_PORT"' in production_ready_body
     assert runner_text.count('"$PRODUCTION_PORT"') == 1
+    assert "SHOW data_directory" not in runner_text
 
     production_identity_lines = [line for line in runner_text.splitlines() if "PRODUCTION_IDENTITY" in line]
     assert production_identity_lines
@@ -157,6 +158,116 @@ def test_runner_requires_explicit_production_data_root_and_complete_summary(runn
     assert "set -Eeuo pipefail" in runner_text
     assert "find -P" in runner_text
     assert "-printf '%y\\t%s\\t%T@\\n'" in runner_text
+
+
+def test_runner_requires_and_validates_explicit_production_pgdata(runner_text: str) -> None:
+    assert 'supplied="${VIEWER_PRODUCTION_PGDATA:-}"' in runner_text
+    assert '[[ "$supplied" == /* ]]' in runner_text
+    assert '[[ -d "$supplied" ]]' in runner_text
+    assert '[[ ! -L "$supplied" ]]' in runner_text
+    assert 'resolved="$(realpath -e -- "$supplied")"' in runner_text
+    assert 'pg_version_file="$PRODUCTION_PGDATA/PG_VERSION"' in runner_text
+    assert '[[ "$pg_version" == "$EXPECTED_PG_MAJOR" ]]' in runner_text
+    assert 'postmaster_file="$PRODUCTION_PGDATA/postmaster.pid"' in runner_text
+    assert '[[ -f "$postmaster_file" && ! -L "$postmaster_file" ]]' in runner_text
+    assert 'postmaster_real="$(realpath -e -- "$postmaster_file")"' in runner_text
+    assert '[[ "$postmaster_real" == "$PRODUCTION_PGDATA/postmaster.pid" ]]' in runner_text
+    assert '[[ "$(stat -c \'%U\' "$postmaster_file")" == "postgres" ]]' in runner_text
+    assert '[[ "$pid" =~ ^[1-9][0-9]*$ ]]' in runner_text
+
+
+def test_runner_checks_production_pgdata_path_boundaries_in_both_directions(runner_text: str) -> None:
+    assert "paths_overlap()" in runner_text
+    assert 'realpath --relative-to="$first" -- "$second"' in runner_text
+    assert 'realpath --relative-to="$second" -- "$first"' in runner_text
+    assert 'reject_path_overlap "$PRODUCTION_PGDATA" "$REPO_ROOT"' in runner_text
+    assert 'reject_path_overlap "$PRODUCTION_PGDATA" "$PRODUCTION_DATA_ROOT"' in runner_text
+    assert 'reject_path_overlap "$PRODUCTION_PGDATA" "$temp_real"' in runner_text
+    assert 'temp_base_real="$(realpath -e -- "$TEMP_BASE")"' in runner_text
+    assert 'relative_to_temp="$(realpath --relative-to="$temp_base_real" -- "$PRODUCTION_PGDATA")"' in runner_text
+    assert 'paths_overlap "$PRODUCTION_PGDATA" "$temp_base_real"' in runner_text
+    assert "startswith" not in runner_text
+
+
+def test_runner_uses_full_pgdata_process_evidence_chain(runner_text: str) -> None:
+    evidence_function = re.search(
+        r"production_postgres_pid_from_pgdata\(\) \{(?P<body>.*?)\n\}",
+        runner_text,
+        flags=re.DOTALL,
+    )
+    assert evidence_function is not None
+    evidence_body = evidence_function.group("body")
+    assert 'kill -0 "$pid"' in evidence_body
+    assert '[[ -d "/proc/$pid" ]]' in evidence_body
+    assert 'ps -o user= -p "$pid"' in evidence_body
+    assert '[[ "$process_user" == "postgres" ]]' in evidence_body
+    assert 'realpath -e -- "/proc/$pid/exe"' in evidence_body
+    assert '[[ "$(basename -- "$process_executable")" == "postgres" ]]' in evidence_body
+    assert '[[ "$executable_directory" == "$PG_BINDIR" ]]' in evidence_body
+    assert 'validate_production_postgres_cmdline "$pid" "$PRODUCTION_PGDATA"' in evidence_body
+    assert evidence_body.count("validate_production_pgdata_files") == 2
+    assert evidence_body.count("read_production_postmaster_pid") >= 2
+
+
+def test_runner_parses_pgdata_from_nul_delimited_independent_arguments(runner_text: str) -> None:
+    cmdline_function = re.search(
+        r"validate_production_postgres_cmdline\(\) \{(?P<body>.*?)\n\}",
+        runner_text,
+        flags=re.DOTALL,
+    )
+    assert cmdline_function is not None
+    cmdline_body = cmdline_function.group("body")
+    assert "mapfile -d '' -t arguments" in cmdline_body
+    assert '[[ "$argument" == "-D" ]]' in cmdline_body
+    assert 'candidate_real="$(realpath -e -- "${arguments[$((index + 1))]}")"' in cmdline_body
+    assert '[[ "$candidate_real" == "$expected_pgdata" ]]' in cmdline_body
+    assert '((match_count == 1))' in cmdline_body
+    assert "config_file" not in cmdline_body
+
+
+def test_runner_treats_systemd_as_optional_cross_check(runner_text: str) -> None:
+    optional_function = re.search(
+        r"optional_systemd_postgres_pid_cross_check\(\) \{(?P<body>.*?)\n\}",
+        runner_text,
+        flags=re.DOTALL,
+    )
+    assert optional_function is not None
+    optional_body = optional_function.group("body")
+    assert "! -d /run/systemd/system" in optional_body
+    assert "! command -v systemctl" in optional_body
+    assert '2>/dev/null' in optional_body
+    assert optional_body.count('log "systemd cross-check skipped" >&2') >= 3
+    assert '[[ ! "$systemd_pid" =~ ^[1-9][0-9]*$ ]]' in optional_body
+    assert '[[ "$systemd_pid" == "$expected_pid" ]]' in optional_body
+
+    preflight = re.search(r"preflight\(\) \{(?P<body>.*?)\n\}", runner_text, flags=re.DOTALL)
+    assert preflight is not None
+    required_commands = preflight.group("body").split("id postgres", maxsplit=1)[0]
+    assert "systemctl" not in required_commands
+
+
+def test_runner_repeats_full_production_identity_check_after_tests(runner_text: str) -> None:
+    assert 'BASELINE_PRODUCTION_PG_PID="$(production_postgres_pid_from_pgdata)"' in runner_text
+    assert 'current_pg_pid="$(production_postgres_pid_from_pgdata)"' in runner_text
+    assert '[[ "$current_pg_pid" == "$BASELINE_PRODUCTION_PG_PID" ]]' in runner_text
+
+
+def test_runner_validates_production_pgdata_before_creating_a_run_directory(runner_text: str) -> None:
+    preflight = re.search(r"preflight\(\) \{(?P<body>.*?)\n\}", runner_text, flags=re.DOTALL)
+    main = re.search(r"main\(\) \{(?P<body>.*?)\n\}", runner_text, flags=re.DOTALL)
+    assert preflight is not None
+    assert main is not None
+    assert "validate_production_pgdata" in preflight.group("body")
+    main_body = main.group("body")
+    assert main_body.index("preflight") < main_body.index("create_run_root")
+
+
+def test_runner_does_not_guess_a_production_postgres_pid(runner_text: str) -> None:
+    lowered = runner_text.casefold()
+    assert "pgrep postgres" not in lowered
+    assert "pgrep -xo postgres" not in lowered
+    assert "ps aux" not in lowered
+    assert "show data_directory" not in lowered
 
 
 def test_runner_sets_isolated_application_environment(runner_text: str) -> None:

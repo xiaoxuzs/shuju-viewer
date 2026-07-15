@@ -42,8 +42,10 @@ PG_CREATEDB=""
 PG_PSQL=""
 PYTHON=""
 BACK_ROOT=""
+REPO_ROOT=""
 
 PRODUCTION_DATA_ROOT=""
+PRODUCTION_PGDATA=""
 BASELINE_DATA_SUMMARY=""
 BASELINE_PRODUCTION_PG_PID=""
 BASELINE_UVICORN_PIDS=""
@@ -161,10 +163,132 @@ capture_process_ids() {
     printf '%s' "$output"
 }
 
-production_postgres_pid() {
+paths_overlap() {
+    local first="$1"
+    local second="$2"
+    local first_to_second second_to_first
+
+    first_to_second="$(realpath --relative-to="$first" -- "$second")" || return 2
+    second_to_first="$(realpath --relative-to="$second" -- "$first")" || return 2
+    [[ "$first_to_second" == "." || "$first_to_second" != ".." && "$first_to_second" != ../* ]] ||
+        [[ "$second_to_first" == "." || "$second_to_first" != ".." && "$second_to_first" != ../* ]]
+}
+
+reject_path_overlap() {
+    local first="$1"
+    local second="$2"
+    local description="$3"
+    local result
+
+    if paths_overlap "$first" "$second"; then
+        die "$description"
+    else
+        result=$?
+        ((result == 1)) || die "Unable to compare normalized path boundaries"
+    fi
+}
+
+read_production_postmaster_pid() {
     local pid
-    pid="$(systemctl show --property=MainPID --value "$PRODUCTION_PG_SERVICE")" || return 1
+    pid="$(sed -n '1p' "$PRODUCTION_PGDATA/postmaster.pid")" || return 1
     [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+    printf '%s' "$pid"
+}
+
+validate_production_pgdata_files() {
+    local resolved pg_version_file postmaster_file pg_version postmaster_real
+
+    [[ -n "$PRODUCTION_PGDATA" && -d "$PRODUCTION_PGDATA" && ! -L "$PRODUCTION_PGDATA" ]] || return 1
+    resolved="$(realpath -e -- "$PRODUCTION_PGDATA")" || return 1
+    [[ "$resolved" == "$PRODUCTION_PGDATA" ]] || return 1
+
+    pg_version_file="$PRODUCTION_PGDATA/PG_VERSION"
+    postmaster_file="$PRODUCTION_PGDATA/postmaster.pid"
+    [[ -f "$pg_version_file" && ! -L "$pg_version_file" ]] || return 1
+    pg_version="$(<"$pg_version_file")" || return 1
+    [[ "$pg_version" == "$EXPECTED_PG_MAJOR" ]] || return 1
+
+    [[ -f "$postmaster_file" && ! -L "$postmaster_file" ]] || return 1
+    postmaster_real="$(realpath -e -- "$postmaster_file")" || return 1
+    [[ "$postmaster_real" == "$PRODUCTION_PGDATA/postmaster.pid" ]] || return 1
+    [[ "$(stat -c '%U' "$postmaster_file")" == "postgres" ]] || return 1
+    read_production_postmaster_pid >/dev/null
+}
+
+validate_production_postgres_cmdline() {
+    local pid="$1"
+    local expected_pgdata="$2"
+    local argument candidate_real
+    local match_count=0
+    local index
+    local -a arguments=()
+
+    [[ -r "/proc/$pid/cmdline" ]] || return 1
+    mapfile -d '' -t arguments <"/proc/$pid/cmdline" || return 1
+    ((${#arguments[@]} > 0)) || return 1
+
+    for ((index = 0; index < ${#arguments[@]}; index += 1)); do
+        argument="${arguments[$index]}"
+        [[ "$argument" == "-D" ]] || continue
+        ((index + 1 < ${#arguments[@]})) || return 1
+        [[ "${arguments[$((index + 1))]}" == /* ]] || return 1
+        candidate_real="$(realpath -e -- "${arguments[$((index + 1))]}")" || return 1
+        [[ "$candidate_real" == "$expected_pgdata" ]] || return 1
+        ((match_count += 1))
+    done
+    ((match_count == 1))
+}
+
+optional_systemd_postgres_pid_cross_check() {
+    local expected_pid="$1"
+    local systemd_pid
+
+    if [[ ! -d /run/systemd/system ]] || ! command -v systemctl >/dev/null 2>&1; then
+        log "systemd cross-check skipped" >&2
+        return 0
+    fi
+    if ! systemd_pid="$(systemctl show --property=MainPID --value "$PRODUCTION_PG_SERVICE" 2>/dev/null)"; then
+        log "systemd cross-check skipped" >&2
+        return 0
+    fi
+    if [[ ! "$systemd_pid" =~ ^[1-9][0-9]*$ ]]; then
+        log "systemd cross-check skipped" >&2
+        return 0
+    fi
+    [[ "$systemd_pid" == "$expected_pid" ]] || {
+        error "systemd MainPID does not match the production PGDATA evidence chain"
+        return 1
+    }
+}
+
+production_postgres_pid_from_pgdata() {
+    local pid confirmed_pid process_user process_executable executable_directory postgres_executable
+
+    validate_production_pgdata_files || {
+        error "Production PGDATA files failed validation"
+        return 1
+    }
+    pid="$(read_production_postmaster_pid)" || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    [[ -d "/proc/$pid" ]] || return 1
+
+    process_user="$(ps -o user= -p "$pid")" || return 1
+    process_user="$(printf '%s' "$process_user" | tr -d '[:space:]')"
+    [[ "$process_user" == "postgres" ]] || return 1
+
+    process_executable="$(realpath -e -- "/proc/$pid/exe")" || return 1
+    [[ "$(basename -- "$process_executable")" == "postgres" ]] || return 1
+    executable_directory="$(dirname -- "$process_executable")"
+    executable_directory="$(realpath -e -- "$executable_directory")" || return 1
+    [[ "$executable_directory" == "$PG_BINDIR" ]] || return 1
+    postgres_executable="$(realpath -e -- "$PG_POSTGRES")" || return 1
+    [[ "$process_executable" == "$postgres_executable" ]] || return 1
+
+    validate_production_postgres_cmdline "$pid" "$PRODUCTION_PGDATA" || return 1
+    validate_production_pgdata_files || return 1
+    confirmed_pid="$(read_production_postmaster_pid)" || return 1
+    [[ "$confirmed_pid" == "$pid" ]] || return 1
+    optional_systemd_postgres_pid_cross_check "$pid" || return 1
     printf '%s' "$pid"
 }
 
@@ -209,6 +333,39 @@ validate_production_data_root() {
     PRODUCTION_DATA_ROOT="$resolved"
 }
 
+validate_production_pgdata() {
+    local supplied="${VIEWER_PRODUCTION_PGDATA:-}"
+    local resolved temp_real temp_base_real relative_to_temp
+
+    [[ -n "$supplied" ]] || die "VIEWER_PRODUCTION_PGDATA must be explicitly provided"
+    [[ "$supplied" == /* ]] || die "VIEWER_PRODUCTION_PGDATA must be an absolute path"
+    [[ -d "$supplied" ]] || die "VIEWER_PRODUCTION_PGDATA does not exist or is not a directory"
+    [[ ! -L "$supplied" ]] || die "VIEWER_PRODUCTION_PGDATA must not be a symbolic link"
+    resolved="$(realpath -e -- "$supplied")" || die "Unable to resolve VIEWER_PRODUCTION_PGDATA"
+    [[ -n "$resolved" && -d "$resolved" ]] || die "Resolved VIEWER_PRODUCTION_PGDATA is invalid"
+    PRODUCTION_PGDATA="$resolved"
+
+    temp_real="$(realpath -e -- /tmp)" || die "Unable to resolve /tmp"
+    temp_base_real="$(realpath -e -- "$TEMP_BASE")" || die "Unable to resolve $TEMP_BASE"
+    reject_path_overlap "$PRODUCTION_PGDATA" "$REPO_ROOT" "Production PGDATA overlaps the repository"
+    reject_path_overlap "$PRODUCTION_PGDATA" "$PRODUCTION_DATA_ROOT" "Production PGDATA overlaps production DATA_ROOT"
+    reject_path_overlap "$PRODUCTION_PGDATA" "$temp_real" "Production PGDATA overlaps /tmp"
+
+    relative_to_temp="$(realpath --relative-to="$temp_base_real" -- "$PRODUCTION_PGDATA")" ||
+        die "Unable to compare production PGDATA with the temporary cluster root"
+    [[ "$relative_to_temp" != viewer-pg16-test-* ]] ||
+        die "Production PGDATA overlaps a native PostgreSQL test directory"
+    if paths_overlap "$PRODUCTION_PGDATA" "$temp_base_real"; then
+        [[ "$PRODUCTION_PGDATA" != "$temp_base_real" && "$temp_base_real" != "$PRODUCTION_PGDATA"/* ]] ||
+            die "Production PGDATA would contain native PostgreSQL test directories"
+    else
+        local overlap_result=$?
+        ((overlap_result == 1)) || die "Unable to compare production PGDATA with /var/tmp"
+    fi
+
+    validate_production_pgdata_files || die "Production PGDATA files failed validation"
+}
+
 check_free_space() {
     local available
     available="$(df -P -B1 "$TEMP_BASE" | awk 'NR == 2 { print $4 }')" || die "Unable to inspect $TEMP_BASE capacity"
@@ -251,7 +408,7 @@ preflight() {
     local command_name
     for command_name in \
         awk basename chmod chown date df dirname find flock grep id mkdir mv paste pgrep realpath readlink \
-        rm runuser sed sleep sort stat systemctl tail touch tr uname; do
+        ps rm runuser sed sleep sort stat tail touch tr uname; do
         require_command "$command_name"
     done
     id postgres >/dev/null 2>&1 || die "The postgres operating-system user is unavailable"
@@ -275,6 +432,7 @@ preflight() {
     local script_dir
     script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
     BACK_ROOT="$(cd -- "$script_dir/.." && pwd -P)"
+    REPO_ROOT="$(cd -- "$BACK_ROOT/.." && pwd -P)"
     PYTHON="$BACK_ROOT/.venv/bin/python"
     [[ -x "$PYTHON" ]] || die "Existing backend virtual environment is unavailable: $PYTHON"
     "$PYTHON" -B -c 'import pytest, psycopg, sqlalchemy' || die "Existing virtual environment lacks pytest, psycopg, or SQLAlchemy"
@@ -282,9 +440,11 @@ preflight() {
     check_free_space
     validate_production_data_root
     discover_postgres_binaries
+    validate_production_pgdata
 
     production_postgres_ready || die "Production PostgreSQL readiness check failed"
-    BASELINE_PRODUCTION_PG_PID="$(production_postgres_pid)" || die "Unable to record production PostgreSQL PID"
+    BASELINE_PRODUCTION_PG_PID="$(production_postgres_pid_from_pgdata)" ||
+        die "Unable to record a verified production PostgreSQL PID"
     BASELINE_UVICORN_PIDS="$(capture_process_ids uvicorn)"
     BASELINE_NGINX_PIDS="$(capture_process_ids nginx)"
     [[ -n "$BASELINE_UVICORN_PIDS" ]] || die "Unable to record any Uvicorn PID"
@@ -723,8 +883,8 @@ verify_production_baseline() {
         error "Production PostgreSQL readiness changed during the test run"
         return 1
     }
-    current_pg_pid="$(production_postgres_pid)" || {
-        error "Unable to re-read production PostgreSQL PID"
+    current_pg_pid="$(production_postgres_pid_from_pgdata)" || {
+        error "Unable to re-run the production PGDATA evidence chain"
         return 1
     }
     current_uvicorn_pids="$(capture_process_ids uvicorn)"
