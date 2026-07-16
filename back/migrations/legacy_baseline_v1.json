@@ -1,0 +1,1698 @@
+{
+  "audit_source": {
+    "generation_basis": "confirmed repository schema plus production PostgreSQL 16 catalog audit",
+    "production_catalog_result": "MATCH",
+    "production_postgres_version_num": 160014,
+    "production_schema_dump_sha256": "0b43d1b94e9c751a03d1ea4e793f55269f242059ae2717f79eb1faedf6b4eebb",
+    "schema_source": "docs/universal_schema.sql"
+  },
+  "baseline_id": "legacy_baseline_v1",
+  "columns": [
+    {
+      "default": "nextval('public.datasets_dataset_id_seq'::regclass)",
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_id",
+      "not_null": true,
+      "ordinal_position": 1,
+      "relation": "datasets"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(255)",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_name",
+      "not_null": true,
+      "ordinal_position": 2,
+      "relation": "datasets"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(160)",
+      "generated": "",
+      "identity": "",
+      "name": "slug",
+      "not_null": true,
+      "ordinal_position": 3,
+      "relation": "datasets"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(20)",
+      "generated": "",
+      "identity": "",
+      "name": "analysis_mode",
+      "not_null": true,
+      "ordinal_position": 4,
+      "relation": "datasets"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(100)",
+      "generated": "",
+      "identity": "",
+      "name": "source_software",
+      "not_null": true,
+      "ordinal_position": 5,
+      "relation": "datasets"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "source_root",
+      "not_null": true,
+      "ordinal_position": 6,
+      "relation": "datasets"
+    },
+    {
+      "default": "'IMPORTED'::character varying",
+      "format_type": "character varying(20)",
+      "generated": "",
+      "identity": "",
+      "name": "status",
+      "not_null": true,
+      "ordinal_position": 7,
+      "relation": "datasets"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "description",
+      "not_null": false,
+      "ordinal_position": 8,
+      "relation": "datasets"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "capabilities",
+      "not_null": true,
+      "ordinal_position": 9,
+      "relation": "datasets"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "extra_metadata",
+      "not_null": true,
+      "ordinal_position": 10,
+      "relation": "datasets"
+    },
+    {
+      "default": "now()",
+      "format_type": "timestamp with time zone",
+      "generated": "",
+      "identity": "",
+      "name": "created_at",
+      "not_null": true,
+      "ordinal_position": 11,
+      "relation": "datasets"
+    },
+    {
+      "default": null,
+      "format_type": "character(32)",
+      "generated": "",
+      "identity": "",
+      "name": "source_dataset_fingerprint",
+      "not_null": false,
+      "ordinal_position": 12,
+      "relation": "datasets"
+    },
+    {
+      "default": "nextval('public.identification_matches_match_id_seq'::regclass)",
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "match_id",
+      "not_null": true,
+      "ordinal_position": 1,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_id",
+      "not_null": true,
+      "ordinal_position": 2,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "run_id",
+      "not_null": true,
+      "ordinal_position": 3,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "integer",
+      "generated": "",
+      "identity": "",
+      "name": "scan_number",
+      "not_null": true,
+      "ordinal_position": 4,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(255)",
+      "generated": "",
+      "identity": "",
+      "name": "spectrum_native_id",
+      "not_null": false,
+      "ordinal_position": 5,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "retention_time",
+      "not_null": false,
+      "ordinal_position": 6,
+      "relation": "identification_matches"
+    },
+    {
+      "default": "2",
+      "format_type": "smallint",
+      "generated": "",
+      "identity": "",
+      "name": "ms_level",
+      "not_null": true,
+      "ordinal_position": 7,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(30)",
+      "generated": "",
+      "identity": "",
+      "name": "entity_type",
+      "not_null": true,
+      "ordinal_position": 8,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "entity_id",
+      "not_null": true,
+      "ordinal_position": 9,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "modified_sequence",
+      "not_null": false,
+      "ordinal_position": 10,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "experimental_mass",
+      "not_null": false,
+      "ordinal_position": 11,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "precursor_mz",
+      "not_null": false,
+      "ordinal_position": 12,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "smallint",
+      "generated": "",
+      "identity": "",
+      "name": "precursor_charge",
+      "not_null": false,
+      "ordinal_position": 13,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "intensity",
+      "not_null": false,
+      "ordinal_position": 14,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "score",
+      "not_null": false,
+      "ordinal_position": 15,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "e_value",
+      "not_null": false,
+      "ordinal_position": 16,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "q_value",
+      "not_null": false,
+      "ordinal_position": 17,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "pep",
+      "not_null": false,
+      "ordinal_position": 18,
+      "relation": "identification_matches"
+    },
+    {
+      "default": "false",
+      "format_type": "boolean",
+      "generated": "",
+      "identity": "",
+      "name": "is_decoy_match",
+      "not_null": true,
+      "ordinal_position": 19,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(100)",
+      "generated": "",
+      "identity": "",
+      "name": "search_engine",
+      "not_null": false,
+      "ordinal_position": 20,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "detail_path",
+      "not_null": false,
+      "ordinal_position": 21,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "detail_cache",
+      "not_null": false,
+      "ordinal_position": 22,
+      "relation": "identification_matches"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "extra_metadata",
+      "not_null": true,
+      "ordinal_position": 23,
+      "relation": "identification_matches"
+    },
+    {
+      "default": null,
+      "format_type": "uuid",
+      "generated": "",
+      "identity": "",
+      "name": "job_id",
+      "not_null": true,
+      "ordinal_position": 1,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(20)",
+      "generated": "",
+      "identity": "",
+      "name": "status",
+      "not_null": true,
+      "ordinal_position": 2,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(40)",
+      "generated": "",
+      "identity": "",
+      "name": "stage",
+      "not_null": false,
+      "ordinal_position": 3,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "stage_label",
+      "not_null": false,
+      "ordinal_position": 4,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "stage_detail",
+      "not_null": false,
+      "ordinal_position": 5,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "message",
+      "not_null": false,
+      "ordinal_position": 6,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "error",
+      "not_null": false,
+      "ordinal_position": 7,
+      "relation": "import_jobs"
+    },
+    {
+      "default": "0",
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "progress",
+      "not_null": true,
+      "ordinal_position": 8,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(160)",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_slug",
+      "not_null": false,
+      "ordinal_position": 9,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(255)",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_name",
+      "not_null": false,
+      "ordinal_position": 10,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "description",
+      "not_null": false,
+      "ordinal_position": 11,
+      "relation": "import_jobs"
+    },
+    {
+      "default": "now()",
+      "format_type": "timestamp with time zone",
+      "generated": "",
+      "identity": "",
+      "name": "created_at",
+      "not_null": true,
+      "ordinal_position": 12,
+      "relation": "import_jobs"
+    },
+    {
+      "default": "now()",
+      "format_type": "timestamp with time zone",
+      "generated": "",
+      "identity": "",
+      "name": "updated_at",
+      "not_null": true,
+      "ordinal_position": 13,
+      "relation": "import_jobs"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "source_path",
+      "not_null": false,
+      "ordinal_position": 14,
+      "relation": "import_jobs"
+    },
+    {
+      "default": "nextval('public.peptides_peptide_id_seq'::regclass)",
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "peptide_id",
+      "not_null": true,
+      "ordinal_position": 1,
+      "relation": "peptides"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_id",
+      "not_null": true,
+      "ordinal_position": 2,
+      "relation": "peptides"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(1000)",
+      "generated": "",
+      "identity": "",
+      "name": "sequence",
+      "not_null": true,
+      "ordinal_position": 3,
+      "relation": "peptides"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "theoretical_mass",
+      "not_null": false,
+      "ordinal_position": 4,
+      "relation": "peptides"
+    },
+    {
+      "default": null,
+      "format_type": "integer",
+      "generated": "",
+      "identity": "",
+      "name": "length",
+      "not_null": false,
+      "ordinal_position": 5,
+      "relation": "peptides"
+    },
+    {
+      "default": null,
+      "format_type": "smallint",
+      "generated": "",
+      "identity": "",
+      "name": "missed_cleavages",
+      "not_null": false,
+      "ordinal_position": 6,
+      "relation": "peptides"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "extra_metadata",
+      "not_null": true,
+      "ordinal_position": 7,
+      "relation": "peptides"
+    },
+    {
+      "default": "nextval('public.protein_relation_mapping_mapping_id_seq'::regclass)",
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "mapping_id",
+      "not_null": true,
+      "ordinal_position": 1,
+      "relation": "protein_relation_mapping"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_id",
+      "not_null": true,
+      "ordinal_position": 2,
+      "relation": "protein_relation_mapping"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "protein_id",
+      "not_null": true,
+      "ordinal_position": 3,
+      "relation": "protein_relation_mapping"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(30)",
+      "generated": "",
+      "identity": "",
+      "name": "entity_type",
+      "not_null": true,
+      "ordinal_position": 4,
+      "relation": "protein_relation_mapping"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "entity_id",
+      "not_null": true,
+      "ordinal_position": 5,
+      "relation": "protein_relation_mapping"
+    },
+    {
+      "default": null,
+      "format_type": "integer",
+      "generated": "",
+      "identity": "",
+      "name": "start_position",
+      "not_null": false,
+      "ordinal_position": 6,
+      "relation": "protein_relation_mapping"
+    },
+    {
+      "default": null,
+      "format_type": "integer",
+      "generated": "",
+      "identity": "",
+      "name": "end_position",
+      "not_null": false,
+      "ordinal_position": 7,
+      "relation": "protein_relation_mapping"
+    },
+    {
+      "default": "false",
+      "format_type": "boolean",
+      "generated": "",
+      "identity": "",
+      "name": "is_unique",
+      "not_null": true,
+      "ordinal_position": 8,
+      "relation": "protein_relation_mapping"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "extra_metadata",
+      "not_null": true,
+      "ordinal_position": 9,
+      "relation": "protein_relation_mapping"
+    },
+    {
+      "default": "nextval('public.proteins_protein_id_seq'::regclass)",
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "protein_id",
+      "not_null": true,
+      "ordinal_position": 1,
+      "relation": "proteins"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_id",
+      "not_null": true,
+      "ordinal_position": 2,
+      "relation": "proteins"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(255)",
+      "generated": "",
+      "identity": "",
+      "name": "accession",
+      "not_null": true,
+      "ordinal_position": 3,
+      "relation": "proteins"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(255)",
+      "generated": "",
+      "identity": "",
+      "name": "gene_name",
+      "not_null": false,
+      "ordinal_position": 4,
+      "relation": "proteins"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "description",
+      "not_null": false,
+      "ordinal_position": 5,
+      "relation": "proteins"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "base_sequence",
+      "not_null": false,
+      "ordinal_position": 6,
+      "relation": "proteins"
+    },
+    {
+      "default": "false",
+      "format_type": "boolean",
+      "generated": "",
+      "identity": "",
+      "name": "is_decoy",
+      "not_null": true,
+      "ordinal_position": 7,
+      "relation": "proteins"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "extra_metadata",
+      "not_null": true,
+      "ordinal_position": 8,
+      "relation": "proteins"
+    },
+    {
+      "default": "nextval('public.proteoforms_proteoform_id_seq'::regclass)",
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "proteoform_id",
+      "not_null": true,
+      "ordinal_position": 1,
+      "relation": "proteoforms"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_id",
+      "not_null": true,
+      "ordinal_position": 2,
+      "relation": "proteoforms"
+    },
+    {
+      "default": "'[]'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "modifications",
+      "not_null": true,
+      "ordinal_position": 3,
+      "relation": "proteoforms"
+    },
+    {
+      "default": null,
+      "format_type": "integer",
+      "generated": "",
+      "identity": "",
+      "name": "start_res",
+      "not_null": false,
+      "ordinal_position": 4,
+      "relation": "proteoforms"
+    },
+    {
+      "default": null,
+      "format_type": "integer",
+      "generated": "",
+      "identity": "",
+      "name": "end_res",
+      "not_null": false,
+      "ordinal_position": 5,
+      "relation": "proteoforms"
+    },
+    {
+      "default": null,
+      "format_type": "double precision",
+      "generated": "",
+      "identity": "",
+      "name": "theoretical_mass",
+      "not_null": false,
+      "ordinal_position": 6,
+      "relation": "proteoforms"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "extra_metadata",
+      "not_null": true,
+      "ordinal_position": 7,
+      "relation": "proteoforms"
+    },
+    {
+      "default": "nextval('public.runs_run_id_seq'::regclass)",
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "run_id",
+      "not_null": true,
+      "ordinal_position": 1,
+      "relation": "runs"
+    },
+    {
+      "default": null,
+      "format_type": "bigint",
+      "generated": "",
+      "identity": "",
+      "name": "dataset_id",
+      "not_null": true,
+      "ordinal_position": 2,
+      "relation": "runs"
+    },
+    {
+      "default": null,
+      "format_type": "text",
+      "generated": "",
+      "identity": "",
+      "name": "file_path",
+      "not_null": true,
+      "ordinal_position": 3,
+      "relation": "runs"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(255)",
+      "generated": "",
+      "identity": "",
+      "name": "file_name",
+      "not_null": true,
+      "ordinal_position": 4,
+      "relation": "runs"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(20)",
+      "generated": "",
+      "identity": "",
+      "name": "analysis_mode",
+      "not_null": true,
+      "ordinal_position": 5,
+      "relation": "runs"
+    },
+    {
+      "default": null,
+      "format_type": "character varying(100)",
+      "generated": "",
+      "identity": "",
+      "name": "software",
+      "not_null": false,
+      "ordinal_position": 6,
+      "relation": "runs"
+    },
+    {
+      "default": "'IMPORTED'::character varying",
+      "format_type": "character varying(20)",
+      "generated": "",
+      "identity": "",
+      "name": "status",
+      "not_null": true,
+      "ordinal_position": 7,
+      "relation": "runs"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "instrument_metadata",
+      "not_null": true,
+      "ordinal_position": 8,
+      "relation": "runs"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "sample_metadata",
+      "not_null": true,
+      "ordinal_position": 9,
+      "relation": "runs"
+    },
+    {
+      "default": "now()",
+      "format_type": "timestamp with time zone",
+      "generated": "",
+      "identity": "",
+      "name": "created_at",
+      "not_null": true,
+      "ordinal_position": 10,
+      "relation": "runs"
+    },
+    {
+      "default": "'{}'::jsonb",
+      "format_type": "jsonb",
+      "generated": "",
+      "identity": "",
+      "name": "run_metadata",
+      "not_null": true,
+      "ordinal_position": 11,
+      "relation": "runs"
+    }
+  ],
+  "constraints": [
+    {
+      "contype": "c",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "CHECK (((analysis_mode)::text = ANY ((ARRAY['BOTTOM_UP'::character varying, 'TOP_DOWN'::character varying])::text[])))",
+      "name": "ck_datasets_analysis_mode",
+      "relation": "datasets",
+      "validated": true
+    },
+    {
+      "contype": "c",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "CHECK (((status)::text = ANY ((ARRAY['IMPORTED'::character varying, 'PARSING'::character varying, 'READY'::character varying, 'ERROR'::character varying])::text[])))",
+      "name": "ck_datasets_status",
+      "relation": "datasets",
+      "validated": true
+    },
+    {
+      "contype": "p",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "PRIMARY KEY (dataset_id)",
+      "name": "datasets_pkey",
+      "relation": "datasets",
+      "validated": true
+    },
+    {
+      "contype": "u",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "UNIQUE (slug)",
+      "name": "datasets_slug_key",
+      "relation": "datasets",
+      "validated": true
+    },
+    {
+      "contype": "c",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "CHECK (((entity_type)::text = ANY ((ARRAY['PEPTIDE'::character varying, 'PROTEOFORM'::character varying])::text[])))",
+      "name": "ck_identification_matches_entity_type",
+      "relation": "identification_matches",
+      "validated": true
+    },
+    {
+      "contype": "f",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "FOREIGN KEY (dataset_id) REFERENCES public.datasets(dataset_id) ON DELETE CASCADE",
+      "name": "identification_matches_dataset_id_fkey",
+      "relation": "identification_matches",
+      "validated": true
+    },
+    {
+      "contype": "p",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "PRIMARY KEY (match_id)",
+      "name": "identification_matches_pkey",
+      "relation": "identification_matches",
+      "validated": true
+    },
+    {
+      "contype": "f",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "FOREIGN KEY (run_id) REFERENCES public.runs(run_id) ON DELETE CASCADE",
+      "name": "identification_matches_run_id_fkey",
+      "relation": "identification_matches",
+      "validated": true
+    },
+    {
+      "contype": "c",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "CHECK (((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying, 'success'::character varying, 'failed'::character varying])::text[])))",
+      "name": "ck_import_jobs_status",
+      "relation": "import_jobs",
+      "validated": true
+    },
+    {
+      "contype": "p",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "PRIMARY KEY (job_id)",
+      "name": "import_jobs_pkey",
+      "relation": "import_jobs",
+      "validated": true
+    },
+    {
+      "contype": "f",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "FOREIGN KEY (dataset_id) REFERENCES public.datasets(dataset_id) ON DELETE CASCADE",
+      "name": "peptides_dataset_id_fkey",
+      "relation": "peptides",
+      "validated": true
+    },
+    {
+      "contype": "p",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "PRIMARY KEY (peptide_id)",
+      "name": "peptides_pkey",
+      "relation": "peptides",
+      "validated": true
+    },
+    {
+      "contype": "u",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "UNIQUE (dataset_id, sequence)",
+      "name": "uq_peptides_dataset_sequence",
+      "relation": "peptides",
+      "validated": true
+    },
+    {
+      "contype": "c",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "CHECK (((entity_type)::text = ANY ((ARRAY['PEPTIDE'::character varying, 'PROTEOFORM'::character varying])::text[])))",
+      "name": "ck_protein_relation_mapping_entity_type",
+      "relation": "protein_relation_mapping",
+      "validated": true
+    },
+    {
+      "contype": "f",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "FOREIGN KEY (dataset_id) REFERENCES public.datasets(dataset_id) ON DELETE CASCADE",
+      "name": "protein_relation_mapping_dataset_id_fkey",
+      "relation": "protein_relation_mapping",
+      "validated": true
+    },
+    {
+      "contype": "p",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "PRIMARY KEY (mapping_id)",
+      "name": "protein_relation_mapping_pkey",
+      "relation": "protein_relation_mapping",
+      "validated": true
+    },
+    {
+      "contype": "f",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "FOREIGN KEY (protein_id) REFERENCES public.proteins(protein_id) ON DELETE CASCADE",
+      "name": "protein_relation_mapping_protein_id_fkey",
+      "relation": "protein_relation_mapping",
+      "validated": true
+    },
+    {
+      "contype": "f",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "FOREIGN KEY (dataset_id) REFERENCES public.datasets(dataset_id) ON DELETE CASCADE",
+      "name": "proteins_dataset_id_fkey",
+      "relation": "proteins",
+      "validated": true
+    },
+    {
+      "contype": "p",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "PRIMARY KEY (protein_id)",
+      "name": "proteins_pkey",
+      "relation": "proteins",
+      "validated": true
+    },
+    {
+      "contype": "u",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "UNIQUE (dataset_id, accession, is_decoy)",
+      "name": "uq_proteins_dataset_accession_decoy",
+      "relation": "proteins",
+      "validated": true
+    },
+    {
+      "contype": "f",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "FOREIGN KEY (dataset_id) REFERENCES public.datasets(dataset_id) ON DELETE CASCADE",
+      "name": "proteoforms_dataset_id_fkey",
+      "relation": "proteoforms",
+      "validated": true
+    },
+    {
+      "contype": "p",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "PRIMARY KEY (proteoform_id)",
+      "name": "proteoforms_pkey",
+      "relation": "proteoforms",
+      "validated": true
+    },
+    {
+      "contype": "c",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "CHECK (((analysis_mode)::text = ANY ((ARRAY['BOTTOM_UP'::character varying, 'TOP_DOWN'::character varying])::text[])))",
+      "name": "ck_runs_analysis_mode",
+      "relation": "runs",
+      "validated": true
+    },
+    {
+      "contype": "c",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "CHECK (((status)::text = ANY ((ARRAY['IMPORTED'::character varying, 'PARSING'::character varying, 'READY'::character varying, 'ERROR'::character varying])::text[])))",
+      "name": "ck_runs_status",
+      "relation": "runs",
+      "validated": true
+    },
+    {
+      "contype": "f",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "FOREIGN KEY (dataset_id) REFERENCES public.datasets(dataset_id) ON DELETE CASCADE",
+      "name": "runs_dataset_id_fkey",
+      "relation": "runs",
+      "validated": true
+    },
+    {
+      "contype": "p",
+      "deferrable": false,
+      "deferred": false,
+      "definition": "PRIMARY KEY (run_id)",
+      "name": "runs_pkey",
+      "relation": "runs",
+      "validated": true
+    }
+  ],
+  "excluded_dimensions": [
+    "acl_grant",
+    "audit_time",
+    "comment",
+    "database_name",
+    "oid",
+    "owner",
+    "physical_file_location",
+    "relation_size",
+    "sequence_current_value",
+    "statistics"
+  ],
+  "format_version": 1,
+  "functions": [],
+  "indexes": [
+    {
+      "definition": "CREATE UNIQUE INDEX datasets_pkey ON public.datasets USING btree (dataset_id)",
+      "method": "btree",
+      "name": "datasets_pkey",
+      "predicate": null,
+      "primary": true,
+      "ready": true,
+      "relation": "datasets",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX datasets_slug_key ON public.datasets USING btree (slug)",
+      "method": "btree",
+      "name": "datasets_slug_key",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "datasets",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX uq_datasets_source_dataset_fingerprint ON public.datasets USING btree (source_dataset_fingerprint) WHERE (source_dataset_fingerprint IS NOT NULL)",
+      "method": "btree",
+      "name": "uq_datasets_source_dataset_fingerprint",
+      "predicate": "(source_dataset_fingerprint IS NOT NULL)",
+      "primary": false,
+      "ready": true,
+      "relation": "datasets",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX identification_matches_pkey ON public.identification_matches USING btree (match_id)",
+      "method": "btree",
+      "name": "identification_matches_pkey",
+      "predicate": null,
+      "primary": true,
+      "ready": true,
+      "relation": "identification_matches",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX idx_im_dataset_q ON public.identification_matches USING btree (dataset_id, q_value)",
+      "method": "btree",
+      "name": "idx_im_dataset_q",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "identification_matches",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX idx_im_dataset_run ON public.identification_matches USING btree (dataset_id, run_id)",
+      "method": "btree",
+      "name": "idx_im_dataset_run",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "identification_matches",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_identification_matches_dataset_run_scan ON public.identification_matches USING btree (dataset_id, run_id, scan_number)",
+      "method": "btree",
+      "name": "ix_identification_matches_dataset_run_scan",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "identification_matches",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_identification_matches_e_value ON public.identification_matches USING btree (e_value)",
+      "method": "btree",
+      "name": "ix_identification_matches_e_value",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "identification_matches",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_identification_matches_entity ON public.identification_matches USING btree (dataset_id, entity_type, entity_id)",
+      "method": "btree",
+      "name": "ix_identification_matches_entity",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "identification_matches",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_identification_matches_q_value ON public.identification_matches USING btree (q_value)",
+      "method": "btree",
+      "name": "ix_identification_matches_q_value",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "identification_matches",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_identification_matches_search_engine ON public.identification_matches USING btree (search_engine)",
+      "method": "btree",
+      "name": "ix_identification_matches_search_engine",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "identification_matches",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX import_jobs_pkey ON public.import_jobs USING btree (job_id)",
+      "method": "btree",
+      "name": "import_jobs_pkey",
+      "predicate": null,
+      "primary": true,
+      "ready": true,
+      "relation": "import_jobs",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_import_jobs_dataset_slug ON public.import_jobs USING btree (dataset_slug)",
+      "method": "btree",
+      "name": "ix_import_jobs_dataset_slug",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "import_jobs",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_import_jobs_status_updated_at ON public.import_jobs USING btree (status, updated_at DESC)",
+      "method": "btree",
+      "name": "ix_import_jobs_status_updated_at",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "import_jobs",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_peptides_dataset_id ON public.peptides USING btree (dataset_id)",
+      "method": "btree",
+      "name": "ix_peptides_dataset_id",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "peptides",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX peptides_pkey ON public.peptides USING btree (peptide_id)",
+      "method": "btree",
+      "name": "peptides_pkey",
+      "predicate": null,
+      "primary": true,
+      "ready": true,
+      "relation": "peptides",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX uq_peptides_dataset_sequence ON public.peptides USING btree (dataset_id, sequence)",
+      "method": "btree",
+      "name": "uq_peptides_dataset_sequence",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "peptides",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_protein_relation_mapping_dataset_id ON public.protein_relation_mapping USING btree (dataset_id)",
+      "method": "btree",
+      "name": "ix_protein_relation_mapping_dataset_id",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "protein_relation_mapping",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_protein_relation_mapping_entity ON public.protein_relation_mapping USING btree (dataset_id, entity_type, entity_id)",
+      "method": "btree",
+      "name": "ix_protein_relation_mapping_entity",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "protein_relation_mapping",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_protein_relation_mapping_is_unique ON public.protein_relation_mapping USING btree (is_unique)",
+      "method": "btree",
+      "name": "ix_protein_relation_mapping_is_unique",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "protein_relation_mapping",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_protein_relation_mapping_protein_id ON public.protein_relation_mapping USING btree (protein_id)",
+      "method": "btree",
+      "name": "ix_protein_relation_mapping_protein_id",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "protein_relation_mapping",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX protein_relation_mapping_pkey ON public.protein_relation_mapping USING btree (mapping_id)",
+      "method": "btree",
+      "name": "protein_relation_mapping_pkey",
+      "predicate": null,
+      "primary": true,
+      "ready": true,
+      "relation": "protein_relation_mapping",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_proteins_dataset_id ON public.proteins USING btree (dataset_id)",
+      "method": "btree",
+      "name": "ix_proteins_dataset_id",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "proteins",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX proteins_pkey ON public.proteins USING btree (protein_id)",
+      "method": "btree",
+      "name": "proteins_pkey",
+      "predicate": null,
+      "primary": true,
+      "ready": true,
+      "relation": "proteins",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX uq_proteins_dataset_accession_decoy ON public.proteins USING btree (dataset_id, accession, is_decoy)",
+      "method": "btree",
+      "name": "uq_proteins_dataset_accession_decoy",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "proteins",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_proteoforms_dataset_id ON public.proteoforms USING btree (dataset_id)",
+      "method": "btree",
+      "name": "ix_proteoforms_dataset_id",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "proteoforms",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX proteoforms_pkey ON public.proteoforms USING btree (proteoform_id)",
+      "method": "btree",
+      "name": "proteoforms_pkey",
+      "predicate": null,
+      "primary": true,
+      "ready": true,
+      "relation": "proteoforms",
+      "unique": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_runs_analysis_mode ON public.runs USING btree (analysis_mode)",
+      "method": "btree",
+      "name": "ix_runs_analysis_mode",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "runs",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_runs_dataset_id ON public.runs USING btree (dataset_id)",
+      "method": "btree",
+      "name": "ix_runs_dataset_id",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "runs",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX ix_runs_status ON public.runs USING btree (status)",
+      "method": "btree",
+      "name": "ix_runs_status",
+      "predicate": null,
+      "primary": false,
+      "ready": true,
+      "relation": "runs",
+      "unique": false,
+      "valid": true
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX runs_pkey ON public.runs USING btree (run_id)",
+      "method": "btree",
+      "name": "runs_pkey",
+      "predicate": null,
+      "primary": true,
+      "ready": true,
+      "relation": "runs",
+      "unique": true,
+      "valid": true
+    }
+  ],
+  "object_counts": {
+    "columns": 91,
+    "constraints": 26,
+    "functions": 0,
+    "indexes": 31,
+    "sequences": 7,
+    "tables": 8,
+    "triggers": 0
+  },
+  "postgres_major_version": 16,
+  "relations": [
+    {
+      "is_partition": false,
+      "name": "datasets",
+      "relkind": "r",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "datasets_dataset_id_seq",
+      "relkind": "S",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "identification_matches",
+      "relkind": "r",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "identification_matches_match_id_seq",
+      "relkind": "S",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "import_jobs",
+      "relkind": "r",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "peptides",
+      "relkind": "r",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "peptides_peptide_id_seq",
+      "relkind": "S",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "protein_relation_mapping",
+      "relkind": "r",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "protein_relation_mapping_mapping_id_seq",
+      "relkind": "S",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "proteins",
+      "relkind": "r",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "proteins_protein_id_seq",
+      "relkind": "S",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "proteoforms",
+      "relkind": "r",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "proteoforms_proteoform_id_seq",
+      "relkind": "S",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "runs",
+      "relkind": "r",
+      "relpersistence": "p"
+    },
+    {
+      "is_partition": false,
+      "name": "runs_run_id_seq",
+      "relkind": "S",
+      "relpersistence": "p"
+    }
+  ],
+  "schema_name": "public",
+  "sequences": [
+    {
+      "cycle": false,
+      "data_type": "bigint",
+      "increment": 1,
+      "max": 9223372036854775807,
+      "min": 1,
+      "name": "datasets_dataset_id_seq",
+      "owned_by_column": "dataset_id",
+      "owned_by_relation": "datasets",
+      "start": 1
+    },
+    {
+      "cycle": false,
+      "data_type": "bigint",
+      "increment": 1,
+      "max": 9223372036854775807,
+      "min": 1,
+      "name": "identification_matches_match_id_seq",
+      "owned_by_column": "match_id",
+      "owned_by_relation": "identification_matches",
+      "start": 1
+    },
+    {
+      "cycle": false,
+      "data_type": "bigint",
+      "increment": 1,
+      "max": 9223372036854775807,
+      "min": 1,
+      "name": "peptides_peptide_id_seq",
+      "owned_by_column": "peptide_id",
+      "owned_by_relation": "peptides",
+      "start": 1
+    },
+    {
+      "cycle": false,
+      "data_type": "bigint",
+      "increment": 1,
+      "max": 9223372036854775807,
+      "min": 1,
+      "name": "protein_relation_mapping_mapping_id_seq",
+      "owned_by_column": "mapping_id",
+      "owned_by_relation": "protein_relation_mapping",
+      "start": 1
+    },
+    {
+      "cycle": false,
+      "data_type": "bigint",
+      "increment": 1,
+      "max": 9223372036854775807,
+      "min": 1,
+      "name": "proteins_protein_id_seq",
+      "owned_by_column": "protein_id",
+      "owned_by_relation": "proteins",
+      "start": 1
+    },
+    {
+      "cycle": false,
+      "data_type": "bigint",
+      "increment": 1,
+      "max": 9223372036854775807,
+      "min": 1,
+      "name": "proteoforms_proteoform_id_seq",
+      "owned_by_column": "proteoform_id",
+      "owned_by_relation": "proteoforms",
+      "start": 1
+    },
+    {
+      "cycle": false,
+      "data_type": "bigint",
+      "increment": 1,
+      "max": 9223372036854775807,
+      "min": 1,
+      "name": "runs_run_id_seq",
+      "owned_by_column": "run_id",
+      "owned_by_relation": "runs",
+      "start": 1
+    }
+  ],
+  "triggers": []
+}
