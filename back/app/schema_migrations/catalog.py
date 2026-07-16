@@ -99,6 +99,8 @@ _SORT_KEYS: dict[str, tuple[str, ...]] = {
 
 _IDENTITY_KEYS = _SORT_KEYS
 
+_SET_LOCAL_SEARCH_PATH_SQL = "SELECT pg_catalog.set_config('search_path', %s, true)"
+
 
 RELATIONS_SQL = """
 SELECT c.relname, c.relkind, c.relpersistence, c.relispartition
@@ -242,6 +244,7 @@ def collect_catalog_in_transaction(connection: Any, *, schema_name: str = "publi
     if schema_name != "public":
         raise SchemaStateError("only the public schema is supported")
 
+    connection.execute(_SET_LOCAL_SEARCH_PATH_SQL, ("pg_catalog",))
     relations = _row_dicts(connection.execute(RELATIONS_SQL, (schema_name,)).fetchall(), _FIELDS["relations"])
     allowed_relkinds = {"r", "p", "v", "m", "S", "f"}
     unknown = sorted({row["relkind"] for row in relations} - allowed_relkinds)

@@ -17,6 +17,7 @@ from app.schema_migrations.catalog import (
     baseline_catalog,
     canonicalize_catalog,
     catalog_differences,
+    collect_catalog,
     load_legacy_baseline,
 )
 from app.schema_migrations.discovery import discover_migrations
@@ -312,6 +313,12 @@ def test_baseline_is_canonical_complete_and_has_every_required_dimension() -> No
     assert tuple(baseline["excluded_dimensions"]) == EXPECTED_EXCLUDED_DIMENSIONS
     assert catalog["functions"] == []
     assert catalog["triggers"] == []
+    dataset_id = next(
+        column
+        for column in catalog["columns"]
+        if column["relation"] == "datasets" and column["name"] == "dataset_id"
+    )
+    assert dataset_id["default"] == "nextval('public.datasets_dataset_id_seq'::regclass)"
     assert all("owner" not in row and "acl" not in row and "comment" not in row for name in CATALOG_COLLECTIONS for row in catalog[name])
     assert all(
         required in baseline[collection][0]
@@ -361,6 +368,23 @@ def test_catalog_sorting_and_structural_differences_are_deterministic() -> None:
     )
 
 
+def test_catalog_comparison_does_not_relax_schema_qualified_defaults() -> None:
+    expected = baseline_catalog(load_legacy_baseline(BASELINE))
+    actual = json.loads(json.dumps(expected))
+    dataset_id = next(
+        column
+        for column in actual["columns"]
+        if column["relation"] == "datasets" and column["name"] == "dataset_id"
+    )
+    dataset_id["default"] = "nextval('datasets_dataset_id_seq'::regclass)"
+
+    assert catalog_differences(expected, actual) == (
+        "columns('datasets', 1).default differs: "
+        "expected=\"nextval('public.datasets_dataset_id_seq'::regclass)\" "
+        "actual=\"nextval('datasets_dataset_id_seq'::regclass)\"",
+    )
+
+
 class _Result:
     def __init__(self, rows: list[tuple[object, ...]] | None = None) -> None:
         self.rows = rows or []
@@ -370,6 +394,62 @@ class _Result:
 
     def fetchall(self) -> list[tuple[object, ...]]:
         return self.rows
+
+
+class _CatalogConnection:
+    def __init__(self, *, fail_search_path: bool = False) -> None:
+        self.fail_search_path = fail_search_path
+        self.calls: list[tuple[str, object]] = []
+
+    def transaction(self) -> nullcontext[None]:
+        return nullcontext()
+
+    def execute(self, sql: str, params: object = None) -> _Result:
+        self.calls.append((sql, params))
+        if "set_config" in sql and self.fail_search_path:
+            raise RuntimeError("cannot set transaction-local search_path")
+        return _Result()
+
+
+def test_catalog_sampling_sets_exact_transaction_local_search_path_before_deparsing() -> None:
+    connection = _CatalogConnection()
+
+    assert collect_catalog(connection) == _empty_catalog()
+
+    assert connection.calls[0] == (
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+        None,
+    )
+    search_path_sql, search_path_params = connection.calls[1]
+    assert "pg_catalog.set_config('search_path', %s, true)" in " ".join(search_path_sql.split())
+    assert search_path_params == ("pg_catalog",)
+
+    deparser_positions = [
+        position
+        for position, (sql, _params) in enumerate(connection.calls)
+        if "pg_get_" in sql or "format_type(" in sql
+    ]
+    assert deparser_positions
+    assert all(position > 1 for position in deparser_positions)
+
+    catalog_calls = connection.calls[2:]
+    assert catalog_calls
+    assert all(params == ("public",) for _sql, params in catalog_calls)
+    all_sql = "\n".join(sql.upper() for sql, _params in connection.calls)
+    assert "SHOW SEARCH_PATH" not in all_sql
+    assert "ALTER DATABASE" not in all_sql
+    assert "ALTER ROLE" not in all_sql
+    assert "SET SEARCH_PATH" not in all_sql
+
+
+def test_catalog_sampling_propagates_search_path_failure_before_catalog_queries() -> None:
+    connection = _CatalogConnection(fail_search_path=True)
+
+    with pytest.raises(RuntimeError, match="transaction-local search_path"):
+        collect_catalog(connection)
+
+    assert len(connection.calls) == 2
+    assert "set_config" in connection.calls[-1][0]
 
 
 class _StateConnection:

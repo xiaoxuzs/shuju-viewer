@@ -171,9 +171,50 @@ def test_universal_schema_catalog_exactly_matches_versioned_legacy_baseline(
 ) -> None:
     _initialize_legacy_schema(schema_migration_target)
     expected = baseline_catalog(load_legacy_baseline(BASELINE))
+    dataset_id = next(
+        column
+        for column in expected["columns"]
+        if column["relation"] == "datasets" and column["name"] == "dataset_id"
+    )
 
+    assert dataset_id["default"] == "nextval('public.datasets_dataset_id_seq'::regclass)"
     assert _catalog(schema_migration_target) == expected
     assert inspect_database(schema_migration_target).classification is DatabaseClassification.UNVERSIONED_LEGACY_MATCH
+
+
+@pytest.mark.parametrize(
+    "caller_search_path",
+    [
+        '"$user", public',
+        "public",
+        "pg_catalog",
+        "pg_catalog, information_schema",
+    ],
+)
+def test_catalog_deparsing_is_canonical_and_restores_caller_search_path(
+    schema_migration_target: object,
+    caller_search_path: str,
+) -> None:
+    _initialize_legacy_schema(schema_migration_target)
+    expected = baseline_catalog(load_legacy_baseline(BASELINE))
+
+    with _connect(schema_migration_target) as connection:
+        connection.execute(
+            "SELECT pg_catalog.set_config('search_path', %s, false)",
+            (caller_search_path,),
+        )
+        before = connection.execute("SELECT pg_catalog.current_setting('search_path')").fetchone()[0]
+        actual = collect_catalog(connection)
+        after = connection.execute("SELECT pg_catalog.current_setting('search_path')").fetchone()[0]
+
+    assert actual == expected
+    assert before == after == caller_search_path
+    dataset_id = next(
+        column
+        for column in actual["columns"]
+        if column["relation"] == "datasets" and column["name"] == "dataset_id"
+    )
+    assert dataset_id["default"] == "nextval('public.datasets_dataset_id_seq'::regclass)"
 
 
 def test_plan_lists_only_0001_and_is_catalog_read_only(schema_migration_target: object) -> None:
@@ -269,6 +310,7 @@ def test_append_only_triggers_reject_update_delete_and_truncate(
         "ALTER TABLE public.runs DROP COLUMN run_metadata",
         "DROP INDEX public.idx_im_dataset_q; CREATE INDEX idx_im_dataset_q ON public.identification_matches (q_value, dataset_id)",
         "ALTER SEQUENCE public.datasets_dataset_id_seq OWNED BY NONE",
+        "ALTER TABLE public.datasets ALTER COLUMN dataset_id SET DEFAULT 7",
     ],
 )
 def test_legacy_catalog_drift_is_rejected_before_any_migration_ddl(
