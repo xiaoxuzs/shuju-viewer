@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +20,8 @@ EMBEDDED_INDEX_MARKERS = (
 )
 DEFAULT_TAIL_BYTES = 4 * 1024 * 1024
 DEFAULT_SCAN_CHUNK_BYTES = 1024 * 1024
+_OutputSignature = tuple[int, int, int | None]
+_OutputSnapshot = dict[Path, _OutputSignature]
 
 
 def _now_iso() -> str:
@@ -46,15 +47,59 @@ def build_thermo_raw_file_parser_command(request: RawConversionRequest) -> list[
     ]
 
 
-def locate_output_mzml(raw_path: Path, output_dir: Path, *, modified_since_ns: int | None = None) -> Path | None:
-    for suffix in (".mzML", ".mzml", ".mzML.gz", ".mzml.gz"):
-        candidate = output_dir / f"{raw_path.stem}{suffix}"
-        try:
-            stat = candidate.stat()
-            if candidate.is_file() and (modified_since_ns is None or stat.st_mtime_ns >= modified_since_ns):
-                return candidate.resolve()
-        except OSError:
+def _output_mzml_candidates(raw_path: Path, output_dir: Path) -> tuple[Path, ...]:
+    return tuple(output_dir / f"{raw_path.stem}{suffix}" for suffix in (".mzML", ".mzml", ".mzML.gz", ".mzml.gz"))
+
+
+def _output_signature(candidate: Path) -> _OutputSignature | None:
+    try:
+        stat = candidate.stat()
+        if not candidate.is_file():
+            return None
+    except OSError:
+        return None
+    inode = stat.st_ino or None
+    return stat.st_size, stat.st_mtime_ns, inode
+
+
+def _snapshot_output_mzml(raw_path: Path, output_dir: Path) -> _OutputSnapshot:
+    snapshot: _OutputSnapshot = {}
+    for candidate in _output_mzml_candidates(raw_path, output_dir):
+        signature = _output_signature(candidate)
+        if signature is not None:
+            snapshot[candidate] = signature
+    return snapshot
+
+
+def _output_changed(previous: _OutputSignature, current: _OutputSignature) -> bool:
+    if current[:2] != previous[:2]:
+        return True
+    previous_inode = previous[2]
+    current_inode = current[2]
+    return previous_inode is not None and current_inode is not None and current_inode != previous_inode
+
+
+def _locate_changed_output_mzml(
+    raw_path: Path,
+    output_dir: Path,
+    *,
+    previous_snapshot: _OutputSnapshot,
+) -> Path | None:
+    for candidate in _output_mzml_candidates(raw_path, output_dir):
+        current = _output_signature(candidate)
+        if current is None:
             continue
+        previous = previous_snapshot.get(candidate)
+        if previous is None or _output_changed(previous, current):
+            return candidate.resolve()
+    return None
+
+
+def locate_output_mzml(raw_path: Path, output_dir: Path, *, modified_since_ns: int | None = None) -> Path | None:
+    for candidate in _output_mzml_candidates(raw_path, output_dir):
+        signature = _output_signature(candidate)
+        if signature is not None and (modified_since_ns is None or signature[1] >= modified_since_ns):
+            return candidate.resolve()
     return None
 
 
@@ -207,7 +252,7 @@ def run_thermo_raw_file_parser(
         stdout_log_path.parent.mkdir(parents=True, exist_ok=True)
         stderr_log_path.parent.mkdir(parents=True, exist_ok=True)
         command = build_thermo_raw_file_parser_command(request)
-        conversion_started_mtime_ns = time.time_ns()
+        output_snapshot = _snapshot_output_mzml(request.raw_path, request.output_dir)
         completed = subprocess.run(
             command,
             capture_output=True,
@@ -225,10 +270,10 @@ def run_thermo_raw_file_parser(
                 "raw_conversion_failed",
                 f"ThermoRawFileParser exited with code {completed.returncode}; stderr log: {stderr_log_path}",
             )
-        located_output_path = locate_output_mzml(
+        located_output_path = _locate_changed_output_mzml(
             request.raw_path,
             request.output_dir,
-            modified_since_ns=conversion_started_mtime_ns,
+            previous_snapshot=output_snapshot,
         )
         mzml_path = validate_converted_mzml(
             located_output_path,

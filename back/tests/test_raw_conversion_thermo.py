@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -157,6 +159,147 @@ def test_locate_output_mzml_ignores_stale_same_stem_file(tmp_path: Path) -> None
     modified_since_ns = stale.stat().st_mtime_ns + 1
 
     assert locate_output_mzml(raw, tmp_path, modified_since_ns=modified_since_ns) is None
+
+
+def test_thermo_adapter_accepts_new_output_with_mtime_before_wall_clock(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "sample.raw"
+    raw.write_bytes(b"raw")
+    converter = tmp_path / "ThermoRawFileParser.exe"
+    converter.write_bytes(b"fake")
+    output = tmp_path / "sample.mzML"
+
+    def fake_run(_command: list[str], **_kwargs: Any) -> SimpleNamespace:
+        output.write_text("<mzML><indexListOffset>1</indexListOffset></mzML>", encoding="utf-8")
+        stat = output.stat()
+        os.utime(output, ns=(stat.st_atime_ns, time.time_ns() - 1_000_000_000))
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("app.raw_conversion.thermo_raw_file_parser.subprocess.run", fake_run)
+
+    result = run_thermo_raw_file_parser(
+        RawConversionRequest(
+            raw_path=raw,
+            output_dir=tmp_path,
+            converter_exe=converter,
+            timeout_seconds=10,
+        ),
+        stdout_log_path=tmp_path / "stdout.log",
+        stderr_log_path=tmp_path / "stderr.log",
+    )
+
+    assert output.stat().st_mtime_ns < time.time_ns()
+    assert result.mzml_path == output.resolve()
+
+
+def test_thermo_adapter_rejects_unchanged_preexisting_output(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "sample.raw"
+    raw.write_bytes(b"raw")
+    converter = tmp_path / "ThermoRawFileParser.exe"
+    converter.write_bytes(b"fake")
+    output = tmp_path / "sample.mzML"
+    output.write_text("<mzML><indexListOffset>1</indexListOffset></mzML>", encoding="utf-8")
+    before = output.stat()
+
+    def fake_run(_command: list[str], **_kwargs: Any) -> SimpleNamespace:
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("app.raw_conversion.thermo_raw_file_parser.subprocess.run", fake_run)
+
+    with pytest.raises(RawConversionError) as exc_info:
+        run_thermo_raw_file_parser(
+            RawConversionRequest(
+                raw_path=raw,
+                output_dir=tmp_path,
+                converter_exe=converter,
+                timeout_seconds=10,
+            ),
+            stdout_log_path=tmp_path / "stdout.log",
+            stderr_log_path=tmp_path / "stderr.log",
+        )
+
+    after = output.stat()
+    assert exc_info.value.code == "raw_conversion_output_missing"
+    assert (after.st_size, after.st_mtime_ns) == (before.st_size, before.st_mtime_ns)
+
+
+def test_thermo_adapter_accepts_preexisting_output_with_changed_size(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "sample.raw"
+    raw.write_bytes(b"raw")
+    converter = tmp_path / "ThermoRawFileParser.exe"
+    converter.write_bytes(b"fake")
+    output = tmp_path / "sample.mzML"
+    output.write_text("<mzML><indexListOffset>1</indexListOffset></mzML>", encoding="utf-8")
+    before = output.stat()
+
+    def fake_run(_command: list[str], **_kwargs: Any) -> SimpleNamespace:
+        output.write_text("<mzML><indexListOffset>12345</indexListOffset></mzML>", encoding="utf-8")
+        stat = output.stat()
+        os.utime(output, ns=(stat.st_atime_ns, before.st_mtime_ns))
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("app.raw_conversion.thermo_raw_file_parser.subprocess.run", fake_run)
+
+    result = run_thermo_raw_file_parser(
+        RawConversionRequest(
+            raw_path=raw,
+            output_dir=tmp_path,
+            converter_exe=converter,
+            timeout_seconds=10,
+        ),
+        stdout_log_path=tmp_path / "stdout.log",
+        stderr_log_path=tmp_path / "stderr.log",
+    )
+
+    after = output.stat()
+    assert after.st_size != before.st_size
+    assert after.st_mtime_ns == before.st_mtime_ns
+    assert result.mzml_path == output.resolve()
+
+
+def test_thermo_adapter_accepts_preexisting_output_with_changed_mtime(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "sample.raw"
+    raw.write_bytes(b"raw")
+    converter = tmp_path / "ThermoRawFileParser.exe"
+    converter.write_bytes(b"fake")
+    output = tmp_path / "sample.mzML"
+    output.write_text("<mzML><indexListOffset>1</indexListOffset></mzML>", encoding="utf-8")
+    before = output.stat()
+
+    def fake_run(_command: list[str], **_kwargs: Any) -> SimpleNamespace:
+        output.write_text("<mzML><indexListOffset>2</indexListOffset></mzML>", encoding="utf-8")
+        stat = output.stat()
+        os.utime(output, ns=(stat.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("app.raw_conversion.thermo_raw_file_parser.subprocess.run", fake_run)
+
+    result = run_thermo_raw_file_parser(
+        RawConversionRequest(
+            raw_path=raw,
+            output_dir=tmp_path,
+            converter_exe=converter,
+            timeout_seconds=10,
+        ),
+        stdout_log_path=tmp_path / "stdout.log",
+        stderr_log_path=tmp_path / "stderr.log",
+    )
+
+    after = output.stat()
+    assert after.st_size == before.st_size
+    assert after.st_mtime_ns != before.st_mtime_ns
+    assert result.mzml_path == output.resolve()
 
 
 def test_thermo_adapter_rejects_only_gzip_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
