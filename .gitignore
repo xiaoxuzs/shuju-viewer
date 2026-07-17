@@ -8,6 +8,10 @@ shuju/
 **/.env
 !**/.env.example
 
+# ---- 临时运维脚本（勿提交）----
+deploy_ssh_helper.py
+_p2_1s_run.sh
+
 # ---- Python 后端 `back/` ----
 back/.venv/
 back/**/__pycache__/

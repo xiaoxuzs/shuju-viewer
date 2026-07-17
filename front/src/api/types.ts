@@ -108,6 +108,51 @@ export interface ImportPickFolderOut {
   cancelled: boolean;
 }
 
+export type ImportUploadType = "RAW_ONLY" | "MZML_ONLY" | "TOPPIC" | "PRSM" | "DIA_NN";
+
+export type ImportUploadState = "CREATED" | "UPLOADING" | "READY" | "STARTED" | "FAILED";
+
+export interface ImportUploadCreated {
+  upload_id: string;
+  import_type: ImportUploadType;
+  state: ImportUploadState;
+  created_at: string;
+}
+
+export interface ImportUploadStatus {
+  upload_id: string;
+  import_type: ImportUploadType;
+  state: ImportUploadState;
+  file_count: number;
+  total_size_bytes: number;
+  job_id: string | null;
+  created_at: string;
+  started_at: string | null;
+}
+
+export interface ImportUploadFileResult {
+  upload_id: string;
+  relative_path: string;
+  size_bytes: number;
+  state: ImportUploadState;
+  total_size_bytes: number;
+  file_count: number;
+}
+
+export interface ImportUploadStartParameters {
+  slug: string;
+  name: string;
+  description?: string | null;
+}
+
+export type ImportUploadStartResult = ImportJobCreatedOut;
+
+export interface ImportUploadError {
+  code: string | null;
+  message: string;
+  status: number | null;
+}
+
 /** 蛋白质列表行（某 cutoff 下一条记录）。 */
 export interface ProteinListItemOut {
   id: number;

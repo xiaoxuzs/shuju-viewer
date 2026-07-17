@@ -10,6 +10,13 @@ import type {
   ImportJobCreatedOut,
   ImportJobOut,
   ImportPickFolderOut,
+  ImportUploadCreated,
+  ImportUploadError,
+  ImportUploadFileResult,
+  ImportUploadStartParameters,
+  ImportUploadStartResult,
+  ImportUploadStatus,
+  ImportUploadType,
   Page,
   PrsmDetailOut,
   PrsmListItemOut,
@@ -64,6 +71,125 @@ export async function pickImportFolder(): Promise<ImportPickFolderOut> {
 export async function fetchImportJob(jobId: string): Promise<ImportJobOut> {
   const { data } = await api.get<ImportJobOut>(`/imports/${jobId}`);
   return data;
+}
+
+export async function createImportUpload(importType: ImportUploadType): Promise<ImportUploadCreated> {
+  const { data } = await api.post<ImportUploadCreated>(
+    "/import-uploads",
+    { import_type: importType },
+    { headers: { "Content-Type": "application/json" } },
+  );
+  return data;
+}
+
+export async function getImportUpload(uploadId: string): Promise<ImportUploadStatus> {
+  const { data } = await api.get<ImportUploadStatus>(`/import-uploads/${uploadId}`);
+  return data;
+}
+
+export async function startImportUpload(
+  uploadId: string,
+  parameters: ImportUploadStartParameters,
+): Promise<ImportUploadStartResult> {
+  const { data } = await api.post<ImportUploadStartResult>(
+    `/import-uploads/${uploadId}/start`,
+    { parameters },
+    { timeout: 600_000, headers: { "Content-Type": "application/json" } },
+  );
+  return data;
+}
+
+export async function deleteImportUpload(uploadId: string): Promise<void> {
+  await api.delete(`/import-uploads/${uploadId}`);
+}
+
+export class ImportUploadRequestError extends Error implements ImportUploadError {
+  code: string | null;
+  status: number | null;
+
+  constructor({ code, message, status }: ImportUploadError) {
+    super(message);
+    this.name = "ImportUploadRequestError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export interface ImportUploadRequest {
+  promise: Promise<ImportUploadFileResult>;
+  abort: () => void;
+}
+
+type UploadProgressCallback = (loadedBytes: number, totalBytes: number) => void;
+
+function uploadErrorFromResponse(xhr: XMLHttpRequest): ImportUploadRequestError {
+  let payload: unknown = xhr.response;
+  if (!payload && xhr.responseText) {
+    try {
+      payload = JSON.parse(xhr.responseText) as unknown;
+    } catch {
+      payload = null;
+    }
+  }
+  const record = typeof payload === "object" && payload !== null ? payload as Record<string, unknown> : null;
+  const rawDetail = record?.detail;
+  const detail = typeof rawDetail === "object" && rawDetail !== null
+    ? rawDetail as Record<string, unknown>
+    : null;
+  const code = typeof detail?.code === "string" ? detail.code : null;
+  const message = typeof detail?.message === "string" && detail.message.trim()
+    ? detail.message.trim()
+    : "File upload failed.";
+  return new ImportUploadRequestError({ code, message, status: xhr.status || null });
+}
+
+export function uploadImportFile(
+  uploadId: string,
+  relativePath: string,
+  file: File,
+  onProgress?: UploadProgressCallback,
+): ImportUploadRequest {
+  const baseUrl = String(api.defaults.baseURL ?? "").replace(/\/$/, "");
+  const query = new URLSearchParams({ relative_path: relativePath });
+  const xhr = new XMLHttpRequest();
+  let settled = false;
+
+  const promise = new Promise<ImportUploadFileResult>((resolve, reject) => {
+    const rejectOnce = (error: ImportUploadRequestError) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    xhr.open("PUT", `${baseUrl}/import-uploads/${encodeURIComponent(uploadId)}/files?${query.toString()}`);
+    xhr.responseType = "json";
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = (event) => {
+      onProgress?.(event.loaded, event.lengthComputable ? event.total : file.size);
+    };
+    xhr.onload = () => {
+      if (settled) return;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        settled = true;
+        resolve(xhr.response as ImportUploadFileResult);
+        return;
+      }
+      rejectOnce(uploadErrorFromResponse(xhr));
+    };
+    xhr.onerror = () => rejectOnce(new ImportUploadRequestError({
+      code: null,
+      message: "Network error while uploading file.",
+      status: null,
+    }));
+    xhr.onabort = () => rejectOnce(new ImportUploadRequestError({
+      code: "UPLOAD_CANCELLED",
+      message: "Upload cancelled.",
+      status: null,
+    }));
+    xhr.send(file);
+  });
+
+  return { promise, abort: () => xhr.abort() };
 }
 
 /** 按 slug 获取单个数据集详情。 */

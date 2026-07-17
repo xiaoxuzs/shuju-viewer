@@ -1242,6 +1242,30 @@ def start_path_import_background(
     thread.start()
 
 
+def enqueue_path_import(
+    *,
+    source_path: str,
+    slug: str,
+    name: str,
+    description: str | None,
+) -> ImportJob:
+    """Create the existing ImportJob and start its existing in-process worker."""
+    job = create_job(
+        slug=slug,
+        name=name,
+        description=description,
+        source_path=source_path,
+    )
+    start_path_import_background(
+        job_id=job.job_id,
+        source_path=source_path,
+        slug=slug,
+        name=name,
+        description=description,
+    )
+    return job
+
+
 # ---------------------------------------------------------------------------
 # Dataset deletion (DB only; on-disk import trees are never removed here)
 # ---------------------------------------------------------------------------

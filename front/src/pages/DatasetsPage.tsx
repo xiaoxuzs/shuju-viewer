@@ -1,5 +1,5 @@
 /**
- * Datasets list: imported dataset cards; local folder path import; empty state still points to the ingest CLI.
+ * Datasets list with a local-only browser upload entrypoint.
  */
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
@@ -12,28 +12,21 @@ import {
   FolderOpen,
   Layers,
   ListTree,
-  Loader2,
   Trash2,
 } from "lucide-react";
 
-import { deleteDataset, enqueueImport, fetchDatasets, fetchImportJob, pickImportFolder } from "@/api/client";
-import type { DatasetOut, ImportJobOut } from "@/api/types";
+import { deleteDataset, fetchDatasets } from "@/api/client";
+import type { DatasetOut } from "@/api/types";
 import { DataLoadError } from "@/components/common/data-state";
 import { PageLoading } from "@/components/common/page-loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
-import { Input } from "@/components/ui/input";
+import { ImportUploadDialog } from "@/features/import-upload/ImportUploadDialog";
 import { parseApiError } from "@/lib/apiError";
-import { clampImportProgress, formatImportStageLabel } from "@/lib/importStages";
-import { basenamePath, slugifyFolderName } from "@/lib/serverPathFromDirectoryInput";
 import { cn } from "@/lib/utils";
 import { isSpectraOnlyDataset } from "@/features/spectra-only/utils";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function analysisModeLabel(ds: DatasetOut): string {
   if (isSpectraOnlyDataset(ds)) return "Spectra";
@@ -59,25 +52,6 @@ function statusVariant(status: string | null): "outline" | "secondary" | "succes
   return "outline";
 }
 
-function importFailureMessage(detail: string | null | undefined): string {
-  if (!detail) return "Failed to import dataset.";
-  if (detail.includes("raw_converter_missing")) {
-    return `RAW converter is not configured. ${detail}`;
-  }
-  if (detail.includes("raw_conversion_timeout")) {
-    return `RAW conversion failed: conversion timed out. ${detail}`;
-  }
-  if (
-    detail.includes("raw_conversion_failed")
-    || detail.includes("raw_conversion_output_missing")
-    || detail.includes("raw_conversion_output_invalid")
-    || detail.includes("raw_conversion_permission_denied")
-  ) {
-    return `RAW conversion failed. ${detail}`;
-  }
-  return `Failed to import dataset: ${detail}`;
-}
-
 function metadataNumber(ds: DatasetOut, key: string): number | null {
   const value = ds.extra_metadata?.[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -91,14 +65,6 @@ export function DatasetsPage() {
   });
 
   const [importOpen, setImportOpen] = useState(false);
-  const [sourcePath, setSourcePath] = useState("");
-  const [slug, setSlug] = useState("");
-  const [dsName, setDsName] = useState("");
-  const [description, setDescription] = useState("");
-  const [importBusy, setImportBusy] = useState(false);
-  const [currentImportJob, setCurrentImportJob] = useState<ImportJobOut | null>(null);
-  const [folderPickBusy, setFolderPickBusy] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
 
   // Delete dialog state
   const [deleteTarget, setDeleteTarget] = useState<DatasetOut | null>(null);
@@ -133,72 +99,6 @@ export function DatasetsPage() {
     [deleteTarget, queryClient],
   );
 
-  const resetImportForm = useCallback(() => {
-    setSourcePath("");
-    setSlug("");
-    setDsName("");
-    setDescription("");
-    setImportError(null);
-    setCurrentImportJob(null);
-  }, []);
-
-  const onBrowseFolder = useCallback(async () => {
-    setImportError(null);
-    setFolderPickBusy(true);
-    try {
-      const res = await pickImportFolder();
-      if (res.cancelled || !res.path) return;
-      setSourcePath(res.path);
-      const leaf = basenamePath(res.path);
-      setSlug((s) => (s.trim() ? s : slugifyFolderName(leaf)));
-      setDsName((n) => (n.trim() ? n : leaf));
-    } catch {
-      setImportError("Failed to open folder picker.");
-    } finally {
-      setFolderPickBusy(false);
-    }
-  }, []);
-
-  const runImport = useCallback(async () => {
-    if (!sourcePath.trim() || !slug.trim() || !dsName.trim()) {
-      setImportError("Please enter or browse to a dataset folder path, plus a slug and display name.");
-      return;
-    }
-    setImportError(null);
-    setImportBusy(true);
-    setCurrentImportJob(null);
-    try {
-      const { job_id: jobId } = await enqueueImport({
-        source_path: sourcePath.trim(),
-        slug: slug.trim(),
-        name: dsName.trim(),
-        description: description.trim() || null,
-      });
-
-      for (;;) {
-        const job = await fetchImportJob(jobId);
-        setCurrentImportJob(job);
-        if (job.status === "success") {
-          await sleep(400);
-          await queryClient.invalidateQueries({ queryKey: ["datasets"] });
-          setImportBusy(false);
-          setImportOpen(false);
-          resetImportForm();
-          return;
-        }
-        if (job.status === "failed") {
-          setImportError(importFailureMessage(job.error ?? job.stage_detail));
-          setImportBusy(false);
-          return;
-        }
-        await sleep(900);
-      }
-    } catch (error) {
-      setImportError(importFailureMessage(parseApiError(error).message));
-      setImportBusy(false);
-    }
-  }, [description, dsName, queryClient, resetImportForm, slug, sourcePath]);
-
   return (
     <>
       <PageHeader
@@ -207,7 +107,7 @@ export function DatasetsPage() {
         actions={
           <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
             <FolderOpen className="h-4 w-4" />
-            Import from folder
+            Upload local dataset
           </Button>
         }
       />
@@ -219,28 +119,11 @@ export function DatasetsPage() {
       {data && data.length === 0 && (
         <Card>
           <CardContent className="p-10 text-center text-sm text-muted-foreground">
-            No datasets ingested yet. Use <strong>Import from folder</strong> for a TopPIC, PrSM, DIA-NN, mzML, or
-            Thermo RAW directory on this machine, or run the universal-schema ingest CLI:
-            <pre className="mt-3 overflow-x-auto rounded-md bg-muted/50 p-3 text-left text-xs">
-{`cd back
-uv run python -m app.ingest.universal_toppic_adapter ingest \\
-    --root ..\\shuju\\MZ20160222DS_histone48_html \\
-    --database-url "postgresql+psycopg://USER:PASS@localhost:5432/Universal_Viewer" \\
-    --slug mz20160222ds_histone48 \\
-    --name "MZ20160222DS_histone48" \\
-    --mode full --replace`}
-            </pre>
-            <div className="mt-4 rounded-md border border-border/60 bg-muted/30 p-3 text-left">
-              <div className="font-medium text-foreground">No Bottom-Up datasets available</div>
-              <div className="mt-1">
-                For spectra-only data, choose a folder containing mzML files or Thermo RAW files. ThermoRawFileParser
-                JSON files are treated as sidecar metadata, not identification results.
-              </div>
-            </div>
+            No datasets have been imported yet. Choose <strong>Upload local dataset</strong> to upload RAW, mzML,
+            TopPIC, PrSM, or DIA-NN data from this computer.
           </CardContent>
         </Card>
       )}
-
       {data && data.length > 0 && (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {data.map((ds) => {
@@ -365,165 +248,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
         </div>
       )}
 
-      {importOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="import-dialog-title"
-        >
-          <Card className="w-full max-w-md border-border/80 shadow-xl">
-            <CardHeader>
-              <CardTitle id="import-dialog-title">Import dataset from folder</CardTitle>
-              <CardDescription>
-                Pick a TopPIC, PrSM, DIA-NN, mzML, or Thermo RAW folder on this machine. Thermo RAW files are converted
-                to mzML during import when a converter is configured. A metadata fingerprint is used for deduplication;
-                files are not copied. <strong>Browse folder</strong> opens a native dialog on the same computer as the
-                API (typical local setup); you can still paste a path manually.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="import-path">
-                  Dataset folder path
-                </label>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Input
-                    id="import-path"
-                    className="min-w-0 sm:flex-1"
-                    placeholder="e.g. E:\\viewer\\shuju\\MyDataset"
-                    value={sourcePath}
-                    disabled={importBusy || folderPickBusy}
-                    onChange={(e) => setSourcePath(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="inline-flex shrink-0 items-center self-start sm:self-auto"
-                    disabled={importBusy || folderPickBusy}
-                    onClick={() => void onBrowseFolder()}
-                  >
-                    {folderPickBusy ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                        Picking…
-                      </>
-                    ) : (
-                      "Browse folder…"
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="import-slug">
-                  Slug (URL id)
-                </label>
-                <Input
-                  id="import-slug"
-                  placeholder="e.g. mz20160222ds_histone48"
-                  value={slug}
-                  disabled={importBusy || folderPickBusy}
-                  onChange={(e) => setSlug(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="import-name">
-                  Display name
-                </label>
-                <Input
-                  id="import-name"
-                  placeholder="Human-readable name"
-                  value={dsName}
-                  disabled={importBusy || folderPickBusy}
-                  onChange={(e) => setDsName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="import-desc">
-                  Description (optional)
-                </label>
-                <textarea
-                  id="import-desc"
-                  rows={2}
-                  placeholder="Optional notes"
-                  value={description}
-                  disabled={importBusy || folderPickBusy}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className={cn(
-                    "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm",
-                    "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    "disabled:cursor-not-allowed disabled:opacity-50",
-                  )}
-                />
-              </div>
-
-              {importBusy && (
-                <div
-                  className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-3"
-                  aria-busy="true"
-                  aria-live="polite"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Loader2
-                      className="h-4 w-4 shrink-0 animate-spin text-primary"
-                      aria-hidden
-                    />
-                    <span className="text-xs font-medium text-foreground">
-                      {formatImportStageLabel(currentImportJob?.stage ?? null, currentImportJob?.stage_label ?? null)}
-                    </span>
-                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-                      {clampImportProgress(currentImportJob?.progress).toFixed(0)}%
-                    </span>
-                  </div>
-                  {currentImportJob?.stage_detail && (
-                    <div className="text-xs text-muted-foreground">{currentImportJob.stage_detail}</div>
-                  )}
-                  <div
-                    className="relative h-2 w-full overflow-hidden rounded-full bg-muted"
-                    role="progressbar"
-                    aria-label="Import in progress"
-                    aria-valuenow={clampImportProgress(currentImportJob?.progress)}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                  >
-                    <div
-                      className="absolute left-0 top-0 h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${clampImportProgress(currentImportJob?.progress)}%` }}
-                      aria-hidden
-                    />
-                  </div>
-                </div>
-              )}
-
-              {importError && (
-                <p className="text-sm text-destructive" role="alert">
-                  {importError}
-                </p>
-              )}
-
-              <div className="flex flex-wrap justify-end gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={importBusy || folderPickBusy}
-                  onClick={() => {
-                    setImportOpen(false);
-                    resetImportForm();
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button type="button" size="sm" disabled={importBusy || folderPickBusy} onClick={() => void runImport()}>
-                  {importBusy ? "Working…" : "Start import"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
+      <ImportUploadDialog open={importOpen} onOpenChange={setImportOpen} />
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
@@ -551,10 +276,7 @@ uv run python -m app.ingest.universal_toppic_adapter ingest \\
                   </code>
                   .
                 </li>
-                <li>
-                  Disk: removes folder <code className="font-mono">{deleteTarget.source_path || "—"}</code> (only if it
-                  is under server <code className="font-mono">DATA_ROOT</code>).
-                </li>
+                <li>Associated dataset records are removed permanently.</li>
                 <li>
                   If an import job is still running, deletion is blocked until you cancel the import or it finishes.
                 </li>

@@ -92,21 +92,13 @@ def enqueue_import(body: ImportEnqueueIn) -> ImportJobCreatedOut:
     except OSError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    job = import_jobs.create_job(
+    job = import_jobs.enqueue_path_import(
         slug=body.slug.strip(),
         name=body.name.strip(),
         description=body.description.strip() if body.description else None,
         source_path=resolved,
     )
     _enqueue_slice("enqueue_create_job_s")
-
-    import_jobs.start_path_import_background(
-        job_id=job.job_id,
-        source_path=resolved,
-        slug=body.slug.strip(),
-        name=body.name.strip(),
-        description=body.description.strip() if body.description else None,
-    )
 
     enqueue_timing["enqueue_total_s"] = time.perf_counter() - enqueue_t0
     timing_parts = " ".join(

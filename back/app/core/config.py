@@ -85,6 +85,14 @@ class Settings(BaseSettings):
     import_native_folder_picker: bool = Field(default=True)
     #: Restrict the folder picker to requests from loopback (recommended when the picker is enabled).
     import_picker_loopback_only: bool = Field(default=True)
+    #: Managed browser uploads are stored only below DATA_ROOT/<import_upload_dir_name>.
+    import_upload_enabled: bool = Field(default=True)
+    import_upload_dir_name: str = Field(default=".viewer-uploads")
+    import_upload_disk_reserve_bytes: int = Field(default=5_368_709_120, ge=0)
+    import_upload_max_file_bytes: int = Field(default=0, ge=0)
+    import_upload_max_total_bytes: int = Field(default=0, ge=0)
+    import_upload_max_files: int = Field(default=5000, ge=1)
+    import_upload_chunk_bytes: int = Field(default=8_388_608, ge=1)
     #: Allow lazy UniProt FASTA fetches for Bottom-Up protein coverage. Keep disabled for offline deployments.
     bu_uniprot_enabled: bool = Field(default=False)
     #: Project-local root for generated Bottom-Up Fragment Match sidecars.
