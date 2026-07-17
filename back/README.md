@@ -17,7 +17,7 @@ uv sync
 # 1. Configure connection (edit .env if different from defaults)
 Copy-Item .env.example .env -ErrorAction SilentlyContinue
 
-# 2. Create tables (universal 8-table schema)
+# 2. Create tables (universal 7-table schema)
 psql -h localhost -U postgres -d Universal_Viewer -f ..\docs\universal_schema.sql
 
 # 3. Ingest a dataset
@@ -99,13 +99,9 @@ app/
   api/v1/      REST routes (raw SQL against the universal schema)
 ```
 
-Empty-database initialization is owned by the 8-table `docs/universal_schema.sql`
-snapshot. Versioned incremental SQL and the legacy Catalog baseline live in
-`back/migrations/` and are operated explicitly with `python -m
-app.schema_migrations`; application startup is not switched to this gate until
-P2-2B2. Reads go
+The on-disk database schema is owned by `docs/universal_schema.sql`. Reads go
 through `app/api/v1/*.py` + `app/api/v1/universal_compat.py`; writes (both path
 upload via `POST /api/v1/imports` and the CLI above) go through
-`app/ingest/universal_toppic_adapter.py`. There is no complete SQLAlchemy ORM
-metadata or Alembic migration tree; the explicit migration runner uses psycopg
-and PostgreSQL Catalog data directly.
+`app/ingest/universal_toppic_adapter.py`. There is no SQLAlchemy ORM layer or
+Alembic migration tree anymore — that has been removed in favour of the single
+universal schema.
