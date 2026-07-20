@@ -12,6 +12,7 @@ import type { BuMatchListItemOut } from "@/features/bu/types";
 import { formatCount, formatDecimal } from "@/features/bu/utils";
 import { clearListParams, numberParam, setListParam } from "@/features/bu/utils/listParams";
 import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
+import { usePageTransitionReady } from "@/features/page-transition";
 
 export function BuMatchesPage() {
   const { dataset, defaultQMax } = useOutletContext<BuDatasetContext>();
@@ -47,6 +48,7 @@ export function BuMatchesPage() {
         order: "asc",
       }),
   });
+  usePageTransitionReady(!isLoading);
 
   const columns: BuColumn<BuMatchListItemOut>[] = [
     {

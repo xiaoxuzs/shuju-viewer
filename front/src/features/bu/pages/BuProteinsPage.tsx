@@ -1,5 +1,6 @@
-import { Link, useOutletContext, useSearchParams } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 
 import { DataLoadError } from "@/components/common/data-state";
 import { Pagination } from "@/components/common/pagination";
@@ -32,6 +33,7 @@ export function BuProteinsPage() {
         order: "desc",
       }),
   });
+  usePageTransitionReady(!isLoading);
 
   const columns: BuColumn<BuProteinListItemOut>[] = [
     { key: "accession", header: "Accession", render: (row) => row.accession },
@@ -75,12 +77,12 @@ export function BuProteinsPage() {
       header: "",
       className: "text-right",
       render: (row) => (
-        <Link
+        <TransitionLink
           className="text-xs font-medium text-primary hover:underline"
           to={`/datasets/${dataset.slug}/matches?protein_id=${row.id}`}
         >
           View matches
-        </Link>
+        </TransitionLink>
       ),
     },
   ];

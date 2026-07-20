@@ -7,7 +7,6 @@
     color-scheme: light;
 
     /* Semantic surfaces and text. HSL triplets (no hsl() wrapper). */
-    --background: 210 40% 99%;
     --foreground: 222 47% 14%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 14%;
@@ -79,7 +78,6 @@
 
   :root.dark {
     color-scheme: dark;
-    --background: 222 47% 7%;
     --foreground: 210 40% 96%;
     --card: 222 36% 10%;
     --card-foreground: 210 40% 96%;

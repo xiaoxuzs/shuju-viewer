@@ -3,12 +3,13 @@
  * 碎片化视图、匹配峰表及全屏谱图模态框；内联注释说明 zoom 与数据流。
  */
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
 import { fetchDataset, fetchMs1Spectrum, fetchMs2Spectrum, fetchMzmlSpectrum, fetchPrsm } from "@/api/client";
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { ChartRenderBoundary } from "@/components/common/chart-render-boundary";
 import { PageLoading } from "@/components/common/page-loading";
 import { PlotStatus } from "@/components/common/plot-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +18,11 @@ import { Stat } from "@/components/common/stat";
 import { Badge } from "@/components/ui/badge";
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 import { formatEValue, formatNumber } from "@/lib/utils";
+import {
+  TransitionLink,
+  usePageTransitionReady,
+  useTransitionSignal,
+} from "@/features/page-transition";
 
 import {
   matchedPeakDetailKey,
@@ -155,6 +161,46 @@ export function PrsmDetailPage() {
     () => buildMs2ChartPeaks(ms2RawSpectrum, parsed?.peaks ?? []),
     [ms2RawSpectrum, parsed?.peaks],
   );
+  const ms1TransitionKey = `${slug}:${prsmIdNum}:${spectraSource ?? "none"}:${ms1Scan ?? ms1Id ?? "none"}`;
+  const ms2TransitionKey = `${slug}:${prsmIdNum}:${spectraSource ?? "none"}:${ms2Scan ?? ms2Id ?? "none"}`;
+  const [ms1Rendered, markMs1Rendered] = useTransitionSignal(ms1TransitionKey);
+  const [ms2Rendered, markMs2Rendered] = useTransitionSignal(ms2TransitionKey);
+  const [lcmsRendered, markLcmsRendered] = useTransitionSignal(ms1TransitionKey);
+  const hasLcmsPeaks = Boolean(ms1RawSpectrum?.peaks.some(
+    (peak) => Number.isFinite(peak.mz) && Number.isFinite(peak.intensity) && peak.intensity > 0,
+  ));
+  usePageTransitionReady(
+    !prsmQuery.isLoading
+    && (!prsm || (
+      !datasetQuery.isLoading
+      && !ms1Query.isLoading
+      && !ms2Query.isLoading
+      && ms1Rendered
+      && ms2Rendered
+      && lcmsRendered
+    )),
+  );
+
+  useEffect(() => {
+    if (ms1Query.isError || (!ms1Query.isLoading && (!ms1Query.data || ms1ChartPeaks.length === 0))) {
+      markMs1Rendered();
+    }
+    if (ms1Query.isError || (!ms1Query.isLoading && !hasLcmsPeaks)) markLcmsRendered();
+  }, [
+    hasLcmsPeaks,
+    markLcmsRendered,
+    markMs1Rendered,
+    ms1ChartPeaks.length,
+    ms1Query.data,
+    ms1Query.isError,
+    ms1Query.isLoading,
+  ]);
+
+  useEffect(() => {
+    if (ms2Query.isError || (!ms2Query.isLoading && (!ms2Query.data || ms2ChartPeaks.length === 0))) {
+      markMs2Rendered();
+    }
+  }, [markMs2Rendered, ms2ChartPeaks.length, ms2Query.data, ms2Query.isError, ms2Query.isLoading]);
 
   // Zoom state: the inline and modal views have independent state so the
   // modal can remember its zoom across open/close cycles without affecting
@@ -224,9 +270,9 @@ export function PrsmDetailPage() {
         actions={
           <div className="flex items-center gap-2">
             <Badge variant="outline">
-              <Link to={`/datasets/${slug}/${cutoff}/proteoforms/${prsm.proteoform_id}`}>
+              <TransitionLink to={`/datasets/${slug}/${cutoff}/proteoforms/${prsm.proteoform_id}`}>
                 ← proteoform #{parsed?.protein?.proteoformId ?? ""}
-              </Link>
+              </TransitionLink>
             </Badge>
           </div>
         }
@@ -327,17 +373,23 @@ export function PrsmDetailPage() {
             ) : ms1Query.isError ? (
               <PrsmSpectrumErrorState error={ms1Query.error} />
             ) : (
-              <SpectrumChart
+              <ChartRenderBoundary
                 key={`ms1-inline-${spectraSource}-${ms1Scan ?? ms1Id ?? "none"}-${spectrumIntensityMode}`}
-                peaks={ms1ChartPeaks}
-                xLabel="m/z (MS1)"
-                yLabel="intensity"
-                yIntensityScale={spectrumIntensityMode}
-                height={260}
-                marker={precursorMarker}
-                emptyHint="no MS1 peaks"
-                onOpenFull={() => setMs1ModalOpen(true)}
-              />
+                fallback={<PlotStatus kind="error" title="Failed to draw the MS1 spectrum." />}
+                onError={markMs1Rendered}
+              >
+                <SpectrumChart
+                  peaks={ms1ChartPeaks}
+                  xLabel="m/z (MS1)"
+                  yLabel="intensity"
+                  yIntensityScale={spectrumIntensityMode}
+                  onFirstRender={markMs1Rendered}
+                  height={260}
+                  marker={precursorMarker}
+                  emptyHint="no MS1 peaks"
+                  onOpenFull={() => setMs1ModalOpen(true)}
+                />
+              </ChartRenderBoundary>
             )}
           </CardContent>
         </Card>
@@ -355,16 +407,22 @@ export function PrsmDetailPage() {
             ) : ms2Query.isError ? (
               <PrsmSpectrumErrorState error={ms2Query.error} />
             ) : (
-              <SpectrumChart
+              <ChartRenderBoundary
                 key={`ms2-inline-${spectraSource}-${ms2Scan ?? ms2Id ?? "none"}-${spectrumIntensityMode}`}
-                peaks={ms2ChartPeaks}
-                xLabel="m/z (MS2)"
-                yLabel="intensity"
-                yIntensityScale={spectrumIntensityMode}
-                height={320}
-                emptyHint="no MS2 peaks"
-                onOpenFull={() => setMs2ModalOpen(true)}
-              />
+                fallback={<PlotStatus kind="error" title="Failed to draw the MS2 spectrum." />}
+                onError={markMs2Rendered}
+              >
+                <SpectrumChart
+                  peaks={ms2ChartPeaks}
+                  xLabel="m/z (MS2)"
+                  yLabel="intensity"
+                  yIntensityScale={spectrumIntensityMode}
+                  onFirstRender={markMs2Rendered}
+                  height={320}
+                  emptyHint="no MS2 peaks"
+                  onOpenFull={() => setMs2ModalOpen(true)}
+                />
+              </ChartRenderBoundary>
             )}
           </CardContent>
         </Card>
@@ -395,9 +453,12 @@ export function PrsmDetailPage() {
       )}
 
       <Lcms3DPanel
+        key={ms1TransitionKey}
         peaks={ms1RawSpectrum?.peaks ?? null}
         scan={ms1RawSpectrum?.scan ?? ms1Scan ?? null}
         retentionTimeSeconds={ms1RawSpectrum?.retentionTime ?? null}
+        onFirstRender={markLcmsRendered}
+        onRenderError={markLcmsRendered}
       />
 
       {/* Matched peaks table */}

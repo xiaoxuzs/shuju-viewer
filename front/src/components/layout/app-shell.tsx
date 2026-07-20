@@ -2,10 +2,11 @@
  * 全局壳层：顶栏导航 + `<Outlet />` 渲染子路由。
  * 进入具体数据集后，根据当前路由中的 `slug` 显示第二级导航链接。
  */
-import { NavLink, Outlet, useParams } from "react-router-dom";
+import { Outlet, useParams } from "react-router-dom";
 import { Database, FlaskConical, Microscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
+import { TransitionNavLink } from "@/features/page-transition";
 
 export function AppShell() {
   const { slug } = useParams();
@@ -16,7 +17,7 @@ export function AppShell() {
       <div className="pointer-events-none fixed inset-0 bg-grid opacity-40 [mask-image:radial-gradient(ellipse_at_top,black,transparent_65%)]" />
 
       <header className="sticky top-0 z-40 flex h-14 items-center border-b border-border/70 bg-background/85 px-6 backdrop-blur">
-        <NavLink to="/" className="flex items-center gap-2">
+        <TransitionNavLink to="/" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
             <Microscope className="h-5 w-5" />
           </div>
@@ -26,7 +27,7 @@ export function AppShell() {
               Proteomics
             </div>
           </div>
-        </NavLink>
+        </TransitionNavLink>
 
         <nav className="ml-10 flex items-center gap-1 text-sm">
           <HeaderLink to="/datasets" icon={<Database className="h-4 w-4" />}>
@@ -61,7 +62,7 @@ function HeaderLink({
   icon?: React.ReactNode;
 }) {
   return (
-    <NavLink
+    <TransitionNavLink
       to={to}
       className={({ isActive }) =>
         cn(
@@ -73,6 +74,6 @@ function HeaderLink({
     >
       {icon}
       <span className="truncate max-w-[260px]">{children}</span>
-    </NavLink>
+    </TransitionNavLink>
   );
 }

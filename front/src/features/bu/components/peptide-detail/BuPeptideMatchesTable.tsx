@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { TransitionLink } from "@/features/page-transition";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,12 +27,12 @@ export function BuPeptideMatchesTable({ slug, peptide }: { slug: string; peptide
                 {peptide.proteins.map((protein) => (
                   <tr key={protein.protein_id} className="border-b border-border/60 last:border-0">
                     <td className="py-2">
-                      <Link
+                      <TransitionLink
                         className="font-medium text-primary hover:underline"
                         to={`/datasets/${slug}/proteins/${protein.protein_id}`}
                       >
                         {protein.accession}
-                      </Link>
+                      </TransitionLink>
                     </td>
                     <td className="py-2">{protein.gene_name ?? "-"}</td>
                     <td className="max-w-[220px] truncate py-2" title={protein.protein_group ?? undefined}>
@@ -73,9 +73,9 @@ export function BuPeptideMatchesTable({ slug, peptide }: { slug: string; peptide
                 {peptide.matches_summary.items.map((match) => (
                   <tr key={match.id} className="border-b border-border/60 last:border-0">
                     <td className="py-2">
-                      <Link className="font-medium text-primary hover:underline" to={`/datasets/${slug}/matches/${match.id}`}>
+                      <TransitionLink className="font-medium text-primary hover:underline" to={`/datasets/${slug}/matches/${match.id}`}>
                         #{match.id}
-                      </Link>
+                      </TransitionLink>
                     </td>
                     <td className="max-w-[180px] truncate py-2" title={match.run_name}>
                       {match.run_name}

@@ -1,10 +1,11 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 
 import type { DatasetOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/common/page-header";
 import { cn } from "@/lib/utils";
 import { getBuDefaultQMax } from "@/features/bu/utils";
+import { TransitionNavLink } from "@/features/page-transition";
 
 export interface BuDatasetContext {
   dataset: DatasetOut;
@@ -37,7 +38,7 @@ export function BuDatasetLayout({ dataset }: { dataset: DatasetOut }) {
 
       <div className="mb-5 flex flex-wrap gap-2 border-b border-border/60 pb-2">
         {tabs.map((tab) => (
-          <NavLink
+          <TransitionNavLink
             key={tab.to}
             to={tab.to}
             end={tab.end}
@@ -50,7 +51,7 @@ export function BuDatasetLayout({ dataset }: { dataset: DatasetOut }) {
             }
           >
             {tab.label}
-          </NavLink>
+          </TransitionNavLink>
         ))}
       </div>
 

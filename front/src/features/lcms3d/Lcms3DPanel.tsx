@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlotStatus } from "@/components/common/plot-status";
 import { formatNumber } from "@/lib/utils";
 import type { Peak } from "./types";
 import { ThreeLcmsScene } from "./ThreeLcmsScene";
@@ -9,9 +10,18 @@ interface Props {
   peaks: Peak[] | null | undefined;
   scan: number | null;
   retentionTimeSeconds: number | null;
+  onFirstRender?: () => void;
+  onRenderError?: () => void;
 }
 
-export function Lcms3DPanel({ peaks, scan, retentionTimeSeconds }: Props) {
+export function Lcms3DPanel({
+  peaks,
+  scan,
+  retentionTimeSeconds,
+  onFirstRender,
+  onRenderError,
+}: Props) {
+  const [renderFailed, setRenderFailed] = useState(false);
   const cleanPeaks = useMemo<Peak[]>(() => {
     if (!peaks || peaks.length === 0) return [];
     return peaks.filter(
@@ -43,10 +53,20 @@ export function Lcms3DPanel({ peaks, scan, retentionTimeSeconds }: Props) {
         <span className="font-mono text-xs text-muted-foreground">{subtitle}</span>
       </CardHeader>
       <CardContent>
-        {cleanPeaks.length === 0 ? (
+        {renderFailed ? (
+          <PlotStatus kind="error" title="Failed to draw the LC-MS 3D spectrum." />
+        ) : cleanPeaks.length === 0 ? (
           <p className="text-sm text-muted-foreground">No peaks to display for this scan.</p>
         ) : (
-          <ThreeLcmsScene peaks={cleanPeaks} height={480} />
+          <ThreeLcmsScene
+            peaks={cleanPeaks}
+            height={480}
+            onFirstRender={onFirstRender}
+            onRenderError={() => {
+              setRenderFailed(true);
+              onRenderError?.();
+            }}
+          />
         )}
       </CardContent>
     </Card>

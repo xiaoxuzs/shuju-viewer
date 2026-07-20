@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { TransitionLink } from "@/features/page-transition";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,12 +35,12 @@ export function BuPeptideLinksTable({ slug, protein }: { slug: string; protein: 
               {protein.peptides.map((peptide) => (
                 <tr key={peptide.peptide_id} className="border-b border-border/60 last:border-0">
                   <td className="py-2 font-mono">
-                    <Link
+                    <TransitionLink
                       className="font-medium text-primary hover:underline"
                       to={`/datasets/${slug}/peptides/${peptide.peptide_id}`}
                     >
                       {peptide.sequence}
-                    </Link>
+                    </TransitionLink>
                   </td>
                   <td
                     className="max-w-[260px] truncate py-2 text-muted-foreground"
@@ -63,9 +63,9 @@ export function BuPeptideLinksTable({ slug, protein }: { slug: string; protein: 
                   </td>
                   <td className="py-2 text-right">
                     {peptide.best_match_id ? (
-                      <Link className="font-medium text-primary hover:underline" to={`/datasets/${slug}/matches/${peptide.best_match_id}`}>
+                      <TransitionLink className="font-medium text-primary hover:underline" to={`/datasets/${slug}/matches/${peptide.best_match_id}`}>
                         #{peptide.best_match_id}
-                      </Link>
+                      </TransitionLink>
                     ) : (
                       "-"
                     )}

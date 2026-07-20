@@ -1,7 +1,7 @@
 /**
  * Proteoform 详情：展示质量、修饰相关统计及该形式下 PrSM 列表。
  */
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchProteoform } from "@/api/client";
@@ -13,6 +13,7 @@ import { PageLoading } from "@/components/common/page-loading";
 import { Stat } from "@/components/common/stat";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatEValue, formatNumber } from "@/lib/utils";
+import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 
 export function ProteoformDetailPage() {
   const { slug = "", cutoff = "", proteoformId = "" } = useParams();
@@ -20,6 +21,7 @@ export function ProteoformDetailPage() {
     queryKey: ["proteoform", slug, cutoff, proteoformId],
     queryFn: () => fetchProteoform(slug, cutoff, Number(proteoformId)),
   });
+  usePageTransitionReady(!isLoading);
 
   if (isLoading) return <PageLoading />;
   if (error && !data) return <DataLoadError />;
@@ -38,9 +40,9 @@ export function ProteoformDetailPage() {
         ]}
         actions={
           <Badge variant="outline">
-            <Link to={`/datasets/${slug}/${cutoff}/proteins/${data.protein_id}`}>
+            <TransitionLink to={`/datasets/${slug}/${cutoff}/proteins/${data.protein_id}`}>
               ← back to protein
-            </Link>
+            </TransitionLink>
           </Badge>
         }
       />
@@ -77,12 +79,12 @@ export function ProteoformDetailPage() {
               {data.prsms.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell>
-                    <Link
+                    <TransitionLink
                       to={`/datasets/${slug}/${cutoff}/prsms/${p.prsm_id}`}
                       className="font-medium text-primary hover:underline"
                     >
                       #{p.prsm_id}
-                    </Link>
+                    </TransitionLink>
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs tabular-nums">
                     {formatEValue(p.e_value)}

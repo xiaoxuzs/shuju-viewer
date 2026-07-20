@@ -8,6 +8,7 @@ import { DatasetPage } from "@/pages/DatasetPage";
 import { BuDatasetLayout } from "@/features/bu/layout/BuDatasetLayout";
 import { SpectraOnlyPage } from "@/features/spectra-only/pages/SpectraOnlyPage";
 import { isSpectraOnlyDataset } from "@/features/spectra-only/utils";
+import { usePageTransitionReady } from "@/features/page-transition";
 
 export function DatasetModeGate() {
   const { slug = "" } = useParams();
@@ -17,6 +18,7 @@ export function DatasetModeGate() {
     queryFn: () => fetchDataset(slug),
     enabled: !!slug,
   });
+  usePageTransitionReady(!isLoading && Boolean(error || !data));
 
   if (isLoading) return <PageLoading />;
   if (error && !data) return <DataLoadError />;

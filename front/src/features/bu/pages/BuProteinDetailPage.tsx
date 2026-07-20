@@ -8,6 +8,7 @@ import { BuPeptideLinksTable } from "@/features/bu/components/protein-detail/BuP
 import { BuProteinHeader } from "@/features/bu/components/protein-detail/BuProteinHeader";
 import { SequenceCoverage } from "@/features/bu/components/sequence/SequenceCoverage";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
+import { usePageTransitionReady } from "@/features/page-transition";
 
 export function BuProteinDetailPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
@@ -18,6 +19,7 @@ export function BuProteinDetailPage() {
     queryFn: () => fetchBuProtein(dataset.slug, parsedProteinId),
     enabled: Number.isFinite(parsedProteinId),
   });
+  usePageTransitionReady(!isLoading);
 
   if (!Number.isFinite(parsedProteinId)) return <p className="text-destructive">Invalid protein id.</p>;
   if (isLoading) return <PageLoading />;

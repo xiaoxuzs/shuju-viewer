@@ -5,6 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>proteo-viewer</title>
+    <style>
+      :root {
+        --background: 210 40% 99%;
+        background-color: hsl(var(--background));
+      }
+      :root.dark {
+        --background: 222 47% 7%;
+      }
+      html,
+      body,
+      #root {
+        min-height: 100%;
+        background-color: hsl(var(--background));
+      }
+    </style>
     <script>
       (() => {
         const storageKey = "viewer.theme";

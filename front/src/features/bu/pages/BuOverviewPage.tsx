@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { ChartRenderBoundary } from "@/components/common/chart-render-boundary";
 import { PageLoading } from "@/components/common/page-loading";
 import { PlotStatus } from "@/components/common/plot-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,14 +25,21 @@ import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/compo
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import { formatCount } from "@/features/bu/utils";
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
+import {
+  usePageTransition,
+  usePageTransitionReady,
+  useTransitionSignal,
+} from "@/features/page-transition";
 
 const ZOOM_HINT = "wheel to zoom (Shift = Y) · brush-drag = X";
 
 export function BuOverviewPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
+  const { beginManualTransition } = usePageTransition();
   const [chromType, setChromType] = useState<"tic" | "bpc">("tic");
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [chromFullOpen, setChromFullOpen] = useState(false);
+  const [chromModalBatchId, setChromModalBatchId] = useState<number | null>(null);
   const [chromModalZoom, setChromModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const { data, isLoading, error } = useQuery({
     queryKey: ["bu", dataset.slug, "overview"],
@@ -65,6 +73,29 @@ export function BuOverviewPage() {
     enabled: !!data && !!selectedRun,
     retry: chartQueryRetry,
   });
+  const chromatogramKey = `${dataset.slug}:${selectedRun?.run_id ?? "none"}:${chromType}`;
+  const [chromatogramReady, markChromatogramReady] = useTransitionSignal(chromatogramKey);
+  const [chromModalReady, markChromModalReady] = useTransitionSignal(chromModalBatchId);
+  const mainContentReady = !isLoading && (
+    !data
+    || !selectedRun
+    || (!chromatogram.isLoading && chromatogramReady)
+  );
+  usePageTransitionReady(mainContentReady && (!chromFullOpen || chromModalReady));
+
+  useEffect(() => {
+    if (
+      !selectedRun
+      || chromatogram.isError
+      || (!chromatogram.isLoading && (!chromatogram.data || chromatogram.data.rt.length === 0))
+    ) markChromatogramReady();
+  }, [
+    chromatogram.data,
+    chromatogram.isError,
+    chromatogram.isLoading,
+    markChromatogramReady,
+    selectedRun,
+  ]);
 
   useEffect(() => {
     setChromFullOpen(false);
@@ -77,6 +108,17 @@ export function BuOverviewPage() {
     if (!fallback) return;
     setSelectedRunId((current) => (data.runs.some((run) => run.run_id === current) ? current : fallback.run_id));
   }, [data]);
+
+  const selectRun = (runId: number) => {
+    if (runId !== selectedRun?.run_id) beginManualTransition();
+    setSelectedRunId(runId);
+  };
+
+  const openChromatogram = () => {
+    const batchId = beginManualTransition();
+    setChromModalBatchId(batchId);
+    setChromFullOpen(true);
+  };
 
   if (isLoading) return <PageLoading />;
   if (error && !data) return <DataLoadError />;
@@ -94,7 +136,7 @@ export function BuOverviewPage() {
             <p className="mt-1 text-xs text-muted-foreground">{ZOOM_HINT}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <RunSelector runs={data.runs} selectedRunId={selectedRun?.run_id ?? null} onChange={setSelectedRunId} />
+            <RunSelector runs={data.runs} selectedRunId={selectedRun?.run_id ?? null} onChange={selectRun} />
             <div className="flex rounded-md border border-border bg-muted/30 p-1 text-xs">
               {(["tic", "bpc"] as const).map((type) => (
                 <button
@@ -126,7 +168,17 @@ export function BuOverviewPage() {
           ) : chromatogram.data?.rt.length === 0 ? (
             <PlotStatus kind="empty" title="No chromatogram data available." />
           ) : chromatogram.data ? (
-            <BuChromatogramChart chromatogram={chromatogram.data} onOpenFull={() => setChromFullOpen(true)} />
+            <ChartRenderBoundary
+              key={chromatogramKey}
+              fallback={<PlotStatus kind="error" title="Failed to draw the chromatogram." />}
+              onError={markChromatogramReady}
+            >
+              <BuChromatogramChart
+                chromatogram={chromatogram.data}
+                onOpenFull={openChromatogram}
+                onFirstRender={markChromatogramReady}
+              />
+            </ChartRenderBoundary>
           ) : null}
         </CardContent>
       </Card>
@@ -190,12 +242,19 @@ export function BuOverviewPage() {
           onClose={() => setChromFullOpen(false)}
           actions={<ResetZoomButton zoom={chromModalZoom} onReset={() => setChromModalZoom(DEFAULT_ZOOM)} />}
         >
-          <BuChromatogramChart
-            chromatogram={chromatogram.data}
-            height={Math.max(BU_CHART.chromatogramHeight, 560)}
-            zoom={chromModalZoom}
-            onZoomChange={setChromModalZoom}
-          />
+          <ChartRenderBoundary
+            key={chromModalBatchId}
+            fallback={<PlotStatus kind="error" title="Failed to draw the chromatogram." />}
+            onError={markChromModalReady}
+          >
+            <BuChromatogramChart
+              chromatogram={chromatogram.data}
+              height={Math.max(BU_CHART.chromatogramHeight, 560)}
+              zoom={chromModalZoom}
+              onZoomChange={setChromModalZoom}
+              onFirstRender={markChromModalReady}
+            />
+          </ChartRenderBoundary>
         </BuChartModal>
       )}
     </div>

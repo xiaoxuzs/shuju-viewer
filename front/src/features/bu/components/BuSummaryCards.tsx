@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { TransitionLink } from "@/features/page-transition";
 import { ArrowRight, FileText, Layers, ListTree } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -53,7 +53,7 @@ function EntryCard({
   value: number;
 }) {
   return (
-    <Link to={to} className="group">
+    <TransitionLink to={to} className="group">
       <Card className="h-full border-border/50 transition-colors hover:border-primary/40">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -66,6 +66,6 @@ function EntryCard({
           <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
         </CardContent>
       </Card>
-    </Link>
+    </TransitionLink>
   );
 }

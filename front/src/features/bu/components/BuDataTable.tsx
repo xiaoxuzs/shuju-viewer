@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { TransitionLink } from "@/features/page-transition";
 import type { ReactNode } from "react";
 
 import { PageLoading } from "@/components/common/page-loading";
@@ -63,9 +63,9 @@ export function BuDataTable<T extends { id: number }>({
                   {columns.map((column, index) => (
                     <TableCell key={column.key} className={column.className}>
                       {index === 0 && href ? (
-                        <Link to={href} className="font-medium text-foreground hover:text-primary">
+                        <TransitionLink to={href} className="font-medium text-foreground hover:text-primary">
                           {column.render(row)}
-                        </Link>
+                        </TransitionLink>
                       ) : (
                         column.render(row)
                       )}

@@ -124,6 +124,7 @@ export function BuSpectrumChart({
   externalAnnotations = EMPTY_EXTERNAL_ANNOTATIONS,
   annotationMode = "live",
   onOpenFull,
+  onFirstRender,
   className,
 }: {
   spectrum: BuSpectrumV1;
@@ -139,6 +140,7 @@ export function BuSpectrumChart({
   externalAnnotations?: SpectrumExternalAnnotation[];
   annotationMode?: "live" | "external" | "both";
   onOpenFull?: () => void;
+  onFirstRender?: () => void;
   className?: string;
 }) {
   const showLiveAnnotations = annotationMode === "live" || annotationMode === "both";
@@ -195,6 +197,8 @@ export function BuSpectrumChart({
   zoomRef.current = zoom;
   const onMatchedIonClickRef = useRef(onMatchedIonClick);
   onMatchedIonClickRef.current = onMatchedIonClick;
+  const onFirstRenderRef = useRef(onFirstRender);
+  onFirstRenderRef.current = onFirstRender;
   const commitZoomRef = useRef<(zoom: Zoom) => void>(() => {});
   commitZoomRef.current = (next) => {
     onZoomChange?.(next);
@@ -477,6 +481,7 @@ export function BuSpectrumChart({
     svgEl.addEventListener("mouseleave", onLeave);
     svgEl.addEventListener("wheel", onWheel, { passive: false });
     applyZoom(zoomRef.current);
+    onFirstRenderRef.current?.();
     return () => {
       svgEl.removeEventListener("dblclick", onDblClick);
       svgEl.removeEventListener("click", onClick);

@@ -1,7 +1,7 @@
 /**
  * 蛋白质详情：展示统计信息及下属 proteoform 表格与跳转链接。
  */
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchProtein } from "@/api/client";
@@ -13,6 +13,7 @@ import { PageLoading } from "@/components/common/page-loading";
 import { Stat } from "@/components/common/stat";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatEValue, formatNumber } from "@/lib/utils";
+import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 
 export function ProteinDetailPage() {
   const { slug = "", cutoff = "", proteinId = "" } = useParams();
@@ -20,6 +21,7 @@ export function ProteinDetailPage() {
     queryKey: ["protein", slug, cutoff, proteinId],
     queryFn: () => fetchProtein(slug, cutoff, Number(proteinId)),
   });
+  usePageTransitionReady(!isLoading);
 
   if (isLoading) return <PageLoading />;
   if (error && !data) return <DataLoadError />;
@@ -47,12 +49,12 @@ export function ProteinDetailPage() {
           label="Best PrSM"
           value={
             data.best_prsm_id != null ? (
-              <Link
+              <TransitionLink
                 to={`/datasets/${slug}/${cutoff}/prsms/${data.best_prsm_id}`}
                 className="text-primary hover:underline"
               >
                 #{data.best_prsm_id}
-              </Link>
+              </TransitionLink>
             ) : (
               "—"
             )
@@ -79,12 +81,12 @@ export function ProteinDetailPage() {
               {data.proteoforms.map((pf) => (
                 <TableRow key={pf.id}>
                   <TableCell>
-                    <Link
+                    <TransitionLink
                       to={`/datasets/${slug}/${cutoff}/proteoforms/${pf.id}`}
                       className="font-medium text-foreground hover:text-primary"
                     >
                       Proteoform #{pf.proteoform_id}
-                    </Link>
+                    </TransitionLink>
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs tabular-nums">
                     {formatNumber(pf.proteoform_mass, 4)}
@@ -97,12 +99,12 @@ export function ProteinDetailPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     {pf.best_prsm_id != null ? (
-                      <Link
+                      <TransitionLink
                         to={`/datasets/${slug}/${cutoff}/prsms/${pf.best_prsm_id}`}
                         className="text-primary hover:underline"
                       >
                         #{pf.best_prsm_id}
-                      </Link>
+                      </TransitionLink>
                     ) : (
                       "—"
                     )}

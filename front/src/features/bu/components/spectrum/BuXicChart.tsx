@@ -21,6 +21,7 @@ export function BuXicChart({
   onZoomChange,
   onPointClick,
   onOpenFull,
+  onFirstRender,
 }: {
   xic: BuXicOut;
   sequence: string;
@@ -31,6 +32,7 @@ export function BuXicChart({
   onZoomChange?: (zoom: Zoom) => void;
   onPointClick?: (selection: BuXicPointSelection) => void;
   onOpenFull?: () => void;
+  onFirstRender?: () => void;
 }) {
   const traces = xic.traces?.length
     ? xic.traces
@@ -92,6 +94,7 @@ export function BuXicChart({
         onZoomChange={onZoomChange}
         onPointClick={onPointClick ? handlePointClick : undefined}
         onOpenFull={onOpenFull}
+        onFirstRender={onFirstRender}
       />
     </div>
   );

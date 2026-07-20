@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { ChartRenderBoundary } from "@/components/common/chart-render-boundary";
 import { PageLoading } from "@/components/common/page-loading";
 import { PlotStatus } from "@/components/common/plot-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +56,10 @@ import {
 } from "@/features/bu/utils";
 import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
+import {
+  usePageTransitionReady,
+  useTransitionSignal,
+} from "@/features/page-transition";
 
 const MS2_PPM = 20;
 const XIC_PPM = 10;
@@ -158,6 +163,40 @@ export function BuMatchDetailPage() {
   );
   const ms2ExternalAnnotations = pfmbOverlay?.mappedAnnotations ?? EMPTY_MS2_EXTERNAL_ANNOTATIONS;
   const ms2AnnotationMode = ms2ExternalAnnotations.length > 0 ? "both" : "live";
+  const [xicRendered, markXicRendered] = useTransitionSignal(`${dataset.slug}:${parsedMatchId}:xic`);
+  const [ms1Rendered, markMs1Rendered] = useTransitionSignal(`${dataset.slug}:${parsedMatchId}:ms1`);
+  const [ms2Rendered, markMs2Rendered] = useTransitionSignal(
+    `${dataset.slug}:${parsedMatchId}:ms2:${ms2.data?.scan ?? "none"}`,
+  );
+  const pfmbCriticalReady = !hasPfmb || (
+    !pfmbEvidence.slots.isLoading
+    && (!pfmbEvidence.hasSlots || !pfmbEvidence.annotation.isLoading)
+  );
+  const mzmlCriticalReady = !xic.isLoading
+    && !ms1.isLoading
+    && !ms2.isLoading
+    && !ms2.isPlaceholderData
+    && xicRendered
+    && ms1Rendered
+    && ms2Rendered;
+  const formatCriticalReady = !data
+    || (isMzml ? mzmlCriticalReady : isBruker ? !mobility.isLoading : true);
+  usePageTransitionReady(!isLoading && (!data || (formatCriticalReady && pfmbCriticalReady)));
+
+  useEffect(() => {
+    if (xic.isError || (!xic.isLoading && (!xic.data || !hasXicSignal(xic.data)))) markXicRendered();
+  }, [markXicRendered, xic.data, xic.isError, xic.isLoading]);
+
+  useEffect(() => {
+    if (ms1.isError || (!ms1.isLoading && (!ms1.data || !hasSpectrumPeaks(ms1.data)))) markMs1Rendered();
+  }, [markMs1Rendered, ms1.data, ms1.isError, ms1.isLoading]);
+
+  useEffect(() => {
+    if (
+      !ms2.isPlaceholderData
+      && (ms2.isError || (!ms2.isLoading && (!ms2.data || !hasSpectrumPeaks(ms2.data))))
+    ) markMs2Rendered();
+  }, [markMs2Rendered, ms2.data, ms2.isError, ms2.isLoading, ms2.isPlaceholderData]);
 
   useEffect(() => {
     setXicFullOpen(false);
@@ -391,14 +430,21 @@ export function BuMatchDetailPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <BuXicChart
-                  xic={xic.data}
-                  sequence={data.sequence}
-                  precursorCharge={data.precursor_charge}
-                  ppm={XIC_PPM}
-                  onPointClick={selectXicPoint}
-                  onOpenFull={() => setXicFullOpen(true)}
-                />
+                <ChartRenderBoundary
+                  key={`${dataset.slug}:${parsedMatchId}:xic`}
+                  fallback={<PlotStatus kind="error" title="Failed to draw the precursor XIC." />}
+                  onError={markXicRendered}
+                >
+                  <BuXicChart
+                    xic={xic.data}
+                    sequence={data.sequence}
+                    precursorCharge={data.precursor_charge}
+                    ppm={XIC_PPM}
+                    onPointClick={selectXicPoint}
+                    onOpenFull={() => setXicFullOpen(true)}
+                    onFirstRender={markXicRendered}
+                  />
+                </ChartRenderBoundary>
               </CardContent>
             </Card>
           ) : null}
@@ -417,13 +463,20 @@ export function BuMatchDetailPage() {
                 </p>
               </CardHeader>
               <CardContent>
-                <BuSpectrumChart
-                  spectrum={ms1.data}
-                  sequence={data.sequence}
-                  precursorCharge={data.precursor_charge}
-                  precursorMz={data.precursor_mz}
-                  onOpenFull={() => setMs1FullOpen(true)}
-                />
+                <ChartRenderBoundary
+                  key={`${dataset.slug}:${parsedMatchId}:ms1`}
+                  fallback={<PlotStatus kind="error" title="Failed to draw the MS1 spectrum." />}
+                  onError={markMs1Rendered}
+                >
+                  <BuSpectrumChart
+                    spectrum={ms1.data}
+                    sequence={data.sequence}
+                    precursorCharge={data.precursor_charge}
+                    precursorMz={data.precursor_mz}
+                    onOpenFull={() => setMs1FullOpen(true)}
+                    onFirstRender={markMs1Rendered}
+                  />
+                </ChartRenderBoundary>
               </CardContent>
             </Card>
           ) : null}
@@ -491,18 +544,25 @@ export function BuMatchDetailPage() {
                       </p>
                       )}
                   </div>
-                  <BuSpectrumChart
-                    spectrum={ms2.data}
-                    sequence={data.sequence}
-                    precursorCharge={data.precursor_charge}
-                    precursorMz={data.precursor_mz}
-                    ppm={MS2_PPM}
-                    onMatchedIonClick={toggleProductIon}
-                    selectedProductIonIds={selectedProductIonIds}
-                    externalAnnotations={ms2ExternalAnnotations}
-                    annotationMode={ms2AnnotationMode}
-                    onOpenFull={() => setMs2FullOpen(true)}
-                  />
+                  <ChartRenderBoundary
+                    key={`${dataset.slug}:${parsedMatchId}:ms2:${ms2.data.scan}`}
+                    fallback={<PlotStatus kind="error" title="Failed to draw the MS2 spectrum." />}
+                    onError={markMs2Rendered}
+                  >
+                    <BuSpectrumChart
+                      spectrum={ms2.data}
+                      sequence={data.sequence}
+                      precursorCharge={data.precursor_charge}
+                      precursorMz={data.precursor_mz}
+                      ppm={MS2_PPM}
+                      onMatchedIonClick={toggleProductIon}
+                      selectedProductIonIds={selectedProductIonIds}
+                      externalAnnotations={ms2ExternalAnnotations}
+                      annotationMode={ms2AnnotationMode}
+                      onOpenFull={() => setMs2FullOpen(true)}
+                      onFirstRender={markMs2Rendered}
+                    />
+                  </ChartRenderBoundary>
                   </div>
                 </section>
 

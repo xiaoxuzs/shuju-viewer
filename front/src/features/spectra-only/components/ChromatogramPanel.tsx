@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { PlotStatus } from "@/components/common/plot-status";
@@ -6,13 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchSpectraChromatogram } from "@/features/spectra-only/api/spectraClient";
 import { BuChromatogramChart } from "@/features/bu/components/spectrum/BuChromatogramChart";
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
+import { ChartRenderBoundary } from "@/components/common/chart-render-boundary";
 
 export function ChromatogramPanel({
   datasetId,
   runId,
+  onReady,
 }: {
   datasetId: number;
   runId: number | null;
+  onReady?: () => void;
 }) {
   const [chromType, setChromType] = useState<"tic" | "bpc">("tic");
   const chromatogram = useQuery({
@@ -21,6 +24,14 @@ export function ChromatogramPanel({
     enabled: runId != null,
     retry: chartQueryRetry,
   });
+
+  useEffect(() => {
+    if (
+      runId == null
+      || chromatogram.isError
+      || (!chromatogram.isLoading && (!chromatogram.data || chromatogram.data.rt.length === 0))
+    ) onReady?.();
+  }, [chromatogram.data, chromatogram.isError, chromatogram.isLoading, onReady, runId]);
 
   return (
     <Card>
@@ -51,7 +62,13 @@ export function ChromatogramPanel({
         ) : chromatogram.data?.rt.length === 0 ? (
           <PlotStatus kind="empty" title="No chromatogram data available." />
         ) : chromatogram.data ? (
-          <BuChromatogramChart chromatogram={chromatogram.data} />
+          <ChartRenderBoundary
+            key={`${runId}:${chromType}`}
+            fallback={<PlotStatus kind="error" title="Failed to draw the chromatogram." />}
+            onError={onReady}
+          >
+            <BuChromatogramChart chromatogram={chromatogram.data} onFirstRender={onReady} />
+          </ChartRenderBoundary>
         ) : null}
       </CardContent>
     </Card>

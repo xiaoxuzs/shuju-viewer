@@ -7,6 +7,7 @@ import { fetchBuPeptide } from "@/features/bu/api/buClient";
 import { BuPeptideHeader } from "@/features/bu/components/peptide-detail/BuPeptideHeader";
 import { BuPeptideMatchesTable } from "@/features/bu/components/peptide-detail/BuPeptideMatchesTable";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
+import { usePageTransitionReady } from "@/features/page-transition";
 
 export function BuPeptideDetailPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
@@ -17,6 +18,7 @@ export function BuPeptideDetailPage() {
     queryFn: () => fetchBuPeptide(dataset.slug, parsedPeptideId),
     enabled: Number.isFinite(parsedPeptideId),
   });
+  usePageTransitionReady(!isLoading);
 
   if (!Number.isFinite(parsedPeptideId)) return <p className="text-destructive">Invalid peptide id.</p>;
   if (isLoading) return <PageLoading />;

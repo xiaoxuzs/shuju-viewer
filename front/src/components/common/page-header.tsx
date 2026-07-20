@@ -1,7 +1,7 @@
 /**
  * 页面标题区：可选面包屑、主标题/描述、右侧操作区。
  */
-import { Link } from "react-router-dom";
+import { TransitionLink } from "@/features/page-transition";
 import { ChevronRight, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,22 +27,22 @@ export function PageHeader({
     <div className={cn("mb-8 space-y-3", className)}>
       {crumbs && crumbs.length > 0 && (
         <nav className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Link
+          <TransitionLink
             to="/"
             className="flex items-center gap-1 hover:text-foreground transition-colors"
           >
             <Home className="h-3.5 w-3.5" />
-          </Link>
+          </TransitionLink>
           {crumbs.map((c, i) => (
             <span key={i} className="flex items-center gap-1">
               <ChevronRight className="h-3.5 w-3.5 opacity-50" />
               {c.to ? (
-                <Link
+                <TransitionLink
                   to={c.to}
                   className="hover:text-foreground transition-colors truncate max-w-[320px]"
                 >
                   {c.label}
-                </Link>
+                </TransitionLink>
               ) : (
                 <span className="text-foreground/80 truncate max-w-[320px]">{c.label}</span>
               )}

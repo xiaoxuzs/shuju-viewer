@@ -2,7 +2,7 @@
  * Proteoform 列表：按 cutoff 分页，默认按 PrSM 数量降序。
  */
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchProteoforms } from "@/api/client";
@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { Pagination } from "@/components/common/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatEValue, formatNumber } from "@/lib/utils";
+import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 
 export function ProteoformsPage() {
   const { slug = "", cutoff = "" } = useParams();
@@ -30,6 +31,7 @@ export function ProteoformsPage() {
         order: "desc",
       }),
   });
+  usePageTransitionReady(!isLoading);
 
   if (error && !data) return <DataLoadError />;
 
@@ -69,12 +71,12 @@ export function ProteoformsPage() {
                     </TableCell>
                     <TableCell className="truncate text-foreground">{pf.sequence_name}</TableCell>
                     <TableCell>
-                      <Link
+                      <TransitionLink
                         to={`/datasets/${slug}/${cutoff}/proteoforms/${pf.id}`}
                         className="font-medium text-foreground hover:text-primary"
                       >
                         Proteoform #{pf.proteoform_id}
-                      </Link>
+                      </TransitionLink>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums">
                       {formatNumber(pf.proteoform_mass, 4)}

@@ -2,7 +2,7 @@
  * 蛋白质列表：按 cutoff 分页，支持名称/描述搜索，默认按最佳 e-value 升序。
  */
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 
@@ -16,10 +16,15 @@ import { Pagination } from "@/components/common/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatEValue } from "@/lib/utils";
+import {
+  TransitionLink,
+  usePageTransitionReady,
+  useTransitionNavigate,
+} from "@/features/page-transition";
 
 export function ProteinsPage() {
   const { slug = "", cutoff = "" } = useParams();
-  const navigate = useNavigate();
+  const navigate = useTransitionNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const pageSize = 50;
@@ -37,6 +42,7 @@ export function ProteinsPage() {
         order: listOrder,
       }),
   });
+  usePageTransitionReady(!isLoading);
 
   if (error && !data) return <DataLoadError />;
 
@@ -96,13 +102,13 @@ export function ProteinsPage() {
                       {p.sequence_id}
                     </TableCell>
                     <TableCell>
-                      <Link
+                      <TransitionLink
                         to={`/datasets/${slug}/${cutoff}/proteins/${p.id}`}
                         className="font-medium text-foreground hover:text-primary"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {p.sequence_name}
-                      </Link>
+                      </TransitionLink>
                     </TableCell>
                     <TableCell className="max-w-md truncate text-muted-foreground">
                       {p.sequence_description ?? "—"}

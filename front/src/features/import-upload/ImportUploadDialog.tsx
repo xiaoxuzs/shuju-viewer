@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileUp, FolderOpen, Loader2, RotateCcw, X } from "lucide-react";
 
@@ -39,6 +38,7 @@ import {
 import { parseApiError } from "@/lib/apiError";
 import { clampImportProgress, formatImportStageLabel } from "@/lib/importStages";
 import { cn } from "@/lib/utils";
+import { TransitionLink } from "@/features/page-transition";
 
 type UploadUiState =
   | "idle"
@@ -693,7 +693,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
             )}
             {uiState === "success" && currentJob?.dataset_slug && (
               <Button asChild size="sm">
-                <Link to={`/datasets/${currentJob.dataset_slug}`}>Open dataset</Link>
+                <TransitionLink to={`/datasets/${currentJob.dataset_slug}`}>Open dataset</TransitionLink>
               </Button>
             )}
             {(

@@ -8,12 +8,14 @@ export function BuChromatogramChart({
   zoom,
   onZoomChange,
   onOpenFull,
+  onFirstRender,
 }: {
   chromatogram: BuChromatogramOut;
   height?: number;
   zoom?: Zoom;
   onZoomChange?: (zoom: Zoom) => void;
   onOpenFull?: () => void;
+  onFirstRender?: () => void;
 }) {
   const isBpc = chromatogram.type === "bpc";
   const points = chromatogram.rt.map((rt, index) => ({ x: rt, y: chromatogram.intensity[index] ?? 0 }));
@@ -43,6 +45,7 @@ export function BuChromatogramChart({
         zoom={zoom}
         onZoomChange={onZoomChange}
         onOpenFull={onOpenFull}
+        onFirstRender={onFirstRender}
       />
     </div>
   );

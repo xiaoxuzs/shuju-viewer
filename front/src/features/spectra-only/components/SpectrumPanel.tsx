@@ -35,6 +35,7 @@ import {
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 import { formatNumber } from "@/lib/utils";
 import { CHART_COLORS } from "@/features/theme/chartColors";
+import { ChartRenderBoundary } from "@/components/common/chart-render-boundary";
 
 const DEFAULT_PRECURSOR_MATCH_TOLERANCE_DA = 0.05;
 const RAW_PEAK_LABEL_COLOR = CHART_COLORS.series[7];
@@ -54,6 +55,7 @@ export function SpectrumPanel({
   titlePrefix,
   highlight,
   enablePeakAnnotations = false,
+  onReady,
 }: {
   datasetId: number;
   runId: number | null;
@@ -61,6 +63,7 @@ export function SpectrumPanel({
   titlePrefix?: string;
   highlight?: SpectrumHighlight | null;
   enablePeakAnnotations?: boolean;
+  onReady?: () => void;
 }) {
   const [zoom, setZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [showLargeSpectrum, setShowLargeSpectrum] = useState(false);
@@ -123,6 +126,15 @@ export function SpectrumPanel({
         color: RAW_SELECTED_PEAK_COLOR,
       }
     : null;
+
+  useEffect(() => {
+    if (
+      runId == null
+      || scanNumber == null
+      || spectrum.isError
+      || (!spectrum.isLoading && (!spectrum.data || peaks.length === 0))
+    ) onReady?.();
+  }, [onReady, peaks.length, runId, scanNumber, spectrum.data, spectrum.isError, spectrum.isLoading]);
   const highlightTargetMz = highlight?.targetMz ?? null;
   const highlightToleranceDa = highlight?.toleranceDa ?? DEFAULT_PRECURSOR_MATCH_TOLERANCE_DA;
   const highlightLabel = highlight?.label ?? "precursor";
@@ -214,26 +226,33 @@ export function SpectrumPanel({
                 toleranceDa={highlightToleranceDa}
               />
             )}
-            <SpectrumChart
-              peaks={peaks}
-              xLabel="m/z"
-              yLabel="Intensity"
-              yHeadroomRatio={showPeakAnnotations ? SPECTRA_ONLY_MS2_Y_HEADROOM_RATIO : undefined}
-              height={420}
-              marker={highlightMarker}
-              highlightPeak={highlightPeak}
-              peakLabels={showPeakAnnotations ? peakLabelOverlays : undefined}
-              selectedPeak={showPeakAnnotations ? selectedPeakOverlay : null}
-              onPeakClick={showPeakAnnotations ? handleChartPeakClick : undefined}
-              zoom={zoom}
-              onZoomChange={setZoom}
-              onOpenFull={() => setShowLargeSpectrum(true)}
-              emptyHint={
-                showPeakAnnotations
-                  ? "No peaks are available for this MS2 spectrum."
-                  : "No peaks to display for this scan."
-              }
-            />
+            <ChartRenderBoundary
+              key={`${runId}:${scanNumber}`}
+              fallback={<PlotStatus kind="error" title="Failed to draw the spectrum." />}
+              onError={onReady}
+            >
+              <SpectrumChart
+                peaks={peaks}
+                xLabel="m/z"
+                yLabel="Intensity"
+                yHeadroomRatio={showPeakAnnotations ? SPECTRA_ONLY_MS2_Y_HEADROOM_RATIO : undefined}
+                height={420}
+                marker={highlightMarker}
+                highlightPeak={highlightPeak}
+                peakLabels={showPeakAnnotations ? peakLabelOverlays : undefined}
+                selectedPeak={showPeakAnnotations ? selectedPeakOverlay : null}
+                onPeakClick={showPeakAnnotations ? handleChartPeakClick : undefined}
+                zoom={zoom}
+                onZoomChange={setZoom}
+                onOpenFull={() => setShowLargeSpectrum(true)}
+                onFirstRender={onReady}
+                emptyHint={
+                  showPeakAnnotations
+                    ? "No peaks are available for this MS2 spectrum."
+                    : "No peaks to display for this scan."
+                }
+              />
+            </ChartRenderBoundary>
             {showPeakAnnotations && peakAnnotations && (
               <DetectedPeaksTable
                 annotations={peakAnnotations.tableAnnotations}

@@ -74,6 +74,7 @@ export function BuInteractivePlot({
   onZoomChange,
   onPointClick,
   onOpenFull,
+  onFirstRender,
   className,
 }: {
   points: BuPlotPoint[];
@@ -95,6 +96,7 @@ export function BuInteractivePlot({
   onZoomChange?: (zoom: Zoom) => void;
   onPointClick?: (selection: BuPlotPointClick) => void;
   onOpenFull?: () => void;
+  onFirstRender?: () => void;
   className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -113,6 +115,8 @@ export function BuInteractivePlot({
   zoomRef.current = zoom;
   const onPointClickRef = useRef(onPointClick);
   onPointClickRef.current = onPointClick;
+  const onFirstRenderRef = useRef(onFirstRender);
+  onFirstRenderRef.current = onFirstRender;
 
   const commitZoomRef = useRef<(zoom: Zoom) => void>(() => {});
   commitZoomRef.current = (next) => {
@@ -411,6 +415,7 @@ export function BuInteractivePlot({
     svgEl.addEventListener("wheel", onWheel, { passive: false });
 
     applyZoom(zoomRef.current);
+    onFirstRenderRef.current?.();
 
     return () => {
       svgEl.removeEventListener("dblclick", onDblClick);

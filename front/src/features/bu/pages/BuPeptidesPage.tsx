@@ -1,5 +1,6 @@
-import { Link, useOutletContext, useSearchParams } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 
 import { DataLoadError } from "@/components/common/data-state";
 import { Pagination } from "@/components/common/pagination";
@@ -34,6 +35,7 @@ export function BuPeptidesPage() {
         order: "asc",
       }),
   });
+  usePageTransitionReady(!isLoading);
 
   const columns: BuColumn<BuPeptideListItemOut>[] = [
     { key: "sequence", header: "Sequence", render: (row) => row.sequence },
@@ -73,12 +75,12 @@ export function BuPeptidesPage() {
       header: "",
       className: "text-right",
       render: (row) => (
-        <Link
+        <TransitionLink
           className="text-xs font-medium text-primary hover:underline"
           to={`/datasets/${dataset.slug}/matches?search=${encodeURIComponent(row.sequence)}`}
         >
           All matches
-        </Link>
+        </TransitionLink>
       ),
     },
   ];

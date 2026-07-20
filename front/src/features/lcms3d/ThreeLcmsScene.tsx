@@ -7,13 +7,19 @@ import type { Peak } from "./types";
 interface Props {
   peaks: Peak[];
   height?: number;
+  onFirstRender?: () => void;
+  onRenderError?: () => void;
 }
 
 const X_SIZE = 12;
 const Z_SIZE = 8;
 
-export function ThreeLcmsScene({ peaks, height = 480 }: Props) {
+export function ThreeLcmsScene({ peaks, height = 480, onFirstRender, onRenderError }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const onFirstRenderRef = useRef(onFirstRender);
+  const onRenderErrorRef = useRef(onRenderError);
+  onFirstRenderRef.current = onFirstRender;
+  onRenderErrorRef.current = onRenderError;
   const { resolvedTheme } = useTheme();
 
   useEffect(() => {
@@ -27,11 +33,17 @@ export function ThreeLcmsScene({ peaks, height = 480 }: Props) {
     const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 1000);
     camera.position.set(0.5, 6.5, 14);
 
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: false,
-      powerPreference: "high-performance",
-    });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance",
+      });
+    } catch {
+      onRenderErrorRef.current?.();
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.domElement.className = "h-full w-full rounded-md";
     container.appendChild(renderer.domElement);
@@ -64,10 +76,19 @@ export function ThreeLcmsScene({ peaks, height = 480 }: Props) {
     resizeObserver.observe(container);
 
     let raf = 0;
+    let firstRenderReported = false;
     const render = () => {
-      controls.update();
-      renderer.render(scene, camera);
-      raf = window.requestAnimationFrame(render);
+      try {
+        controls.update();
+        renderer.render(scene, camera);
+        if (!firstRenderReported) {
+          firstRenderReported = true;
+          onFirstRenderRef.current?.();
+        }
+        raf = window.requestAnimationFrame(render);
+      } catch {
+        onRenderErrorRef.current?.();
+      }
     };
     render();
 

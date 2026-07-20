@@ -2,7 +2,6 @@
  * Datasets list with a local-only browser upload entrypoint.
  */
 import { useCallback, useState } from "react";
-import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -24,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
 import { ImportUploadDialog } from "@/features/import-upload/ImportUploadDialog";
+import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 import { parseApiError } from "@/lib/apiError";
 import { cn } from "@/lib/utils";
 import { isSpectraOnlyDataset } from "@/features/spectra-only/utils";
@@ -63,6 +63,7 @@ export function DatasetsPage() {
     queryKey: ["datasets"],
     queryFn: fetchDatasets,
   });
+  usePageTransitionReady(!isLoading);
 
   const [importOpen, setImportOpen] = useState(false);
 
@@ -137,7 +138,7 @@ export function DatasetsPage() {
             const spectraRunCount = ds.runs?.length ?? 0;
             const spectraFormat = ds.runs?.[0]?.raw_format ?? "mzML";
             return (
-              <Link
+              <TransitionLink
                 key={ds.id}
                 to={`/datasets/${ds.slug}`}
                 className="group"
@@ -242,7 +243,7 @@ export function DatasetsPage() {
                     )}
                   </CardContent>
                 </Card>
-              </Link>
+              </TransitionLink>
             );
           })}
         </div>

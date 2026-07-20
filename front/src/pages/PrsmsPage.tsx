@@ -2,7 +2,7 @@
  * PrSM 列表：按 cutoff 分页，默认按 e-value 升序（好的匹配在前）。
  */
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchPrsms } from "@/api/client";
@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { Pagination } from "@/components/common/pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatEValue, formatNumber } from "@/lib/utils";
+import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 
 export function PrsmsPage() {
   const { slug = "", cutoff = "" } = useParams();
@@ -24,6 +25,7 @@ export function PrsmsPage() {
     queryFn: () =>
       fetchPrsms(slug, cutoff, { page, page_size: pageSize, sort: "e_value", order: "asc" }),
   });
+  usePageTransitionReady(!isLoading);
 
   if (error && !data) return <DataLoadError />;
 
@@ -61,12 +63,12 @@ export function PrsmsPage() {
                 {data?.items.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell>
-                      <Link
+                      <TransitionLink
                         to={`/datasets/${slug}/${cutoff}/prsms/${p.prsm_id}`}
                         className="font-medium text-primary hover:underline"
                       >
                         #{p.prsm_id}
-                      </Link>
+                      </TransitionLink>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums">
                       {formatEValue(p.e_value)}

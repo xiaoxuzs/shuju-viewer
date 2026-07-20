@@ -1,7 +1,7 @@
 /**
  * 单个数据集概览：汇总各 cutoff 规模，并链接到蛋白质 / proteoform / PrSM 列表。
  */
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Filter } from "lucide-react";
 
@@ -12,6 +12,7 @@ import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLoading } from "@/components/common/page-loading";
 import { Stat } from "@/components/common/stat";
+import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 
 export function DatasetPage() {
   const { slug = "" } = useParams();
@@ -20,6 +21,7 @@ export function DatasetPage() {
     queryFn: () => fetchDataset(slug),
     enabled: !!slug,
   });
+  usePageTransitionReady(!isLoading);
 
   if (isLoading) return <PageLoading />;
   if (error && !data) return <DataLoadError />;
@@ -84,7 +86,7 @@ export function DatasetPage() {
 
 function CutoffLink({ to, label, count }: { to: string; label: string; count: number }) {
   return (
-    <Link
+    <TransitionLink
       to={to}
       className="group flex flex-col justify-between rounded-lg border border-border/60 bg-muted/40 p-3 transition-colors hover:border-primary/40 hover:bg-accent"
     >
@@ -93,6 +95,6 @@ function CutoffLink({ to, label, count }: { to: string; label: string; count: nu
         <div className="text-lg font-semibold">{count.toLocaleString()}</div>
         <ArrowRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
       </div>
-    </Link>
+    </TransitionLink>
   );
 }

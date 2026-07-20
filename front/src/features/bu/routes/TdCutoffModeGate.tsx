@@ -5,6 +5,7 @@ import { fetchDataset } from "@/api/client";
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageLoading } from "@/components/common/page-loading";
 import { isSpectraOnlyDataset } from "@/features/spectra-only/utils";
+import { usePageTransitionReady } from "@/features/page-transition";
 
 export function TdCutoffModeGate() {
   const { slug = "" } = useParams();
@@ -13,6 +14,7 @@ export function TdCutoffModeGate() {
     queryFn: () => fetchDataset(slug),
     enabled: !!slug,
   });
+  usePageTransitionReady(!isLoading && Boolean(error || !data));
 
   if (isLoading) return <PageLoading />;
   if (error && !data) return <DataLoadError />;

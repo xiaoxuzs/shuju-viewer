@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { TransitionLink } from "@/features/page-transition";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ export function BuProteinHeader({ slug, protein }: { slug: string; protein: BuPr
             {protein.gene_name && <Badge variant="secondary">{protein.gene_name}</Badge>}
             {protein.is_decoy && <Badge variant="outline">decoy</Badge>}
             <Button asChild size="sm" variant="outline">
-              <Link to={`/datasets/${slug}/matches?protein_id=${protein.id}`}>View all matches</Link>
+              <TransitionLink to={`/datasets/${slug}/matches?protein_id=${protein.id}`}>View all matches</TransitionLink>
             </Button>
           </div>
         </div>

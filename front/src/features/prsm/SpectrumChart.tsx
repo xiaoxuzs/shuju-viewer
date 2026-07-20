@@ -94,6 +94,7 @@ interface Props {
   yIntensityScale?: "absolute" | "percent";
   /** Optional automatic Y-axis headroom ratio, e.g. 0.12 keeps 12% space above the tallest visible peak. */
   yHeadroomRatio?: number;
+  onFirstRender?: () => void;
   className?: string;
 }
 
@@ -217,6 +218,7 @@ export function SpectrumChart({
   yPercentBase,
   yIntensityScale = "absolute",
   yHeadroomRatio = 0,
+  onFirstRender,
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -237,6 +239,8 @@ export function SpectrumChart({
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const commitZoomRef = useRef<(z: Zoom) => void>(() => {});
+  const onFirstRenderRef = useRef(onFirstRender);
+  onFirstRenderRef.current = onFirstRender;
   commitZoomRef.current = (next: Zoom) => {
     if (onZoomChange) onZoomChange(next);
     if (!isControlled) setInternalZoom(next);
@@ -921,6 +925,7 @@ export function SpectrumChart({
 
     // Initial paint using whatever zoom is currently set by the parent.
     applyZoom(zoomRef.current);
+    onFirstRenderRef.current?.();
 
     return () => {
       svgEl.removeEventListener("wheel", wheelHandler);
