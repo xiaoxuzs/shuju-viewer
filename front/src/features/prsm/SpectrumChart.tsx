@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import { Maximize2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CHART_COLORS } from "@/features/theme/chartColors";
 
 export interface ChartPeak {
   mz: number;
@@ -108,7 +109,7 @@ const N_ION_TYPES = new Set(["B", "C", "A"]);
 const C_ION_TYPES = new Set(["Y", "Z", "Z_DOT", "X"]);
 
 function colorFor(peak: ChartPeak): string {
-  if (!peak.ion) return "hsl(215 16% 65%)"; // unmatched – muted grey
+  if (!peak.ion) return CHART_COLORS.unmatched;
   if (N_ION_TYPES.has(peak.ion)) return "hsl(var(--ion-n))";
   if (C_ION_TYPES.has(peak.ion)) return "hsl(var(--ion-c))";
   return "hsl(var(--ion-shift))";
@@ -350,13 +351,13 @@ export function SpectrumChart({
       .attr("x", innerW / 2)
       .attr("y", innerH + 32)
       .attr("text-anchor", "middle")
-      .attr("fill", "hsl(var(--muted-foreground))")
+      .attr("fill", CHART_COLORS.text)
       .attr("font-size", 11)
       .text(xLabel);
     g.append("text")
       .attr("transform", `rotate(-90) translate(${-innerH / 2},${-44})`)
       .attr("text-anchor", "middle")
-      .attr("fill", "hsl(var(--muted-foreground))")
+      .attr("fill", CHART_COLORS.text)
       .attr("font-size", 11)
       .text(axisYLabel);
 
@@ -462,9 +463,9 @@ export function SpectrumChart({
         .call((sel) => {
           sel
             .selectAll("text")
-            .attr("fill", "hsl(var(--muted-foreground))")
+            .attr("fill", CHART_COLORS.text)
             .attr("font-size", 11);
-          sel.selectAll("line, path").attr("stroke", "hsl(var(--border))");
+          sel.selectAll("line, path").attr("stroke", CHART_COLORS.axis);
         });
       const yTickFormat: (v: d3.NumberValue) => string = useLocalPercentPanel
         ? (v) =>
@@ -482,9 +483,9 @@ export function SpectrumChart({
         .call((sel) => {
           sel
             .selectAll("text")
-            .attr("fill", "hsl(var(--muted-foreground))")
+            .attr("fill", CHART_COLORS.text)
             .attr("font-size", 11);
-          sel.selectAll("line, path").attr("stroke", "hsl(var(--border))");
+          sel.selectAll("line, path").attr("stroke", CHART_COLORS.axis);
         });
 
       gridG
@@ -495,7 +496,7 @@ export function SpectrumChart({
             .tickFormat(() => "") as any,
         )
         .selectAll("line")
-        .attr("stroke", "hsl(var(--border))")
+        .attr("stroke", CHART_COLORS.grid)
         .attr("stroke-dasharray", "2,3");
       gridG.selectAll(".domain").remove();
 

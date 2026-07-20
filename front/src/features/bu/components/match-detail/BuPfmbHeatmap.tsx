@@ -329,7 +329,7 @@ function HeatmapLegend({ hasDetected }: { hasDetected: boolean }) {
       {hasDetected ? (
         <>
           <span className="inline-flex items-center gap-1">
-            <span className="h-3 w-5 rounded-sm border border-amber-500 bg-amber-400/40" />
+            <span className="h-3 w-5 rounded-sm border border-warning bg-warning/40" />
             Matched zero intensity
           </span>
           <span className="inline-flex items-center gap-1">
@@ -383,7 +383,7 @@ function cellFill(
   normalizedLog: number | null,
   patternId: string,
 ): string {
-  if (state === "matched-zero") return "rgba(245, 158, 11, 0.38)";
+  if (state === "matched-zero") return "hsl(var(--warning) / 0.38)";
   if (state === "not-detected") return "hsl(var(--muted) / 0.45)";
   if (state === "legacy-zero") return `url(#${patternId})`;
   return d3.interpolateViridis(normalizedLog ?? 0);

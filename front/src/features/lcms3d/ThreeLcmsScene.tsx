@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { useTheme } from "@/features/theme/themeContext";
 import type { Peak } from "./types";
 
 interface Props {
@@ -10,21 +11,18 @@ interface Props {
 
 const X_SIZE = 12;
 const Z_SIZE = 8;
-const COLORS = {
-  axis: 0x64748b,
-  grid: 0xcbd5e1,
-  text: "#1e293b",
-};
 
 export function ThreeLcmsScene({ peaks, height = 480 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const themeColors = readSceneTheme(container);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf8fafc);
+    scene.background = new THREE.Color(themeColors.background);
 
     const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 1000);
     camera.position.set(0.5, 6.5, 14);
@@ -50,8 +48,8 @@ export function ThreeLcmsScene({ peaks, height = 480 }: Props) {
 
     const mzRange = computeMzRange(peaks);
     const intensityMax = computeIntensityMax(peaks);
-    scene.add(makeAxes(mzRange, intensityMax));
-    const sticks = makeStickPlot(peaks, mzRange, intensityMax);
+    scene.add(makeAxes(mzRange, intensityMax, themeColors));
+    const sticks = makeStickPlot(peaks, mzRange, intensityMax, themeColors.heat);
     if (sticks) scene.add(sticks);
 
     const resize = () => {
@@ -81,7 +79,7 @@ export function ThreeLcmsScene({ peaks, height = 480 }: Props) {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [peaks]);
+  }, [peaks, resolvedTheme]);
 
   return (
     <div
@@ -91,9 +89,9 @@ export function ThreeLcmsScene({ peaks, height = 480 }: Props) {
     >
       <div className="pointer-events-none absolute left-3 top-3 z-10 rounded bg-background/85 px-2 py-1 text-[11px] font-medium text-muted-foreground shadow-sm ring-1 ring-border">
         <div className="flex gap-3">
-          <span className="text-slate-700">X: m/z</span>
-          <span className="text-slate-700">Y: Intensity</span>
-          <span className="text-violet-700">Color: Intensity (Viridis)</span>
+          <span className="text-foreground">X: m/z</span>
+          <span className="text-foreground">Y: Intensity</span>
+          <span className="text-[hsl(var(--chart-series-5))]">Color: Intensity (Viridis)</span>
         </div>
       </div>
     </div>
@@ -103,6 +101,37 @@ export function ThreeLcmsScene({ peaks, height = 480 }: Props) {
 // ---- geometry / data ------------------------------------------------------
 
 interface MzRange { min: number; max: number; }
+
+interface SceneThemeColors {
+  background: string;
+  axis: string;
+  grid: string;
+  text: string;
+  label: string;
+  labelHalo: string;
+  heat: string[];
+}
+
+function readSceneTheme(container: HTMLElement): SceneThemeColors {
+  const read = (variable: string) => {
+    const probe = document.createElement("span");
+    probe.style.cssText = `position:absolute;opacity:0;pointer-events:none;color:hsl(var(${variable}))`;
+    container.appendChild(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  };
+
+  return {
+    background: read("--chart-scene-background"),
+    axis: read("--chart-axis"),
+    grid: read("--chart-grid"),
+    text: read("--chart-text"),
+    label: read("--foreground"),
+    labelHalo: read("--chart-label-halo"),
+    heat: [1, 2, 3, 4, 5, 6].map((index) => read(`--chart-heat-${index}`)),
+  };
+}
 
 function computeMzRange(peaks: Peak[]): MzRange {
   if (peaks.length === 0) return { min: 0, max: 1 };
@@ -126,7 +155,12 @@ function computeIntensityMax(peaks: Peak[]): number {
   return max > 0 ? max : 1;
 }
 
-function makeStickPlot(peaks: Peak[], mz: MzRange, iMax: number): THREE.LineSegments | null {
+function makeStickPlot(
+  peaks: Peak[],
+  mz: MzRange,
+  iMax: number,
+  heatColors: string[],
+): THREE.LineSegments | null {
   if (peaks.length === 0) return null;
   const positions = new Float32Array(peaks.length * 6);
   const colors = new Float32Array(peaks.length * 6);
@@ -137,7 +171,7 @@ function makeStickPlot(peaks: Peak[], mz: MzRange, iMax: number): THREE.LineSegm
     const x = scale(p.mz, mz.min, mz.max, -X_SIZE / 2, X_SIZE / 2);
     const y = scale(Math.max(0, p.intensity), 0, iMax, 0, Y_SIZE);
     const t = iMax > 0 ? Math.max(0, Math.min(1, p.intensity / iMax)) : 0;
-    const c = viridis(t);
+    const c = viridis(t, heatColors);
 
     const off = i * 6;
     positions[off    ] = x; positions[off + 1] = 0; positions[off + 2] = 0;
@@ -158,7 +192,7 @@ function makeStickPlot(peaks: Peak[], mz: MzRange, iMax: number): THREE.LineSegm
   return new THREE.LineSegments(geometry, material);
 }
 
-function makeAxes(mz: MzRange, iMax: number): THREE.Group {
+function makeAxes(mz: MzRange, iMax: number, colors: SceneThemeColors): THREE.Group {
   const group = new THREE.Group();
   const Y_SIZE = 5.6;
   const x0 = -X_SIZE / 2, x1 = X_SIZE / 2;
@@ -177,11 +211,11 @@ function makeAxes(mz: MzRange, iMax: number): THREE.Group {
   gridGeo.setAttribute("position", new THREE.Float32BufferAttribute(gridV, 3));
   group.add(new THREE.LineSegments(
     gridGeo,
-    new THREE.LineBasicMaterial({ color: COLORS.grid, transparent: true, opacity: 0.4 }),
+    new THREE.LineBasicMaterial({ color: colors.grid, transparent: true, opacity: 0.55 }),
   ));
 
   // X axis (m/z) and Y axis (intensity) only
-  const axisMat = new THREE.LineBasicMaterial({ color: COLORS.axis });
+  const axisMat = new THREE.LineBasicMaterial({ color: colors.axis });
   const xAxis = new THREE.BufferGeometry();
   xAxis.setAttribute("position", new THREE.Float32BufferAttribute([x0, 0, 0, x1, 0, 0], 3));
   group.add(new THREE.Line(xAxis, axisMat));
@@ -193,23 +227,24 @@ function makeAxes(mz: MzRange, iMax: number): THREE.Group {
   const mzTicks = makeTickValues(mz.min, mz.max, 5);
   for (const t of mzTicks) {
     const x = scale(t, mz.min, mz.max, x0, x1);
-    group.add(makeTextSprite(formatTick(t), "#334155", 0.78, 0.22, new THREE.Vector3(x, -0.12, 0)));
+    group.add(makeTextSprite(formatTick(t), colors.text, colors.labelHalo, 0.78, 0.22, new THREE.Vector3(x, -0.12, 0)));
   }
   const intTicks = makeTickValues(0, iMax, 5);
   for (const t of intTicks) {
     const y = scale(t, 0, iMax, 0, Y_SIZE);
-    group.add(makeTextSprite(formatTick(t), "#334155", 0.96, 0.22, new THREE.Vector3(x0 - 0.7, y, 0)));
+    group.add(makeTextSprite(formatTick(t), colors.text, colors.labelHalo, 0.96, 0.22, new THREE.Vector3(x0 - 0.7, y, 0)));
   }
 
   // axis labels
-  group.add(makeTextSprite("m/z (Da)", "#0f172a", 1.1, 0.28, new THREE.Vector3(x1 + 0.9, -0.16, 0)));
-  group.add(makeTextSprite("Intensity", "#0f172a", 0.78, 0.28, new THREE.Vector3(x0 - 0.7, Y_SIZE + 0.4, 0)));
+  group.add(makeTextSprite("m/z (Da)", colors.label, colors.labelHalo, 1.1, 0.28, new THREE.Vector3(x1 + 0.9, -0.16, 0)));
+  group.add(makeTextSprite("Intensity", colors.label, colors.labelHalo, 0.78, 0.28, new THREE.Vector3(x0 - 0.7, Y_SIZE + 0.4, 0)));
   return group;
 }
 
 function makeTextSprite(
   text: string,
   color: string,
+  haloColor: string,
   width: number,
   height: number,
   position: THREE.Vector3,
@@ -224,7 +259,7 @@ function makeTextSprite(
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.lineWidth = 8;
-    ctx.strokeStyle = "rgba(248, 250, 252, 0.95)";
+    ctx.strokeStyle = haloColor;
     ctx.fillStyle = color;
     ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
@@ -245,14 +280,8 @@ function makeTextSprite(
 }
 
 // Viridis-approximate colormap (5-stop linear interpolation)
-function viridis(t: number): THREE.Color {
-  const stops = [
-    new THREE.Color(0x440154),
-    new THREE.Color(0x3b528b),
-    new THREE.Color(0x21908c),
-    new THREE.Color(0x5dc863),
-    new THREE.Color(0xfde725),
-  ];
+function viridis(t: number, colors: string[]): THREE.Color {
+  const stops = colors.map((color) => new THREE.Color(color));
   const clamped = Math.max(0, Math.min(1, t));
   const scaled = clamped * (stops.length - 1);
   const idx = Math.min(stops.length - 2, Math.floor(scaled));

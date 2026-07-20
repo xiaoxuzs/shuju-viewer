@@ -1,7 +1,8 @@
 import type { BuRtMzHeatmapOut } from "@/features/bu/types";
 import { formatCount } from "@/features/bu/utils";
+import { CHART_COLORS } from "@/features/theme/chartColors";
 
-const VIRIDIS = ["#440154", "#414487", "#2a788e", "#22a884", "#7ad151", "#fde725"];
+const VIRIDIS = CHART_COLORS.heat;
 
 export function RtMzMiniHeatmap({ heatmap, height = 300 }: { heatmap: BuRtMzHeatmapOut; height?: number }) {
   const binsRt = heatmap.counts.length;
@@ -65,8 +66,8 @@ export function RtMzMiniHeatmap({ heatmap, height = 300 }: { heatmap: BuRtMzHeat
             const x = left + ((tick - rtMin) / Math.max(1e-9, rtMax - rtMin)) * innerW;
             return (
               <g key={`rt-${tick}`}>
-                <line x1={x} x2={x} y1={top + innerH} y2={top + innerH + 5} stroke="hsl(var(--border))" />
-                <text x={x} y={top + innerH + 20} textAnchor="middle" fontSize={11} fill="hsl(var(--muted-foreground))">
+                <line x1={x} x2={x} y1={top + innerH} y2={top + innerH + 5} stroke={CHART_COLORS.axis} />
+                <text x={x} y={top + innerH + 20} textAnchor="middle" fontSize={11} fill={CHART_COLORS.text}>
                   {tick.toFixed(0)}
                 </text>
               </g>
@@ -76,31 +77,31 @@ export function RtMzMiniHeatmap({ heatmap, height = 300 }: { heatmap: BuRtMzHeat
             const y = top + innerH - ((tick - mzMin) / Math.max(1e-9, mzMax - mzMin)) * innerH;
             return (
               <g key={`mz-${tick}`}>
-                <line x1={left - 5} x2={left} y1={y} y2={y} stroke="hsl(var(--border))" />
-                <text x={left - 9} y={y + 4} textAnchor="end" fontSize={11} fill="hsl(var(--muted-foreground))">
+                <line x1={left - 5} x2={left} y1={y} y2={y} stroke={CHART_COLORS.axis} />
+                <text x={left - 9} y={y + 4} textAnchor="end" fontSize={11} fill={CHART_COLORS.text}>
                   {tick.toFixed(0)}
                 </text>
               </g>
             );
           })}
-          <text x={left + innerW / 2} y={height - 10} textAnchor="middle" fontSize={12} fill="hsl(var(--muted-foreground))">
+          <text x={left + innerW / 2} y={height - 10} textAnchor="middle" fontSize={12} fill={CHART_COLORS.text}>
             RT ({heatmap.unit_rt})
           </text>
           <text
             transform={`rotate(-90) translate(${-top - innerH / 2},18)`}
             textAnchor="middle"
             fontSize={12}
-            fill="hsl(var(--muted-foreground))"
+            fill={CHART_COLORS.text}
           >
             Precursor m/z ({heatmap.unit_mz})
           </text>
           {VIRIDIS.map((color, index) => (
             <rect key={color} x={left + innerW + 24} y={top + innerH - ((index + 1) * innerH) / VIRIDIS.length} width={14} height={innerH / VIRIDIS.length} fill={color} />
           ))}
-          <text x={left + innerW + 44} y={top + 4} fontSize={10} fill="hsl(var(--muted-foreground))">
+          <text x={left + innerW + 44} y={top + 4} fontSize={10} fill={CHART_COLORS.text}>
             {formatCount(heatmap.max_count)}
           </text>
-          <text x={left + innerW + 44} y={top + innerH} fontSize={10} fill="hsl(var(--muted-foreground))">
+          <text x={left + innerW + 44} y={top + innerH} fontSize={10} fill={CHART_COLORS.text}>
             1
           </text>
         </svg>

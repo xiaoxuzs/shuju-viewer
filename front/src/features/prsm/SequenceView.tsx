@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { CHART_COLORS } from "@/features/theme/chartColors";
 import type { AnnotatedProtein, Cleavage, Residue } from "./parse";
 
 interface Props {
@@ -36,11 +37,14 @@ const LETTER_SIZE = 12;
 const MIDDLE_MARGIN = 40;
 const SKIP_LINE_HEIGHT = 40;
 const MOD_ANNO_Y_SHIFTS = [-15, -30];
-const BP_STROKE = "#1e90ff";
+const BP_STROKE = CHART_COLORS.series[0];
+const TEXT_COLOR = "hsl(var(--foreground))";
+const MUTED_TEXT_COLOR = "hsl(var(--subtle-foreground))";
+const FIXED_PTM_COLOR = "hsl(var(--destructive))";
 const MASS_SHIFT_COLORS: Record<string, string> = {
-  variable: "#64E9EC",
-  protein_variable: "#64E9EC",
-  unexpected: "#ec6f64",
+  variable: "hsl(var(--info))",
+  protein_variable: "hsl(var(--info))",
+  unexpected: CHART_COLORS.series[1],
 };
 
 const SHOW_NUM = true;
@@ -137,9 +141,9 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
   }, [massShifts]);
 
   const residueColor = (res: Residue): string => {
-    if (res.position < firstResiduePosition || res.position > lastResiduePosition) return "grey";
-    if (fixedPtmPositions.has(res.position)) return "red";
-    return "black";
+    if (res.position < firstResiduePosition || res.position > lastResiduePosition) return MUTED_TEXT_COLOR;
+    if (fixedPtmPositions.has(res.position)) return FIXED_PTM_COLOR;
+    return TEXT_COLOR;
   };
 
   // SVG canvas size (mirrors `PrsmPara.getSvgSize`).
@@ -193,13 +197,13 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
         height={height}
         fontFamily="FreeMono, Consolas, 'Courier New', monospace"
         fontSize={16}
-        style={{ background: "white" }}
+        style={{ background: "hsl(var(--card))" }}
       >
         {showStartSkipped && (
           <text
             x={LEFT_MARGIN}
             y={TOP_MARGIN}
-            fill="black"
+            fill={TEXT_COLOR}
             fontSize={15}
           >
             {startSkippedInfo}
@@ -229,7 +233,7 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
                   y={y1 - FONT_HEIGHT * 0.7}
                   width={x2 - x1 + FONT_WIDTH}
                   height={FONT_HEIGHT}
-                  fill={MASS_SHIFT_COLORS[type] ?? "#64E9EC"}
+                  fill={MASS_SHIFT_COLORS[type] ?? "hsl(var(--info))"}
                   fillOpacity={0.4}
                 />,
               );
@@ -244,7 +248,7 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
             const x = getX(anno.leftPos, displayFirstPos);
             const y = getY(anno.leftPos, displayFirstPos) + MOD_ANNO_Y_SHIFTS[annoYShiftIdx[i] ?? 0] + yShift;
             return (
-              <text key={`anno-${i}`} x={x} y={y} fill="black" fontSize={15}>
+              <text key={`anno-${i}`} x={x} y={y} fill={TEXT_COLOR} fontSize={15}>
                 {anno.annoText}
               </text>
             );
@@ -263,10 +267,10 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
             const rightText = rightPos + 1;
             return (
               <g key={`num-${i}`}>
-                <text x={lx} y={ly} fill="black" textAnchor="end">
+                <text x={lx} y={ly} fill={TEXT_COLOR} textAnchor="end">
                   {leftText}
                 </text>
-                <text x={rightNumX} y={ry} fill="black" textAnchor="start">
+                <text x={rightNumX} y={ry} fill={TEXT_COLOR} textAnchor="start">
                   {rightText}
                 </text>
               </g>
@@ -357,7 +361,7 @@ export function SequenceView({ protein, className, onCleavageClick }: Props) {
           <text
             x={LEFT_MARGIN}
             y={getY(displayLastPos + 1, displayFirstPos) + yShift}
-            fill="black"
+            fill={TEXT_COLOR}
             fontSize={15}
           >
             {endSkippedInfo}
@@ -388,7 +392,7 @@ function BoundarySymbol({
       <polyline
         points={points}
         fill="none"
-        stroke="red"
+        stroke={FIXED_PTM_COLOR}
         strokeWidth={1.3}
       />
     );
@@ -400,7 +404,7 @@ function BoundarySymbol({
     <polyline
       points={points}
       fill="none"
-      stroke="red"
+      stroke={FIXED_PTM_COLOR}
       strokeWidth={1.3}
     />
   );

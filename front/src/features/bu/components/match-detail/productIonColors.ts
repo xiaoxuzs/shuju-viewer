@@ -1,12 +1,14 @@
+import { CHART_COLORS } from "@/features/theme/chartColors";
+
 export const PRODUCT_ION_COLORS = [
-  "#2563eb",
-  "#dc2626",
-  "#16a34a",
-  "#9333ea",
-  "#ea580c",
-  "#0891b2",
-  "#ca8a04",
-  "#db2777",
+  CHART_COLORS.series[0],
+  CHART_COLORS.series[1],
+  CHART_COLORS.series[2],
+  CHART_COLORS.series[9],
+  CHART_COLORS.series[3],
+  CHART_COLORS.series[7],
+  "hsl(var(--warning))",
+  CHART_COLORS.series[6],
 ] as const;
 
 export interface ProductIonColorAssignment {

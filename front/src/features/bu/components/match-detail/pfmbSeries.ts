@@ -1,14 +1,15 @@
 import type { BuPfmbMatchedIon } from "@/features/bu/types";
+import { CHART_COLORS } from "@/features/theme/chartColors";
 
 export type PfmbIonType = BuPfmbMatchedIon["ion_type"];
 
 // Fixed colors per fragment series, shared by the PFMB table, spectrum chart,
 // sequence-coverage map and heatmap so a series always reads the same.
 export const PFMB_SERIES_COLOR: Record<PfmbIonType, string> = {
-  b: "#1f77b4",
-  y: "#d62728",
-  c: "#2ca02c",
-  z_dot: "#7952b3",
+  b: CHART_COLORS.series[0],
+  y: CHART_COLORS.series[1],
+  c: CHART_COLORS.series[2],
+  z_dot: CHART_COLORS.series[4],
 };
 
 export const PROTON_MASS = 1.007276466812;

@@ -4,7 +4,9 @@
 
 @layer base {
   :root {
-    /* Light, paper-white palette. HSL triplets (no hsl() wrapper). */
+    color-scheme: light;
+
+    /* Semantic surfaces and text. HSL triplets (no hsl() wrapper). */
     --background: 210 40% 99%;
     --foreground: 222 47% 14%;
     --card: 0 0% 100%;
@@ -17,27 +19,138 @@
     --secondary-foreground: 222 47% 14%;
     --muted: 210 40% 96%;
     --muted-foreground: 215 16% 42%;
+    --subtle-foreground: 215 14% 56%;
     --accent: 210 40% 94%;
     --accent-foreground: 222 47% 14%;
+    --selected: 214 95% 93%;
+    --selected-foreground: 221 83% 38%;
+    --disabled: 214 25% 91%;
+    --disabled-foreground: 215 14% 51%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
     --success: 152 64% 38%;
+    --success-foreground: 153 73% 19%;
     --warning: 35 92% 50%;
+    --warning-foreground: 26 83% 25%;
+    --info: 199 89% 48%;
+    --info-foreground: 201 96% 20%;
     --border: 214 32% 88%;
+    --divider: 214 32% 91%;
     --input: 214 32% 88%;
     --ring: 221 83% 53%;
+    --overlay: 222 47% 8%;
     --radius: 0.5rem;
 
-    /* Fragment-ion colors used by sequence view / MS2 chart */
-    --ion-n: 221 83% 53%; /* N-term (b / c) ions – blue */
-    --ion-c: 350 82% 55%; /* C-term (y / z) ions – red */
-    --ion-shift: 35 92% 50%; /* unexpected mass shift – amber */
-    --ion-fixed: 152 64% 38%; /* fixed PTM – green */
+    /* Visualization colors: stable meanings, theme-specific contrast. */
+    --chart-grid: 214 32% 88%;
+    --chart-axis: 215 20% 65%;
+    --chart-text: 215 16% 42%;
+    --chart-unmatched: 215 16% 65%;
+    --chart-series-1: 221 83% 53%;
+    --chart-series-2: 0 72% 51%;
+    --chart-series-3: 142 71% 40%;
+    --chart-series-4: 25 95% 53%;
+    --chart-series-5: 262 83% 58%;
+    --chart-series-6: 173 80% 30%;
+    --chart-series-7: 330 81% 50%;
+    --chart-series-8: 188 86% 41%;
+    --chart-series-9: 215 25% 35%;
+    --chart-series-10: 271 81% 56%;
+    --chart-series-11: 142 64% 32%;
+    --chart-series-12: 21 90% 43%;
+    --chart-selection: 50.44 97.85% 63.53%;
+    --chart-selection-soft: 52.76 98.31% 76.86%;
+    --chart-selection-foreground: 222 47% 14%;
+    --chart-series-foreground: 0 0% 100%;
+    --chart-heat-1: 273 100% 17%;
+    --chart-heat-2: 244 34% 39%;
+    --chart-heat-3: 188 54% 36%;
+    --chart-heat-4: 160 66% 39%;
+    --chart-heat-5: 91 57% 57%;
+    --chart-heat-6: 54 96% 57%;
+    --chart-scene-background: 210 40% 98%;
+    --chart-label-halo: 210 40% 98%;
+
+    --ion-n: 221 83% 53%;
+    --ion-c: 350 82% 55%;
+    --ion-shift: 35 92% 50%;
+    --ion-fixed: 152 64% 38%;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+    --background: 222 47% 7%;
+    --foreground: 210 40% 96%;
+    --card: 222 36% 10%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 36% 11%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 217 91% 64%;
+    --primary-foreground: 222 47% 10%;
+    --secondary: 217 25% 15%;
+    --secondary-foreground: 210 40% 94%;
+    --muted: 217 25% 15%;
+    --muted-foreground: 215 20% 68%;
+    --subtle-foreground: 215 15% 52%;
+    --accent: 217 25% 17%;
+    --accent-foreground: 210 40% 96%;
+    --selected: 217 55% 20%;
+    --selected-foreground: 213 94% 78%;
+    --disabled: 217 16% 16%;
+    --disabled-foreground: 215 14% 45%;
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 60% 48%;
+    --success-foreground: 151 73% 82%;
+    --warning: 38 92% 58%;
+    --warning-foreground: 48 96% 89%;
+    --info: 199 89% 58%;
+    --info-foreground: 198 93% 86%;
+    --border: 217 24% 23%;
+    --divider: 217 19% 18%;
+    --input: 217 24% 25%;
+    --ring: 217 91% 64%;
+    --overlay: 222 47% 2%;
+
+    --chart-grid: 217 19% 22%;
+    --chart-axis: 215 18% 42%;
+    --chart-text: 215 20% 72%;
+    --chart-unmatched: 215 18% 64%;
+    --chart-series-1: 213 94% 68%;
+    --chart-series-2: 0 84% 68%;
+    --chart-series-3: 142 69% 58%;
+    --chart-series-4: 25 95% 63%;
+    --chart-series-5: 263 90% 72%;
+    --chart-series-6: 173 80% 48%;
+    --chart-series-7: 330 81% 66%;
+    --chart-series-8: 188 86% 58%;
+    --chart-series-9: 215 20% 65%;
+    --chart-series-10: 271 91% 75%;
+    --chart-series-11: 142 70% 65%;
+    --chart-series-12: 21 90% 64%;
+    --chart-selection: 44 80% 35%;
+    --chart-selection-soft: 44 55% 23%;
+    --chart-selection-foreground: 48 100% 96%;
+    --chart-series-foreground: 222 47% 10%;
+    --chart-heat-1: 273 55% 37%;
+    --chart-heat-2: 244 45% 51%;
+    --chart-heat-3: 188 57% 45%;
+    --chart-heat-4: 160 62% 47%;
+    --chart-heat-5: 91 62% 62%;
+    --chart-heat-6: 54 96% 63%;
+    --chart-scene-background: 222 42% 8%;
+    --chart-label-halo: 222 42% 8%;
+
+    --ion-n: 213 94% 68%;
+    --ion-c: 350 89% 68%;
+    --ion-shift: 38 92% 58%;
+    --ion-fixed: 152 60% 48%;
   }
 
   * {
     @apply border-border;
   }
+
   html,
   body {
     @apply bg-background text-foreground;
@@ -49,19 +162,54 @@
     text-rendering: optimizeLegibility;
   }
 
+  body {
+    min-height: 100vh;
+  }
+
+  ::selection {
+    background: hsl(var(--selected));
+    color: hsl(var(--selected-foreground));
+  }
+
+  input,
+  textarea,
+  select {
+    color: hsl(var(--foreground));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(var(--subtle-foreground));
+    opacity: 1;
+  }
+
+  input:disabled,
+  textarea:disabled,
+  select:disabled {
+    background: hsl(var(--disabled));
+    color: hsl(var(--disabled-foreground));
+  }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+
   ::-webkit-scrollbar-thumb {
     background: hsl(var(--border));
     border-radius: 10px;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.7);
+  }
+
+  * {
+    scrollbar-color: hsl(var(--border)) transparent;
   }
 }
 
@@ -72,11 +220,13 @@
       linear-gradient(90deg, hsl(var(--border) / 0.6) 1px, transparent 1px);
     background-size: 40px 40px;
   }
+
   .bg-soft-glow {
     background:
-      radial-gradient(circle at 15% 0%, hsl(221 83% 53% / 0.08), transparent 50%),
-      radial-gradient(circle at 85% 10%, hsl(260 100% 70% / 0.06), transparent 55%);
+      radial-gradient(circle at 15% 0%, hsl(var(--primary) / 0.08), transparent 50%),
+      radial-gradient(circle at 85% 10%, hsl(var(--chart-series-5) / 0.06), transparent 55%);
   }
+
   .chart-surface {
     background: hsl(var(--card));
     border: 1px solid hsl(var(--border));

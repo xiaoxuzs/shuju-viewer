@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import { cn } from "@/lib/utils";
+import { CHART_COLORS } from "@/features/theme/chartColors";
 import type { AnnotatedProtein, MsPeakRow } from "./parse";
 
 /*
@@ -117,7 +118,7 @@ function colorForSide(side: "n" | "c"): string {
 }
 
 function colorForPeak(p: DeconvPeak): string {
-  if (!p.matched || !p.ionType) return "hsl(215 16% 60%)";
+  if (!p.matched || !p.ionType) return CHART_COLORS.unmatched;
   if (N_ION_TYPES.has(p.ionType)) return "hsl(var(--ion-n))";
   if (C_ION_TYPES.has(p.ionType)) return "hsl(var(--ion-c))";
   return "hsl(var(--ion-shift))";
@@ -488,7 +489,7 @@ export function FragmentationView({ protein, peaks, className }: Props) {
                       x2={x}
                       y1={nIonRowY + 6}
                       y2={yTop - 3}
-                      stroke="hsl(215 12% 55%)"
+                      stroke={CHART_COLORS.axis}
                       strokeWidth={1}
                       strokeDasharray="4,4"
                       opacity={0.6}
@@ -510,7 +511,7 @@ export function FragmentationView({ protein, peaks, className }: Props) {
                       x2={x}
                       y1={cIonRowY + 6}
                       y2={yTop - 3}
-                      stroke="hsl(215 12% 55%)"
+                      stroke={CHART_COLORS.axis}
                       strokeWidth={1}
                       strokeDasharray="4,4"
                       opacity={0.6}
@@ -709,7 +710,7 @@ export function FragmentationView({ protein, peaks, className }: Props) {
               x2={margin.left + innerW}
               y1={errorMid}
               y2={errorMid}
-              stroke="hsl(215 12% 40%)"
+              stroke={CHART_COLORS.text}
               strokeWidth={1}
               strokeDasharray="5,4"
               opacity={0.7}
@@ -759,7 +760,7 @@ export function FragmentationView({ protein, peaks, className }: Props) {
                     cx={x}
                     cy={y}
                     r={2.5}
-                    fill="hsl(222 47% 20%)"
+                    fill="hsl(var(--foreground))"
                   >
                     <title>
                       mass {d.mass.toFixed(4)} · err {d.ppmError!.toFixed(2)} ppm
@@ -846,7 +847,7 @@ function LadderRow({
 }: LadderRowProps) {
   if (ticks.length === 0) return null;
   const matchedColor = colorForSide(side);
-  const mutedColor = "hsl(215 14% 72%)";
+  const mutedColor = CHART_COLORS.axis;
   return (
     <g className={`ladder-row ladder-${side}`}>
       {ticks.map((t) => {
@@ -886,7 +887,7 @@ function LadderRow({
             textAnchor="middle"
             fontSize={11}
             fontFamily="FreeMono, Consolas, monospace"
-            fill="hsl(222 47% 14%)"
+            fill="hsl(var(--foreground))"
           >
             {letter}
           </text>

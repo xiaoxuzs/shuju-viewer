@@ -5,6 +5,7 @@
 import { NavLink, Outlet, useParams } from "react-router-dom";
 import { Database, FlaskConical, Microscope } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/features/theme/ThemeToggle";
 
 export function AppShell() {
   const { slug } = useParams();
@@ -37,6 +38,10 @@ export function AppShell() {
             </HeaderLink>
           )}
         </nav>
+
+        <div className="ml-auto pl-4">
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="relative mx-auto max-w-[1600px] px-6 py-8">

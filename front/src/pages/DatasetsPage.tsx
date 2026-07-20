@@ -251,7 +251,7 @@ export function DatasetsPage() {
       <ImportUploadDialog open={importOpen} onOpenChange={setImportOpen} />
       {deleteTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/65 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-dialog-title"

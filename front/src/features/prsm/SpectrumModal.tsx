@@ -31,7 +31,7 @@ export function SpectrumModal({ title, subtitle, onClose, children, actions }: P
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/65 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

@@ -23,8 +23,8 @@ import {
 } from "./coverageLayout";
 
 const CHUNK = 50;
-const UNCOVERED_COLOR = "#111111";
-const SELECTED_TEXT_COLOR = "#111827";
+const UNCOVERED_COLOR = "hsl(var(--foreground))";
+const SELECTED_TEXT_COLOR = "hsl(var(--chart-selection-foreground))";
 const SIDEBAR_MIN_HEIGHT = 224;
 
 export function SequenceCoverage({ protein }: { protein: BuProteinDetailOut }) {
@@ -198,7 +198,7 @@ function SequenceRows({
                           ? SELECTED_PEPTIDE_HIGHLIGHT
                           : coverageMarkerBackground(residue.color, 0.18)
                         : undefined,
-                      boxShadow: selected ? "0 0 0 1px rgba(250, 204, 21, 0.65)" : undefined,
+                      boxShadow: selected ? "0 0 0 1px hsl(var(--chart-selection) / 0.65)" : undefined,
                       color: residue
                         ? selected
                           ? SELECTED_TEXT_COLOR
@@ -224,7 +224,7 @@ function Notice({ tone, children }: { tone: "muted" | "warning"; children: React
     <div
       className={
         tone === "warning"
-          ? "rounded-md border border-amber-300/60 bg-amber-100/70 px-3 py-2 text-sm text-amber-900"
+          ? "rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-foreground"
           : "rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
       }
     >

@@ -1,3 +1,5 @@
+import { CHART_COLORS } from "@/features/theme/chartColors";
+
 export interface Zoom {
   x: [number, number] | null;
   y: [number, number] | null;
@@ -10,18 +12,18 @@ export function isZoomed(zoom: Zoom): boolean {
 }
 
 export const BU_CHART = {
-  unmatched: "#bbbbbb",
-  b: "#1f77b4",
-  y: "#d62728",
-  tic: "#1f77b4",
-  bpc: "#d62728",
-  isotopeM1: "#c57a12",
-  isotopeM2: "#7952b3",
-  rtWindow: "#2ca02c",
-  apex: "#ff0000",
-  grid: "hsl(var(--border))",
-  text: "hsl(var(--muted-foreground))",
-  axis: "hsl(var(--border))",
+  unmatched: CHART_COLORS.unmatched,
+  b: CHART_COLORS.series[0],
+  y: CHART_COLORS.series[1],
+  tic: CHART_COLORS.series[0],
+  bpc: CHART_COLORS.series[1],
+  isotopeM1: CHART_COLORS.series[3],
+  isotopeM2: CHART_COLORS.series[4],
+  rtWindow: CHART_COLORS.series[2],
+  apex: CHART_COLORS.series[1],
+  grid: CHART_COLORS.grid,
+  text: CHART_COLORS.text,
+  axis: CHART_COLORS.axis,
   margin: { top: 22, right: 20, bottom: 48, left: 72 },
   ms2Height: 360,
   xicHeight: 280,

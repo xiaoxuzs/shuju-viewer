@@ -34,10 +34,11 @@ import {
 } from "@/features/spectra-only/utils/peakAnnotations";
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 import { formatNumber } from "@/lib/utils";
+import { CHART_COLORS } from "@/features/theme/chartColors";
 
 const DEFAULT_PRECURSOR_MATCH_TOLERANCE_DA = 0.05;
-const RAW_PEAK_LABEL_COLOR = "hsl(188 80% 36%)";
-const RAW_SELECTED_PEAK_COLOR = "hsl(32 95% 48%)";
+const RAW_PEAK_LABEL_COLOR = CHART_COLORS.series[7];
+const RAW_SELECTED_PEAK_COLOR = CHART_COLORS.series[3];
 const SPECTRA_ONLY_MS2_Y_HEADROOM_RATIO = 0.12;
 
 interface SpectrumHighlight {

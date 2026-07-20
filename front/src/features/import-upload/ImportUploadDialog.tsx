@@ -475,7 +475,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/65 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="import-upload-dialog-title"
@@ -518,7 +518,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                     importType === option.value
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border bg-background hover:bg-muted",
-                    "disabled:cursor-not-allowed disabled:opacity-50",
+                    "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
                   )}
                   onClick={() => {
                     setImportType(option.value);
@@ -572,7 +572,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                 className={cn(
                   "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
+                  "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
                 )}
               />
             </div>

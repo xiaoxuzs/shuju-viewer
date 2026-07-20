@@ -480,13 +480,13 @@ export function BuMatchDetailPage() {
                     </p>
                     {selectedMs2Rt !== null &&
                       Math.abs(ms2.data.rt_minutes - selectedMs2Rt) > RT_LINK_TOLERANCE_MIN && (
-                        <p className="mt-1 text-xs font-medium text-amber-600" data-testid="ms2-rt-out-of-tolerance">
+                        <p className="mt-1 text-xs font-medium text-warning" data-testid="ms2-rt-out-of-tolerance">
                           Nearest MS2 scan is {Math.abs(ms2.data.rt_minutes - selectedMs2Rt).toFixed(2)} min from the
                           current inspected RT.
                         </p>
                       )}
                     {pfmbOverlay && pfmbOverlay.unmappedCount > 0 && (
-                      <p className="mt-1 text-xs font-medium text-amber-600" data-testid="ms2-pfmb-unmapped">
+                      <p className="mt-1 text-xs font-medium text-warning" data-testid="ms2-pfmb-unmapped">
                         Some Fragment Match annotations could not be mapped to raw mzML peaks within the current tolerance and are not drawn.
                       </p>
                       )}

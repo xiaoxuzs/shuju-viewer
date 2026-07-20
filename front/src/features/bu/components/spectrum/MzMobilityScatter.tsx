@@ -1,5 +1,6 @@
 import type { BuMobilitySliceOut } from "@/features/bu/types";
 import { formatIntensity } from "@/features/bu/components/spectrum/chartTheme";
+import { CHART_COLORS } from "@/features/theme/chartColors";
 
 export function MzMobilityScatter({ slice, height = 320 }: { slice: BuMobilitySliceOut; height?: number }) {
   const points = slice.mz
@@ -31,7 +32,7 @@ export function MzMobilityScatter({ slice, height = 320 }: { slice: BuMobilitySl
   const y = (mobility: number) => top + innerHeight - ((mobility - minMobility) / Math.max(1e-6, maxMobility - minMobility)) * innerHeight;
   const color = (intensity: number) => {
     const t = Math.max(0, Math.min(1, Math.log10(intensity + 1) / maxLog));
-    return `hsl(${260 - t * 190}, 78%, ${62 - t * 20}%)`;
+    return CHART_COLORS.heat[Math.min(CHART_COLORS.heat.length - 1, Math.floor(t * CHART_COLORS.heat.length))];
   };
 
   return (
@@ -49,16 +50,16 @@ export function MzMobilityScatter({ slice, height = 320 }: { slice: BuMobilitySl
           <rect x={left} y={top} width={innerWidth} height={innerHeight} fill="transparent" />
           {Array.from({ length: 6 }, (_item, index) => minMz + ((maxMz - minMz) * index) / 5).map((tick) => (
             <g key={`x-${tick}`}>
-              <line x1={x(tick)} x2={x(tick)} y1={top} y2={top + innerHeight} stroke="hsl(var(--border))" strokeDasharray="2 3" />
-              <text x={x(tick)} y={top + innerHeight + 20} textAnchor="middle" fontSize={11} fill="hsl(var(--muted-foreground))">
+              <line x1={x(tick)} x2={x(tick)} y1={top} y2={top + innerHeight} stroke={CHART_COLORS.grid} strokeDasharray="2 3" />
+              <text x={x(tick)} y={top + innerHeight + 20} textAnchor="middle" fontSize={11} fill={CHART_COLORS.text}>
                 {tick.toFixed(0)}
               </text>
             </g>
           ))}
           {Array.from({ length: 5 }, (_item, index) => minMobility + ((maxMobility - minMobility) * index) / 4).map((tick) => (
             <g key={`y-${tick}`}>
-              <line x1={left} x2={left + innerWidth} y1={y(tick)} y2={y(tick)} stroke="hsl(var(--border))" strokeDasharray="2 3" />
-              <text x={left - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="hsl(var(--muted-foreground))">
+              <line x1={left} x2={left + innerWidth} y1={y(tick)} y2={y(tick)} stroke={CHART_COLORS.grid} strokeDasharray="2 3" />
+              <text x={left - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill={CHART_COLORS.text}>
                 {tick.toFixed(3)}
               </text>
             </g>
@@ -68,14 +69,14 @@ export function MzMobilityScatter({ slice, height = 320 }: { slice: BuMobilitySl
               <title>{`m/z ${point.mz.toFixed(4)} · 1/K0 ${point.mobility.toFixed(4)} · ${formatIntensity(point.intensity)}`}</title>
             </circle>
           ))}
-          <text x={left + innerWidth / 2} y={height - 8} textAnchor="middle" fontSize={12} fill="hsl(var(--muted-foreground))">
+          <text x={left + innerWidth / 2} y={height - 8} textAnchor="middle" fontSize={12} fill={CHART_COLORS.text}>
             m/z
           </text>
           <text
             transform={`rotate(-90) translate(${-top - innerHeight / 2},18)`}
             textAnchor="middle"
             fontSize={12}
-            fill="hsl(var(--muted-foreground))"
+            fill={CHART_COLORS.text}
           >
             1/K0
           </text>

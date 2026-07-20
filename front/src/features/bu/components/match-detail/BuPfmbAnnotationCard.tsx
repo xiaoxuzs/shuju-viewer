@@ -289,7 +289,7 @@ function PfmbHeader({
 
       <div className="min-h-4">
         {outOfTolerance && (
-          <p className="text-xs font-medium text-amber-600" data-testid="pfmb-rt-out-of-tolerance">
+          <p className="text-xs font-medium text-warning" data-testid="pfmb-rt-out-of-tolerance">
             Nearest Fragment Match slot is {nearestDistance!.toFixed(2)} min from the current inspected RT (over
             {" "}{RT_LINK_TOLERANCE_MIN.toFixed(1)} min); showing the Fragment Match apex slot instead.
           </p>

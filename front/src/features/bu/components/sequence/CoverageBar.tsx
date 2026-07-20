@@ -24,7 +24,7 @@ export function CoverageBar({
   return (
     <div
       aria-label="Sequence coverage bar"
-      className="relative h-4 w-full overflow-hidden rounded-sm bg-[#f3f3f3]"
+      className="relative h-4 w-full overflow-hidden rounded-sm bg-muted"
     >
       {segments.map((segment) => {
         const color = getSegmentColor(segment, colorMap);
@@ -47,7 +47,7 @@ export function CoverageBar({
       {dividers.map((position) => (
         <span
           key={position}
-          className="pointer-events-none absolute inset-y-0 border-l border-dashed border-[#cccccc]"
+          className="pointer-events-none absolute inset-y-0 border-l border-dashed border-divider"
           style={{ left: `${(position / safeLength) * 100}%` }}
         />
       ))}

@@ -1,6 +1,7 @@
 import type { BuDiaWindowsOut } from "@/features/bu/types";
+import { CHART_COLORS } from "@/features/theme/chartColors";
 
-const WINDOW_COLOR = "#9467bd";
+const WINDOW_COLOR = CHART_COLORS.series[4];
 
 export function DiaWindowMap({ diaWindows, height = 300 }: { diaWindows: BuDiaWindowsOut; height?: number }) {
   const windows = diaWindows.windows;
@@ -35,10 +36,10 @@ export function DiaWindowMap({ diaWindows, height = 300 }: { diaWindows: BuDiaWi
                 x2={scaleX(tick)}
                 y1={top}
                 y2={top + innerHeight}
-                stroke="hsl(var(--border))"
+                stroke={CHART_COLORS.grid}
                 strokeDasharray="2 3"
               />
-              <text x={scaleX(tick)} y={top + innerHeight + 22} textAnchor="middle" fontSize={11} fill="hsl(var(--muted-foreground))">
+              <text x={scaleX(tick)} y={top + innerHeight + 22} textAnchor="middle" fontSize={11} fill={CHART_COLORS.text}>
                 {tick.toFixed(0)}
               </text>
             </g>
@@ -49,19 +50,19 @@ export function DiaWindowMap({ diaWindows, height = 300 }: { diaWindows: BuDiaWi
             const y = top + index * rowHeight + 2;
             return (
               <g key={`${window.label}-${window.mz}`}>
-                <text x={left - 8} y={y + 10} textAnchor="end" fontSize={9} fill="hsl(var(--muted-foreground))">
+                <text x={left - 8} y={y + 10} textAnchor="end" fontSize={9} fill={CHART_COLORS.text}>
                   {window.label}
                 </text>
                 <rect x={x} y={y} width={width} height={12} rx={2} fill={WINDOW_COLOR} opacity={0.72} />
                 {width > 26 && (
-                  <text x={x + width / 2} y={y + 9} textAnchor="middle" fontSize={8} fill="white">
+                  <text x={x + width / 2} y={y + 9} textAnchor="middle" fontSize={8} fill="hsl(var(--chart-series-foreground))">
                     {window.mz.toFixed(0)}
                   </text>
                 )}
               </g>
             );
           })}
-          <text x={left + innerWidth / 2} y={svgHeight - 8} textAnchor="middle" fontSize={12} fill="hsl(var(--muted-foreground))">
+          <text x={left + innerWidth / 2} y={svgHeight - 8} textAnchor="middle" fontSize={12} fill={CHART_COLORS.text}>
             m/z
           </text>
         </svg>

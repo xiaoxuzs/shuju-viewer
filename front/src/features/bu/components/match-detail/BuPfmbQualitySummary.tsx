@@ -91,7 +91,7 @@ export function BuPfmbQualitySummary({
   return (
     <div className="mb-4 space-y-3" data-testid="pfmb-quality-summary">
       <div
-        className="flex items-start gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-200"
+        className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-foreground"
         data-testid="pfmb-quality-disclaimer"
       >
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />

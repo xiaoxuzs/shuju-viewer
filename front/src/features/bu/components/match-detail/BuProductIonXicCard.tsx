@@ -14,6 +14,7 @@ import {
   type ProductIonSelection,
 } from "@/features/bu/components/match-detail/productIonSelection";
 import { assignProductIonColors } from "@/features/bu/components/match-detail/productIonColors";
+import { CHART_COLORS } from "@/features/theme/chartColors";
 import {
   type ProductIonYAxisMode,
 } from "@/features/bu/components/match-detail/productIonXicViewModel";
@@ -230,7 +231,7 @@ export function BuProductIonXicCard({
       )}
 
       {warning && (
-        <p className="mt-3 text-xs font-medium text-amber-600" role="alert">
+        <p className="mt-3 text-xs font-medium text-warning" role="alert">
           {warning}
         </p>
       )}
@@ -265,13 +266,13 @@ export function BuProductIonXicCard({
               rtWindow={rtWindow}
               rtMarkers={[
                 ...(inspectedRt !== null
-                  ? [{ rt: inspectedRt, label: "Current inspected RT", color: "#7c3aed", dashed: true }]
+                  ? [{ rt: inspectedRt, label: "Current inspected RT", color: CHART_COLORS.series[4], dashed: true }]
                   : []),
                 ...(ms2ScanRt !== null
-                  ? [{ rt: ms2ScanRt, label: "MS2 scan RT", color: "#0f766e" }]
+                  ? [{ rt: ms2ScanRt, label: "MS2 scan RT", color: CHART_COLORS.series[5] }]
                   : []),
                 ...(identificationRt !== null
-                  ? [{ rt: identificationRt, label: "Identification RT apex", color: "#dc2626", dashed: true }]
+                  ? [{ rt: identificationRt, label: "Identification RT apex", color: CHART_COLORS.series[1], dashed: true }]
                   : []),
               ]}
             />

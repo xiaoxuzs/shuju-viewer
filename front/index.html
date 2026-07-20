@@ -3,7 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>proteo-viewer</title>
+    <script>
+      (() => {
+        const storageKey = "viewer.theme";
+        let stored = null;
+        try {
+          stored = localStorage.getItem(storageKey);
+        } catch {
+          stored = null;
+        }
+        const mode = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+        const resolved = mode === "system"
+          ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : mode;
+        const root = document.documentElement;
+        root.classList.toggle("dark", resolved === "dark");
+        root.dataset.theme = mode;
+        root.dataset.resolvedTheme = resolved;
+        root.style.colorScheme = resolved;
+      })();
+    </script>
     <link rel="preconnect" href="https://rsms.me/" />
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
   </head>
