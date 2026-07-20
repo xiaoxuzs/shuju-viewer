@@ -327,17 +327,17 @@ def build_prsm_js(
             ),
         })
 
-    mass_shift_obj: dict[str, Any] | None = None
-    if entry["mass_shifts"]:
-        sh = entry["mass_shifts"][0]
-        mass_shift_obj = {
-            "id": "0",
+    mass_shift_objects = [
+        {
+            "id": str(index),
             "left_position": str(sh["left"]),
             "right_position": str(sh["right"]),
             "shift": f"{sh['shift']:.10f}",
             "anno": f"{sh['shift']:+.4f}",
             "shift_type": sh.get("type", "unexpected"),
         }
+        for index, sh in enumerate(entry["mass_shifts"])
+    ]
 
     annot: dict[str, Any] = {
         "protein_length": str(n),
@@ -347,8 +347,11 @@ def build_prsm_js(
         "residue": residues_out,
         "cleavage": cleavages_out,
     }
-    if mass_shift_obj:
-        annot["mass_shift"] = mass_shift_obj
+    if len(mass_shift_objects) == 1:
+        # Preserve the existing single-modification JS contract.
+        annot["mass_shift"] = mass_shift_objects[0]
+    elif mass_shift_objects:
+        annot["mass_shift"] = mass_shift_objects
 
     return {
         "prsm": {
