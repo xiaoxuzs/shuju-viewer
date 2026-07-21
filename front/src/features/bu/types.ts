@@ -239,6 +239,13 @@ export interface BuSpectrumV1 {
   precursor: BuSpectrumPrecursor | null;
   matched_ions: BuMatchedIon[];
   markers: BuSpectrumMarker[];
+  annotation_status?:
+    | "not_requested"
+    | "modification_data_missing"
+    | "unmodified"
+    | "modified"
+    | "unsupported_modification";
+  annotation_warnings?: string[];
 }
 
 export interface BuXicTrace {

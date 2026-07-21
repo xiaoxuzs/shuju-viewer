@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.bu.services.modified_sequence import ModifiedSequenceError
 from app.bu.services.theoretical_fragments import match_by_ions
 from app.schemas import BuSpectrumMarker, BuSpectrumPrecursor, BuSpectrumV1
 from app.services import spectrum_memory_wiring
@@ -29,6 +30,15 @@ from app.services.mzml_scan_reader import (
     get_spectrum_by_scan,
 )
 from app.spectrum_memory import CapacityError, NotResidentError, get_mzml_run_spectra, release_dataset
+
+
+_SpectrumAnnotationStatus = Literal[
+    "not_requested",
+    "modification_data_missing",
+    "unmodified",
+    "modified",
+    "unsupported_modification",
+]
 
 
 def _json_object(raw: Any) -> dict[str, Any]:
@@ -188,6 +198,8 @@ def spectrum_v1(
     *,
     matched_ions: list[Any] | None = None,
     markers: list[BuSpectrumMarker] | None = None,
+    annotation_status: _SpectrumAnnotationStatus = "not_requested",
+    annotation_warnings: list[str] | None = None,
 ) -> BuSpectrumV1:
     rt_seconds = float(spec.get("rt_seconds") or 0.0)
     return BuSpectrumV1(
@@ -201,6 +213,8 @@ def spectrum_v1(
         precursor=_precursor_payload(spec.get("precursor")),
         matched_ions=matched_ions or [],
         markers=markers or [],
+        annotation_status=annotation_status,
+        annotation_warnings=annotation_warnings or [],
     )
 
 
@@ -265,13 +279,45 @@ def get_match_ms2(
         spec = _get_indexed_ms2(session, dataset_id, run_id, candidate.scan_number)
     mz = [float(v) for v in (spec.get("mz") or [])]
     intensity = [float(v) for v in (spec.get("intensity") or [])]
-    matched_ions = match_by_ions(
-        sequence=str(match.get("sequence") or ""),
-        mz=mz,
-        intensity=intensity,
-        ppm=ppm,
+    sequence = str(match.get("sequence") or "")
+    modified_sequence_value = match.get("modified_sequence")
+    modified_sequence = (
+        str(modified_sequence_value).strip()
+        if modified_sequence_value is not None
+        else None
     )
-    return spectrum_v1(spec, matched_ions=matched_ions)
+    annotation_warnings: list[str] = []
+    annotation_status: _SpectrumAnnotationStatus
+    if not modified_sequence:
+        annotation_status = "modification_data_missing"
+        annotation_warnings.append(
+            "Modified.Sequence is unavailable; live b/y masses were calculated "
+            "from Stripped.Sequence only."
+        )
+    elif "(unimod:" in modified_sequence.lower():
+        annotation_status = "modified"
+    else:
+        annotation_status = "unmodified"
+    try:
+        matched_ions = match_by_ions(
+            sequence=sequence,
+            modified_sequence=modified_sequence,
+            mz=mz,
+            intensity=intensity,
+            ppm=ppm,
+        )
+    except ModifiedSequenceError as exc:
+        matched_ions = []
+        annotation_status = "unsupported_modification"
+        annotation_warnings = [
+            f"Live b/y annotation was skipped ({exc.code}): {exc}"
+        ]
+    return spectrum_v1(
+        spec,
+        matched_ions=matched_ions,
+        annotation_status=annotation_status,
+        annotation_warnings=annotation_warnings,
+    )
 
 
 def get_match_ms1(

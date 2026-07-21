@@ -333,6 +333,14 @@ class BuSpectrumV1(BaseModel):
     precursor: BuSpectrumPrecursor | None = None
     matched_ions: list[BuMatchedIon] = Field(default_factory=list)
     markers: list[BuSpectrumMarker] = Field(default_factory=list)
+    annotation_status: Literal[
+        "not_requested",
+        "modification_data_missing",
+        "unmodified",
+        "modified",
+        "unsupported_modification",
+    ] = "not_requested"
+    annotation_warnings: list[str] = Field(default_factory=list)
 
 
 class BuXicTrace(BaseModel):

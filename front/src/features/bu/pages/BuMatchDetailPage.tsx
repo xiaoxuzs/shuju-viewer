@@ -538,6 +538,15 @@ export function BuMatchDetailPage() {
                           current inspected RT.
                         </p>
                       )}
+                    {(ms2.data.annotation_warnings ?? []).map((warning) => (
+                      <p
+                        key={warning}
+                        className="mt-1 text-xs font-medium text-warning"
+                        data-testid="ms2-annotation-warning"
+                      >
+                        {warning}
+                      </p>
+                    ))}
                     {pfmbOverlay && pfmbOverlay.unmappedCount > 0 && (
                       <p className="mt-1 text-xs font-medium text-warning" data-testid="ms2-pfmb-unmapped">
                         Some Fragment Match annotations could not be mapped to raw mzML peaks within the current tolerance and are not drawn.

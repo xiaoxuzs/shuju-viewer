@@ -37,6 +37,7 @@ def _match(*, raw_format: str = "mzml") -> dict[str, Any]:
         "match_id": 1,
         "run_id": 10,
         "sequence": "LLLPGELAK",
+        "modified_sequence": "LLLPGELAK",
         "scan_number": -1,
         "precursor_mz": 477.3051452636719,
         "precursor_charge": 2,
@@ -173,6 +174,88 @@ def test_match_ms2_explicit_rt_uses_unbounded_nearest_scan_index_query(
 
     assert max_deltas == [None]
     assert out.scan == 67726
+
+
+def test_match_ms2_passes_modified_sequence_to_fragment_matcher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: dict[str, Any] = {}
+    match = _match()
+    match["sequence"] = "ACDE"
+    match["modified_sequence"] = "AC(UniMod:4)DE"
+
+    def capture_match(**kwargs: Any):
+        received.update(kwargs)
+        return []
+
+    monkeypatch.setattr(
+        spectrum_facade,
+        "get_spectrum_by_scan",
+        lambda *_args: (_ms2_spec(67726), False),
+    )
+    monkeypatch.setattr(spectrum_facade, "match_by_ions", capture_match)
+
+    out = spectrum_facade.get_match_ms2(
+        None,  # type: ignore[arg-type]
+        {"dataset_id": 39},
+        match,
+        scan=67726,
+    )
+
+    assert received["sequence"] == "ACDE"
+    assert received["modified_sequence"] == "AC(UniMod:4)DE"
+    assert out.annotation_status == "modified"
+    assert out.annotation_warnings == []
+
+
+def test_match_ms2_keeps_raw_spectrum_but_skips_unsafe_modified_annotation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = _ms2_spec(67726)
+    match = _match()
+    match["modified_sequence"] = "LLL[UniMod:4]PGELAK"
+    monkeypatch.setattr(
+        spectrum_facade,
+        "get_spectrum_by_scan",
+        lambda *_args: (spec, False),
+    )
+
+    out = spectrum_facade.get_match_ms2(
+        None,  # type: ignore[arg-type]
+        {"dataset_id": 39},
+        match,
+        scan=67726,
+    )
+
+    assert out.mz == spec["mz"]
+    assert out.intensity == spec["intensity"]
+    assert out.matched_ions == []
+    assert out.annotation_status == "unsupported_modification"
+    assert len(out.annotation_warnings) == 1
+    assert "modified_sequence_invalid" in out.annotation_warnings[0]
+
+
+def test_match_ms2_marks_missing_modified_sequence_without_hiding_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    match = _match()
+    match.pop("modified_sequence")
+    monkeypatch.setattr(
+        spectrum_facade,
+        "get_spectrum_by_scan",
+        lambda *_args: (_ms2_spec(67726), False),
+    )
+
+    out = spectrum_facade.get_match_ms2(
+        None,  # type: ignore[arg-type]
+        {"dataset_id": 39},
+        match,
+        scan=67726,
+    )
+
+    assert len(out.matched_ions) >= 10
+    assert out.annotation_status == "modification_data_missing"
+    assert "Stripped.Sequence only" in out.annotation_warnings[0]
 
 
 def test_match_ms2_without_explicit_scan_reports_no_candidate_without_fallback(
