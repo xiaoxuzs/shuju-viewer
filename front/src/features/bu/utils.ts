@@ -8,6 +8,17 @@ export const SCAN_UNAVAILABLE_REASON = "Not available from imported match metada
 
 export type InspectedRtSource = "xic" | "pfmb";
 
+export function isDiaclipSourceSoftware(sourceSoftware: string | null | undefined): boolean {
+  return sourceSoftware === "DIA-CLIP";
+}
+
+export function getBuDatasetDisplayDescription(dataset: DatasetOut): string {
+  const isDiaclip = isDiaclipSourceSoftware(dataset.source_software);
+  const description = dataset.description
+    ?? `Bottom-Up DIA dataset imported from ${isDiaclip ? "DIA-CLIP" : "DIA-NN"} results.`;
+  return isDiaclip ? description.replace(/DIA-NN/gi, "reference") : description;
+}
+
 export function getBuDefaultQMax(dataset: DatasetOut): number | undefined {
   const value = dataset.extra_metadata?.q_value_cutoff;
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;

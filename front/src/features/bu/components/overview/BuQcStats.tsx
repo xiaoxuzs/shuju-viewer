@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BuOverviewOut } from "@/features/bu/types";
-import { formatCount, formatDecimal } from "@/features/bu/utils";
+import { formatCount, formatDecimal, isDiaclipSourceSoftware } from "@/features/bu/utils";
 
 const QC_FIELDS: { key: string; label: string; unit?: string }[] = [
   { key: "precursors_identified", label: "Precursors" },
@@ -18,15 +18,19 @@ const QC_FIELDS: { key: string; label: string; unit?: string }[] = [
 export function BuQcStats({ overview }: { overview: BuOverviewOut }) {
   const qc = overview.qc.aggregated ?? {};
   const importedMatches = overview.import_stats.imported_matches ?? overview.import_stats.matches_imported;
+  const isDiaclip = isDiaclipSourceSoftware(overview.source_software);
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">DIA-NN QC</CardTitle>
+        <CardTitle className="text-base">{isDiaclip ? "DIA-CLIP QC" : "DIA-NN QC"}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-          <Metric label="Q.Value cutoff" value={formatDecimal(overview.q_value_cutoff)} />
+          <Metric
+            label={isDiaclip ? "DIA-CLIP q-value cutoff" : "Q.Value cutoff"}
+            value={formatDecimal(overview.q_value_cutoff)}
+          />
           <Metric label="Imported matches" value={formatMetric(importedMatches)} />
           {QC_FIELDS.map((field) => (
             <Metric key={field.key} label={field.label} value={formatMetric(qc[field.key], field.unit)} />

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +40,7 @@ def ingest_universal_diaclip(
     """Import DIA-CLIP identifications using DIA-NN report and spectra context."""
     resolved = root.resolve()
     prepared = prepare_diaclip_source(resolved, q_value_cutoff=q_value_cutoff)
-    source = replace(
+    source = dataclass_replace(
         prepared.source,
         extra_metadata={
             **prepared.source.extra_metadata,

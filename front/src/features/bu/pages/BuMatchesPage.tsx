@@ -9,7 +9,7 @@ import { BuDataTable, type BuColumn } from "@/features/bu/components/BuDataTable
 import { BuListFilters } from "@/features/bu/components/BuListFilters";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import type { BuMatchListItemOut } from "@/features/bu/types";
-import { formatCount, formatDecimal } from "@/features/bu/utils";
+import { formatCount, formatDecimal, isDiaclipSourceSoftware } from "@/features/bu/utils";
 import { clearListParams, numberParam, setListParam } from "@/features/bu/utils/listParams";
 import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 import { usePageTransitionReady } from "@/features/page-transition";
@@ -49,6 +49,7 @@ export function BuMatchesPage() {
       }),
   });
   usePageTransitionReady(!isLoading);
+  const isDiaclip = isDiaclipSourceSoftware(dataset.source_software);
 
   const columns: BuColumn<BuMatchListItemOut>[] = [
     {
@@ -87,15 +88,23 @@ export function BuMatchesPage() {
       className: "text-right font-mono text-xs",
       render: (row) => formatDecimal(row.retention_time),
     },
+    ...(isDiaclip
+      ? [{
+          key: "score",
+          header: "DIA-CLIP score",
+          className: "text-right font-mono text-xs",
+          render: (row: BuMatchListItemOut) => formatDecimal(row.score),
+        }]
+      : []),
     {
       key: "q",
-      header: "Q.Value",
+      header: isDiaclip ? "DIA-CLIP q-value" : "Q.Value",
       className: "text-right font-mono text-xs",
       render: (row) => formatDecimal(row.q_value),
     },
     {
       key: "intensity",
-      header: "Intensity",
+      header: isDiaclip ? "DIA-CLIP quantity" : "Intensity",
       className: "text-right font-mono text-xs",
       render: (row) => formatCount(row.intensity),
     },

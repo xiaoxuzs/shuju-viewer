@@ -41,6 +41,8 @@ test("ordinary users see only local upload choices for all six import types", as
     await expect(dialog.locator("#import-folder")).toHaveAttribute("webkitdirectory", "");
   }
   await expect(dialog.getByText("DIA-CLIP v1 is a single-run Bottom-Up import", { exact: false })).toBeVisible();
+  await expect(dialog.getByText("required context report", { exact: false })).toBeVisible();
+  await expect(dialog.getByText("DIA-NN context", { exact: false })).toHaveCount(0);
   expect(oldPathRequests).toEqual([]);
 });
 

@@ -4,7 +4,7 @@ import type { DatasetOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/common/page-header";
 import { cn } from "@/lib/utils";
-import { getBuDefaultQMax } from "@/features/bu/utils";
+import { getBuDatasetDisplayDescription, getBuDefaultQMax } from "@/features/bu/utils";
 import { TransitionNavLink } from "@/features/page-transition";
 
 export interface BuDatasetContext {
@@ -25,7 +25,7 @@ export function BuDatasetLayout({ dataset }: { dataset: DatasetOut }) {
     <>
       <PageHeader
         title={dataset.name}
-        description={dataset.description ?? "Bottom-Up DIA dataset imported from DIA-NN results."}
+        description={getBuDatasetDisplayDescription(dataset)}
         crumbs={[{ label: "Datasets", to: "/datasets" }, { label: dataset.name }]}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">

@@ -164,8 +164,8 @@ test("DIA-CLIP metadata adds a source-specific evidence section without changing
     "Feature distance",
     "Cosine similarity",
     "DIA-CLIP quantity",
-    "DIA-NN context Q-value",
-    "DIA-NN precursor quantity",
+    "Reference q-value",
+    "Reference precursor quantity",
   ]);
   expect(diaclip?.rows.find((row) => row.label === "DIA-CLIP score")?.value).toBe("0.91");
   expect(sections).toHaveLength(6);

@@ -64,3 +64,55 @@ VIEWER_DIACLIP_EXPECTED_ACCEPTED_TARGETS
 
 不要对生产数据库直接运行破坏性测试，也不要复用生产 slug。
 
+## 前端展示验收
+
+DIA-CLIP 前端以 `source_software=DIA-CLIP` 为唯一展示分流条件。验收时检查：
+
+1. dataset badge、默认说明、QC 标题和 run 信息都显示 DIA-CLIP；已有描述中的 DIA-NN 在展示层改为 reference；
+2. match 列表显示 `DIA-CLIP score`、`DIA-CLIP q-value` 和 `DIA-CLIP quantity`；
+3. match 详情显示 `DIA-CLIP evidence`，内部上下文值显示为 `Reference`，不出现 DIA-NN 来源名称；
+4. DIA-CLIP 上传说明把 `all_report.parquet` 显示为 context report；
+5. 普通 DIA-NN dataset 仍显示 `DIA-NN QC`、`Q.Value` 和 `Intensity`，且不出现 DIA-CLIP score。
+
+定向自动化测试：
+
+```powershell
+Set-Location front
+pnpm exec playwright test tests/bu-source-presentation.spec.ts tests/bu-evidence-summary.spec.ts tests/import-upload-page.spec.ts
+```
+
+自动化测试只能验证稳定的显示契约；发布前还应使用一个真实 DIA-CLIP dataset
+人工检查 overview、matches 和任意一个 match 详情页。
+
+## 2026-07-24 本机全链路验收记录
+
+使用 `D:\dia-clip`、显式 `DIA_CLIP` 类型和已转换的 6.677 GB mzML
+执行了一次真实路径导入。验收结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| ImportJob | `success`，100% |
+| RAW 转换复用 | `skipped=1`、`converted=0`、`failed=0` |
+| dataset | `READY`，`source_software=DIA-CLIP` |
+| run | 1 个 mzML run |
+| proteins | 14983 |
+| peptides | 169818 |
+| matches | 199322 |
+| match 来源 | `search_engine=DIA-CLIP`，含 `extra_metadata.diaclip` |
+| mzML 扫描索引 | 已生成 |
+| TIC 色谱摘要 | 已生成 |
+| precursor XIC | 可读取；抽样返回 1188 点 |
+| product XIC | 可读取；抽样返回 362 点 |
+| MS1 / MS2 | 均可按抽样 match 读取 |
+
+仓库测试结果为 `439 passed, 11 skipped`；另有 37 个 DIA-CLIP、导入路由和
+RAW 转换定向测试全部通过。`cs/DIA-CLIP导入验收.py` 使用 golden 计数再次
+只读验收通过。
+
+本次样例没有 PFMB sidecar，因此 Fragment Match 按设计跳过；这不影响基础
+DIA-CLIP 导入、precursor/product XIC 和 mzML MS1/MS2。样例也没有唯一 FASTA，
+所以蛋白序列回填状态为 `skipped/no_unique_fasta`。这两项都属于可选能力，
+不能把它们的缺失误报为 DIA-CLIP 主流程失败。
+
+dataset id、run id、match id 和任务 id 都是当前数据库生成的环境值，不得写入
+业务判断或自动化测试常量。

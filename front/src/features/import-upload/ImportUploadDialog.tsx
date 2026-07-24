@@ -86,7 +86,7 @@ const IMPORT_TYPES: Array<{
   {
     value: "DIA_CLIP",
     label: "DIA-CLIP",
-    help: "DIA-CLIP v1 TSV plus DIA-NN all_report.parquet and one matching spectrum run",
+    help: "DIA-CLIP v1 TSV plus an all_report.parquet context report and one matching spectrum run",
   },
 ];
 
@@ -558,10 +558,11 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
             {importType === "DIA_CLIP" && (
               <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
                 DIA-CLIP v1 is a single-run Bottom-Up import. Select one folder containing exactly one supported
-                DIA-CLIP result TSV, exactly one DIA-NN <span className="font-mono">all_report.parquet</span>,
-                and the matching <span className="font-mono">.raw</span>, <span className="font-mono">.mzML</span>,
-                or Bruker <span className="font-mono">.d</span> spectrum source. The server validates this contract
-                again before importing.
+                DIA-CLIP result TSV, exactly one required context report named{" "}
+                <span className="font-mono">all_report.parquet</span>, and the matching{" "}
+                <span className="font-mono">.raw</span>, <span className="font-mono">.mzML</span>, or Bruker{" "}
+                <span className="font-mono">.d</span> spectrum source. The server validates this contract again
+                before importing.
               </div>
             )}
           </section>
@@ -669,7 +670,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                 <div className="font-semibold text-primary">DIA-CLIP v1 preflight passed</div>
                 <dl className="mt-2 grid gap-1 text-muted-foreground">
                   <div><dt className="inline font-medium">Result TSV: </dt><dd className="inline font-mono">{diaclipCheck.resultPath}</dd></div>
-                  <div><dt className="inline font-medium">DIA-NN context: </dt><dd className="inline font-mono">{diaclipCheck.reportPath}</dd></div>
+                  <div><dt className="inline font-medium">Context report: </dt><dd className="inline font-mono">{diaclipCheck.reportPath}</dd></div>
                   <div><dt className="inline font-medium">Spectrum sources: </dt><dd className="inline">{diaclipCheck.spectraSources.length}</dd></div>
                 </dl>
               </div>

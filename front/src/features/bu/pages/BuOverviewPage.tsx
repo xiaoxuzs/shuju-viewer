@@ -23,7 +23,7 @@ import { BuChromatogramChart } from "@/features/bu/components/spectrum/BuChromat
 import { DiaWindowMap } from "@/features/bu/components/spectrum/DiaWindowMap";
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
-import { formatCount } from "@/features/bu/utils";
+import { formatCount, isDiaclipSourceSoftware } from "@/features/bu/utils";
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 import {
   usePageTransition,
@@ -123,6 +123,7 @@ export function BuOverviewPage() {
   if (isLoading) return <PageLoading />;
   if (error && !data) return <DataLoadError />;
   if (!data) return <DataEmptyState />;
+  const isDiaclip = isDiaclipSourceSoftware(data.source_software);
 
   return (
     <div className="space-y-5">
@@ -228,7 +229,9 @@ export function BuOverviewPage() {
               <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                 <span>Format: {run.raw_format ?? "-"}</span>
                 <span>Matches: {formatCount(run.match_count)}</span>
-                <span className="col-span-2 break-all">DIA-NN: {run.diann_run_name ?? "-"}</span>
+                <span className="col-span-2 break-all">
+                  {isDiaclip ? "DIA-CLIP run" : "DIA-NN"}: {run.diann_run_name ?? "-"}
+                </span>
               </div>
             </div>
           ))}

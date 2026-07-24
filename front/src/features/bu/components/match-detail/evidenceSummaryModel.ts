@@ -79,8 +79,8 @@ function buildDiaclipEvidence(match: BuMatchDetailOut): EvidenceSection | null {
       { label: "Feature distance", value: displayMetadataDecimal(metadata.feature_distance) },
       { label: "Cosine similarity", value: displayMetadataDecimal(metadata.cos_similarity) },
       { label: "DIA-CLIP quantity", value: displayMetadataDecimal(metadata.quant_result) },
-      { label: "DIA-NN context Q-value", value: displayMetadataDecimal(metadata.diann_q_value) },
-      { label: "DIA-NN precursor quantity", value: displayMetadataDecimal(metadata.diann_precursor_quantity) },
+      { label: "Reference q-value", value: displayMetadataDecimal(metadata.diann_q_value) },
+      { label: "Reference precursor quantity", value: displayMetadataDecimal(metadata.diann_precursor_quantity) },
     ],
   };
 }

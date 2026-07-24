@@ -102,8 +102,8 @@ C(Carbamidomethyl) -> C(UniMod:4)
 | 计算所得 q-value | `identification_matches.q_value` | Viewer 的筛选 q-value |
 | `quant_result` | `identification_matches.intensity` | DIA-CLIP 定量主值 |
 | `feature_distance`、`cos_similarity` | `identification_matches.extra_metadata.diaclip` | 来源专属证据 |
-| 原始 DIA-NN Q/Global Q/quantity | `identification_matches.extra_metadata.diaclip` | 上下文与审计，不覆盖 DIA-CLIP 主值 |
-| DIA-NN Run、RT、m/z、序列、蛋白 | 现有公共字段 | 继续支撑 DIA-NN 同款可视化 |
+| 原始 DIA-NN Q/Global Q/quantity | `identification_matches.extra_metadata.diaclip` | 内部上下文与审计；前端仅以 Reference 字段展示，不覆盖 DIA-CLIP 主值 |
+| DIA-NN Run、RT、m/z、序列、蛋白 | 现有公共字段 | 内部复用公共数据；DIA-CLIP 页面不暴露 DIA-NN 来源名称 |
 | 搜索引擎/来源软件 | `DIA-CLIP` | 页面 badge 和详情可识别来源 |
 
 当前 v1 TSV 只提供 `feature_distance`、`cos_similarity` 等标量，没有导出 DIA-CLIP 模型内部使用的 XIC 向量、张量或逐点表征。因此 Viewer 当前能可靠展示的是：
@@ -148,7 +148,12 @@ Viewer 不会根据这些标量臆造模型内部 XIC 表征。若未来 DIA-CLI
 - 导入类型新增 `DIA-CLIP`。
 - 选择前提示 v1 所需文件和单运行限制。
 - 文件夹选择后检查唯一 `all_report.parquet`、谱图源和唯一匹配表头的 TSV。
-- match 详情在有 DIA-CLIP 元数据时显示 score、feature distance、cosine similarity、DIA-CLIP quantity 及 DIA-NN 上下文值。
+- DIA-CLIP 上传提示把 `all_report.parquet` 称为 context report，不向用户暴露其内部 DIA-NN 来源。
+- overview、QC、run 信息和无描述时的默认文案按 `source_software=DIA-CLIP` 显示 DIA-CLIP 品牌。
+- DIA-CLIP 的已有自定义描述若包含 `DIA-NN`，展示层改写为 `reference`；数据库原值不变。
+- DIA-CLIP match 列表显示 DIA-CLIP score、q-value 和 quantity；普通 DIA-NN 列表继续使用原有列。
+- match 详情在有 DIA-CLIP 元数据时显示 score、feature distance、cosine similarity、DIA-CLIP quantity 及 Reference 上下文值。
+- `diann_run_name`、`diann_q_value`、`diann_precursor_quantity` 等内部字段保持不变，只在展示层重新命名。
 - 普通 DIA-NN 数据不会出现 DIA-CLIP 卡片。
 
 ### 4.4 测试
@@ -163,7 +168,27 @@ Viewer 不会根据这些标量臆造模型内部 XIC 表征。若未来 DIA-CLI
 - DIA-CLIP 到 DIA-NN report 的无歧义回连；
 - 用户选择类型校验、上传任务透传和 worker 路由；
 - 公共写入契约保留 DIA-CLIP score/q/intensity/metadata；
-- 前端预检、任务恢复类型和可选证据卡。
+- 前端预检、任务恢复类型和可选证据卡；
+- DIA-CLIP 与 DIA-NN 的 overview、run、match 列和详情标签分流，防止品牌串用。
+
+### 4.5 适配器名称遮蔽回归修复（2026-07-24）
+
+`universal_diaclip_adapter.py` 的公开参数 `replace: bool` 必须继续与公共
+Bottom-Up writer 的接口保持一致，但不能与 `dataclasses.replace` 使用同一个
+本地名称。否则任何通过前置校验并进入 DIA-CLIP 适配器的导入都会把布尔值当作
+函数调用，并稳定失败为：
+
+```text
+TypeError: 'bool' object is not callable
+```
+
+当前实现将 dataclass 工具函数别名为 `dataclass_replace`，保留 `replace`
+参数不变，避免破坏调用方契约。回归测试位于
+`back/tests/test_bu_diaclip_adapter.py`，同时覆盖 `replace=True` 和
+`replace=False`、DIA-CLIP 元数据合并以及公共 writer 参数转发。
+
+维护适配器入口时，应避免让配置参数遮蔽同模块调用的函数、模块或类型；涉及公共
+writer 的参数名优先保持兼容，通过导入别名解决局部冲突，而不是同时修改所有调用方。
 
 ## 5. 重复识别为何改成复合键
 
@@ -235,6 +260,24 @@ Viewer 不会根据这些标量臆造模型内部 XIC 表征。若未来 DIA-CLI
 9. 更新本文档、schema 和 `cs/` 验收入口。
 
 只有当现有规范数据模型无法无损表达新类型时，才修改公共 writer 或数据库表；这能避免每新增一种工具就复制整个导入和可视化栈。
+
+### 6.4 前端来源展示与内部字段
+
+前端的业务来源判断只使用 API 返回的 `source_software`，当前 DIA-CLIP 的显式值为
+`DIA-CLIP`。不要根据 slug、文件名、TSV 表头或 `diann_*` 字段猜测来源，因为这些
+内容属于物理布局和内部实现，不是稳定的产品契约。
+
+DIA-CLIP 页面遵守以下规则：
+
+1. 用户可见的 QC、run、score、q-value、quantity 和默认说明使用 DIA-CLIP 名称；
+2. 来自底层上下文、但仍有审计价值的值使用 `Reference` 标签；
+3. 已存描述中的 `DIA-NN` 在展示时改写为 `reference`，存储值不修改；
+4. 数据库和 API 内部的 `diann_*` 字段可以继续保留，避免无收益的迁移和兼容破坏；
+5. 普通 DIA-NN 数据继续显示 DIA-NN，不因 DIA-CLIP 品牌处理而改变；
+6. 新增来源类型时，必须同时增加“新来源显示正确”和“既有来源没有回归”两组测试。
+
+当前实际路由使用 `front/src/features/bu/`。`front/src/features/bu-viewer/` 是未被
+`App.tsx` 引用的重复目录；除非另有清理任务，不要在两个目录同步复制改动。
 
 ## 7. 同步到服务器时的适配
 
@@ -311,6 +354,9 @@ API_CORS_ORIGINS=https://viewer.example
 7. 先用小型样例 smoke test，再导入完整数据。
 
 后端和前端不能只升级一边：旧前端不会提供 DIA-CLIP 选项，而新前端连接旧后端会被枚举校验拒绝。
+
+同步本次适配器修复后必须重启后端进程。正在运行的 Python 进程不会自动重新加载
+该模块；旧进程仍会在每次有效 DIA-CLIP 导入进入适配器时触发相同错误。
 
 ### 7.4 运行期注意
 
