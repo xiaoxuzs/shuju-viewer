@@ -38,7 +38,10 @@ def has_bu_diann_layout(path: Path) -> bool:
     """Return True if *path* looks like a DIA-NN Bottom-Up ingest root."""
     if not path.is_dir():
         return False
-    has_report = any((p.name in _BU_REPORT_NAMES and p.is_file()) for p in path.rglob("*.parquet"))
+    has_report = any(
+        p.name.casefold() in _BU_REPORT_NAMES and p.is_file()
+        for p in path.rglob("*")
+    )
     if not has_report:
         return False
     has_mzml = any(p.is_file() for p in path.rglob("*.mzML")) or any(p.is_file() for p in path.rglob("*.mzml"))

@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("ordinary users see only local upload choices for all five import types", async ({ page }) => {
+test("ordinary users see only local upload choices for all six import types", async ({ page }) => {
   const oldPathRequests: string[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -24,7 +24,7 @@ test("ordinary users see only local upload choices for all five import types", a
   await expect(dialog.getByText("source path", { exact: false })).toHaveCount(0);
   await expect(dialog.getByText("import source", { exact: false })).toHaveCount(0);
 
-  for (const label of ["RAW", "mzML", "TopPIC", "PrSM", "DIA-NN"]) {
+  for (const label of ["RAW", "mzML", "TopPIC", "PrSM", "DIA-NN", "DIA-CLIP"]) {
     await expect(dialog.getByRole("radio", { name: label, exact: true })).toBeVisible();
   }
 
@@ -35,11 +35,12 @@ test("ordinary users see only local upload choices for all five import types", a
   await dialog.getByRole("radio", { name: "mzML", exact: true }).click();
   await expect(dialog.locator("#import-files")).toHaveAttribute("accept", ".mzML,.mzml");
 
-  for (const label of ["TopPIC", "PrSM", "DIA-NN"]) {
+  for (const label of ["TopPIC", "PrSM", "DIA-NN", "DIA-CLIP"]) {
     await dialog.getByRole("radio", { name: label, exact: true }).click();
     await expect(dialog.locator("#import-files")).toHaveCount(0);
     await expect(dialog.locator("#import-folder")).toHaveAttribute("webkitdirectory", "");
   }
+  await expect(dialog.getByText("DIA-CLIP v1 is a single-run Bottom-Up import", { exact: false })).toBeVisible();
   expect(oldPathRequests).toEqual([]);
 });
 

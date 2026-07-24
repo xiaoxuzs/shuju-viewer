@@ -11,6 +11,8 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.schemas.imports import ImportEnqueueIn, ImportJobCreatedOut, ImportJobOut, ImportPickFolderOut
 from app.services import import_jobs
+from app.services.import_planner import plan_zip_ingest
+from app.services.import_selection import validate_import_selection
 from app.services.native_folder_dialog import NativeFolderDialogError, pick_folder_native
 from app.dataset_ingest_root import resolve_ingest_root
 
@@ -83,7 +85,10 @@ def enqueue_import(body: ImportEnqueueIn) -> ImportJobCreatedOut:
         resolved = str(p.resolve())
         _enqueue_slice("enqueue_path_checks_s")
         # Fail fast if the tree is unusable (nested root resolution).
-        resolve_ingest_root(p)
+        ingest_root = resolve_ingest_root(p)
+        plan = plan_zip_ingest(ingest_root)
+        if body.import_type is not None:
+            validate_import_selection(body.import_type, ingest_root, plan)
         _enqueue_slice("enqueue_resolve_ingest_root_s")
     except HTTPException:
         raise
@@ -97,6 +102,7 @@ def enqueue_import(body: ImportEnqueueIn) -> ImportJobCreatedOut:
         name=body.name.strip(),
         description=body.description.strip() if body.description else None,
         source_path=resolved,
+        import_type=body.import_type.value if body.import_type is not None else None,
     )
     _enqueue_slice("enqueue_create_job_s")
 

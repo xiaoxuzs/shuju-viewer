@@ -105,7 +105,7 @@ def _install_common_patches(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     monkeypatch.setattr(import_jobs, "_db_engine", engine)
     monkeypatch.setattr(import_jobs, "_update_job", lambda _job_id, **kwargs: updates.append(kwargs))
-    monkeypatch.setattr(import_jobs, "find_dataset_with_fingerprint", lambda _fingerprint: None)
+    monkeypatch.setattr(import_jobs, "find_dataset_with_fingerprint", lambda _fingerprint, _import_kind: None)
     monkeypatch.setattr(
         import_jobs,
         "compute_dataset_metadata_fingerprint",
@@ -172,14 +172,28 @@ def _install_common_patches(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     }
 
 
-def _run_job(root: Path) -> None:
+def _run_job(root: Path, *, import_type: str | None = None) -> None:
     import_jobs.run_path_import_job(
         job_id="job-raw",
         source_path=str(root),
         slug="raw-test",
         name="RAW Test",
         description=None,
+        import_type=import_type,
     )
+
+
+def test_duplicate_lookup_uses_fingerprint_and_import_kind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _NoopEngine()
+    monkeypatch.setattr(import_jobs, "_db_engine", engine)
+
+    assert import_jobs.find_dataset_with_fingerprint("a" * 32, "DIA_CLIP") is None
+
+    statement, params = engine.statements[-1]
+    assert "source_import_kind = :import_kind" in statement
+    assert params == {"h": "a" * 32, "import_kind": "DIA_CLIP"}
 
 
 def test_raw_import_job_converts_and_records_run_metadata(
@@ -244,6 +258,49 @@ def test_import_job_without_raw_does_not_call_converter(
     metadata = state["inserted_run_metadata"][0]
     assert metadata["raw_format"] == "mzml"
     assert "raw_conversion" not in metadata
+    assert not any(update.get("status") == "failed" for update in state["updates"])
+
+
+def test_explicit_diaclip_type_routes_the_shared_diann_layout_to_diaclip_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = _make_diann_root(tmp_path, raw=False, mzml=True)
+    state = _install_common_patches(monkeypatch)
+    selections: list[tuple[str, Path]] = []
+    clip_calls: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(
+        import_jobs,
+        "validate_import_selection",
+        lambda selected, ingest_root, _plan: selections.append((selected.value, ingest_root)),
+    )
+    monkeypatch.setattr(
+        import_jobs,
+        "ingest_universal_diann",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("DIA-NN adapter must not handle an explicit DIA_CLIP import")
+        ),
+    )
+    monkeypatch.setattr(
+        import_jobs,
+        "ingest_universal_diaclip",
+        lambda **kwargs: (
+            clip_calls.append(kwargs)
+            or SimpleNamespace(dataset_id=7, run_id=1, proteins=1, proteoforms=0, matches=1)
+        ),
+    )
+
+    _run_job(root, import_type="DIA_CLIP")
+
+    assert selections == [("DIA_CLIP", root.resolve())]
+    assert clip_calls and clip_calls[0]["root"] == root.resolve()
+    final_updates = [
+        params
+        for statement, params in state["engine"].statements
+        if "source_import_kind" in statement and params and params.get("dataset_id") == 7
+    ]
+    assert final_updates[-1]["source_import_kind"] == "DIA_CLIP"
     assert not any(update.get("status") == "failed" for update in state["updates"])
 
 

@@ -17,6 +17,7 @@ const IMPORT_TYPES = new Set<ImportUploadType>([
   "TOPPIC",
   "PRSM",
   "DIA_NN",
+  "DIA_CLIP",
 ]);
 
 export function parseActiveImportJob(value: string | null): ActiveImportJobRecord | null {

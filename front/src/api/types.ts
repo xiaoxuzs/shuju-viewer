@@ -70,12 +70,15 @@ export interface BuRunSummary {
   has_im: boolean | null;
 }
 
+export type ImportUploadType = "RAW_ONLY" | "MZML_ONLY" | "TOPPIC" | "PRSM" | "DIA_NN" | "DIA_CLIP";
+
 /** ``POST /imports`` JSON body: path-based import on the server. */
 export interface ImportEnqueueIn {
   source_path: string;
   slug: string;
   name: string;
   description?: string | null;
+  import_type?: ImportUploadType | null;
 }
 
 /** Background import job status from ``POST /imports`` / ``GET /imports/{job_id}``. */
@@ -107,8 +110,6 @@ export interface ImportPickFolderOut {
   path: string | null;
   cancelled: boolean;
 }
-
-export type ImportUploadType = "RAW_ONLY" | "MZML_ONLY" | "TOPPIC" | "PRSM" | "DIA_NN";
 
 export type ImportUploadState = "CREATED" | "UPLOADING" | "READY" | "STARTED" | "FAILED";
 

@@ -12,10 +12,21 @@ import {
   calculateWindowedSpeed,
   createProgressSnapshot,
   formatUploadSpeed,
+  preflightDiaclipSelection,
   previewImportFiles,
   selectImportFiles,
   uploadFilesThenStart,
 } from "../src/features/import-upload/importUploadFiles";
+
+const DIACLIP_HEADER = [
+  "label",
+  "score",
+  "feature_distance",
+  "cos_similarity",
+  "modified_peptide",
+  "charge",
+  "quant_result",
+].join("\t");
 
 test("single-file selection uses File.name and calculates total size", () => {
   const selected = selectImportFiles([
@@ -52,6 +63,30 @@ test("RAW and mzML file modes reject mismatched extensions", () => {
     .toThrow("Only .raw files");
   expect(() => selectImportFiles([fakeFile("wrong.raw", 1)], "files", "MZML_ONLY"))
     .toThrow("Only .mzml files");
+});
+
+test("DIA-CLIP preflight is header-based and accepts an arbitrary result filename", async () => {
+  const selected = selectImportFiles([
+    textFile("renamed-output.tsv", `${DIACLIP_HEADER}\textra\n`, "bundle/results/renamed-output.tsv"),
+    textFile("all_report.parquet", "", "bundle/all_report.parquet"),
+    textFile("sample.raw", "", "bundle/sample.raw"),
+  ], "folder", "DIA_CLIP");
+
+  await expect(preflightDiaclipSelection(selected.files)).resolves.toEqual({
+    resultPath: "bundle/results/renamed-output.tsv",
+    reportPath: "bundle/all_report.parquet",
+    spectraSources: ["bundle/sample.raw"],
+  });
+});
+
+test("DIA-CLIP preflight rejects a TSV without the supported v1 header", async () => {
+  const selected = selectImportFiles([
+    textFile("wrong.tsv", "modified_peptide\tcharge\n", "bundle/wrong.tsv"),
+    textFile("all_report.parquet", "", "bundle/all_report.parquet"),
+    textFile("sample.mzML", "", "bundle/sample.mzML"),
+  ], "folder", "DIA_CLIP");
+
+  await expect(preflightDiaclipSelection(selected.files)).rejects.toThrow("supported v1 header");
 });
 
 test("large file summaries are truncated without losing the remaining count", () => {
@@ -157,6 +192,15 @@ test("active ImportJob storage validates, persists, and clears the minimal recor
   expect(storage.getItem(ACTIVE_IMPORT_JOB_KEY)).toBeNull();
 });
 
+test("active ImportJob storage accepts DIA-CLIP as an explicit import type", () => {
+  expect(parseActiveImportJob(JSON.stringify({
+    job_id: "job-clip",
+    import_type: "DIA_CLIP",
+    upload_id: "upload-clip",
+    created_at: "2026-07-23T00:00:00.000Z",
+  }))?.import_type).toBe("DIA_CLIP");
+});
+
 test("invalid active ImportJob storage is rejected and removed", () => {
   const storage = memoryStorage();
   storage.setItem(ACTIVE_IMPORT_JOB_KEY, JSON.stringify({ job_id: 123, upload_id: "x" }));
@@ -167,6 +211,16 @@ test("invalid active ImportJob storage is rejected and removed", () => {
 
 function fakeFile(name: string, size: number, webkitRelativePath = ""): File {
   return { name, size, webkitRelativePath } as File;
+}
+
+function textFile(name: string, content: string, webkitRelativePath: string): File {
+  const blob = new Blob([content]);
+  return {
+    name,
+    size: blob.size,
+    webkitRelativePath,
+    slice: (start?: number, end?: number) => blob.slice(start, end),
+  } as File;
 }
 
 function selectedFile(name: string, size: number) {

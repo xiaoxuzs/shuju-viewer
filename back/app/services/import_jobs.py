@@ -40,7 +40,9 @@ from app.ingest.universal_toppic_adapter import (
 )
 from app.ingest.bu.diann_parquet_reader import find_diann_report, inspect_report
 from app.ingest.bu.run_discovery import discover_bu_runs, match_diann_runs_to_files
+from app.ingest.bu.universal_diaclip_adapter import ingest_universal_diaclip
 from app.ingest.bu.universal_diann_adapter import ingest_universal_diann
+from app.import_types import ImportType
 from app.ingest.mzml_only_adapter import ingest_mzml_only
 from app.ingest.universal_prsm_js_adapter import ingest_universal_prsm_js
 from app.pfmb.sidecar_prepare import prepare_bu_pfmb_sidecar
@@ -52,6 +54,7 @@ from app.raw_conversion import (
 )
 from app.services.import_planner import ImportLayoutError, plan_zip_ingest
 from app.services.import_planner.types import DatasetShape
+from app.services.import_selection import default_import_kind, validate_import_selection
 from app.services.incoming_path_relocate import relocate_incoming_root
 from app.services.mzml_mapping import (
     MzmlMappingError,
@@ -77,6 +80,7 @@ _PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
     "ingest_universal_toppic_s",
     "ingest_universal_prsm_js_s",
     "ingest_universal_diann_s",
+    "ingest_universal_diaclip_s",
     "ingest_mzml_only_s",
     "assign_toppic_runs_from_prsm_headers_s",
     "description_update_s",
@@ -128,6 +132,7 @@ _BOOTSTRAP_SQL: tuple[str, ...] = (
         dataset_name VARCHAR(255) NULL,
         description TEXT NULL,
         source_path TEXT NULL,
+        import_type VARCHAR(40) NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -141,14 +146,29 @@ _BOOTSTRAP_SQL: tuple[str, ...] = (
 
 _IMPORT_JOBS_ALTER_SQL: tuple[str, ...] = (
     "ALTER TABLE import_jobs ADD COLUMN IF NOT EXISTS source_path TEXT NULL",
+    "ALTER TABLE import_jobs ADD COLUMN IF NOT EXISTS import_type VARCHAR(40) NULL",
     "ALTER TABLE import_jobs DROP COLUMN IF EXISTS source_zip_name",
 )
 
 _DATASET_FINGERPRINT_SQL: tuple[str, ...] = (
     "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS source_dataset_fingerprint CHAR(32) NULL",
+    "ALTER TABLE datasets ADD COLUMN IF NOT EXISTS source_import_kind VARCHAR(40) NOT NULL DEFAULT 'LEGACY'",
     """
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_datasets_source_dataset_fingerprint
-    ON datasets (source_dataset_fingerprint)
+    UPDATE datasets
+    SET source_import_kind = CASE
+        WHEN source_software ILIKE 'DIA-CLIP%' THEN 'DIA_CLIP'
+        WHEN source_software ILIKE 'DIA-NN%' THEN 'DIA_NN'
+        WHEN source_software = 'TopPIC_TopFD' THEN 'TOPPIC'
+        WHEN source_software = 'TopPIC_prsm_js' THEN 'PRSM'
+        WHEN source_software = 'mzML_only' THEN 'MZML_ONLY'
+        ELSE source_import_kind
+    END
+    WHERE source_import_kind = 'LEGACY'
+    """,
+    "DROP INDEX IF EXISTS uq_datasets_source_dataset_fingerprint",
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_datasets_source_fingerprint_import_kind
+    ON datasets (source_dataset_fingerprint, source_import_kind)
     WHERE source_dataset_fingerprint IS NOT NULL
     """,
     "DROP INDEX IF EXISTS uq_datasets_source_zip_sha256",
@@ -179,14 +199,15 @@ def ensure_jobs_table() -> None:
 
 
 def ensure_dataset_fingerprint_schema() -> None:
-    """Add ``datasets.source_dataset_fingerprint`` and drop legacy ZIP digest column."""
+    """Ensure composite metadata-fingerprint/import-kind duplicate protection."""
     try:
         with _db_engine.begin() as conn:
             for stmt in _DATASET_FINGERPRINT_SQL:
                 conn.execute(text(stmt))
     except Exception:  # noqa: BLE001
         log.exception(
-            "could not bootstrap datasets.source_dataset_fingerprint; duplicate checks may fail until DB is fixed"
+            "could not bootstrap dataset fingerprint/import-kind schema; "
+            "duplicate checks may fail until DB is fixed"
         )
 
 
@@ -209,8 +230,11 @@ class ExistingDatasetFingerprintMatch:
     dataset_name: str
 
 
-def find_dataset_with_fingerprint(fingerprint_hex: str) -> ExistingDatasetFingerprintMatch | None:
-    """If a row already has this metadata fingerprint, return it; otherwise ``None``."""
+def find_dataset_with_fingerprint(
+    fingerprint_hex: str,
+    import_kind: str,
+) -> ExistingDatasetFingerprintMatch | None:
+    """Return an existing dataset with the same physical fingerprint and import interpretation."""
     row = None
     try:
         with _db_engine.begin() as conn:
@@ -220,10 +244,11 @@ def find_dataset_with_fingerprint(fingerprint_hex: str) -> ExistingDatasetFinger
                     SELECT slug, dataset_name
                     FROM datasets
                     WHERE source_dataset_fingerprint = :h
+                      AND source_import_kind = :import_kind
                     LIMIT 1
                     """
                 ),
-                {"h": fingerprint_hex.lower()},
+                {"h": fingerprint_hex.lower(), "import_kind": import_kind},
             ).mappings().one_or_none()
     except Exception:  # noqa: BLE001
         log.exception("find_dataset_with_fingerprint failed")
@@ -358,6 +383,7 @@ def create_job(
     name: str | None = None,
     description: str | None = None,
     source_path: str | None = None,
+    import_type: str | None = None,
 ) -> ImportJob:
     """Insert a new job row in status ``queued`` and return its snapshot."""
     job_id = str(uuid.uuid4())
@@ -367,11 +393,11 @@ def create_job(
                 """
                 INSERT INTO import_jobs (
                     job_id, status, stage, stage_label, message, progress,
-                    dataset_slug, dataset_name, description, source_path
+                    dataset_slug, dataset_name, description, source_path, import_type
                 )
                 VALUES (
                     CAST(:job_id AS uuid), 'queued', 'queued', :stage_label,
-                    'Queued', 0, :slug, :name, :description, :source_path
+                    'Queued', 0, :slug, :name, :description, :source_path, :import_type
                 )
                 RETURNING
                     job_id, status, stage, stage_label, stage_detail, message,
@@ -385,6 +411,7 @@ def create_job(
                 "name": name,
                 "description": description,
                 "source_path": source_path,
+                "import_type": import_type,
             },
         ).mappings().one()
     return _row_to_job(dict(row))
@@ -725,6 +752,7 @@ def run_path_import_job(
     slug: str,
     name: str,
     description: str | None,
+    import_type: str | None = None,
 ) -> None:
     """Import from an on-disk folder: resolve ingest root, fingerprint, ingest, finalize."""
     _t0 = time.perf_counter()
@@ -775,20 +803,28 @@ def run_path_import_job(
         )
         _slice("fingerprint_job_updates_s")
 
-        dup = find_dataset_with_fingerprint(fp.fingerprint)
-        if dup is not None:
-            raise RuntimeError(
-                f"This dataset's metadata fingerprint matches an existing dataset "
-                f"(slug={dup.slug}, name={dup.dataset_name}). "
-                "Delete the existing dataset or choose a different data directory."
-            )
-        _slice("duplicate_check_by_fingerprint_s")
-
         try:
             plan = plan_zip_ingest(ingest_root)
         except ImportLayoutError as exc:
             raise RuntimeError(str(exc)) from exc
         _slice("plan_zip_ingest_s")
+
+        selected_import_type = ImportType(import_type) if import_type is not None else None
+        if selected_import_type is not None:
+            validate_import_selection(selected_import_type, ingest_root, plan)
+        source_import_kind = (
+            selected_import_type.value
+            if selected_import_type is not None
+            else default_import_kind(plan)
+        )
+        dup = find_dataset_with_fingerprint(fp.fingerprint, source_import_kind)
+        if dup is not None:
+            raise RuntimeError(
+                f"This dataset's metadata fingerprint and import type {source_import_kind} "
+                f"match an existing dataset (slug={dup.slug}, name={dup.dataset_name}). "
+                "Delete the existing dataset or choose a different import type or data directory."
+            )
+        _slice("duplicate_check_by_fingerprint_s")
 
         raw_conversion_batch: RawConversionBatch | None = None
         raw_conversion_output_dir: Path | None = None
@@ -950,7 +986,12 @@ def run_path_import_job(
                     pfmb_prepare.sidecar_dir,
                 )
             _slice("bu_pfmb_prepare_s")
-            stats = ingest_universal_diann(
+            bu_ingest = (
+                ingest_universal_diaclip
+                if selected_import_type == ImportType.DIA_CLIP
+                else ingest_universal_diann
+            )
+            stats = bu_ingest(
                 root=ingest_root,
                 database_url=settings.database_url,
                 slug=slug,
@@ -962,7 +1003,11 @@ def run_path_import_job(
                 pfmb_sidecar_dir=pfmb_sidecar_dir,
                 progress_callback=_make_bu_adapter_progress_handler(job_id),
             )
-            _slice("ingest_universal_diann_s")
+            _slice(
+                "ingest_universal_diaclip_s"
+                if selected_import_type == ImportType.DIA_CLIP
+                else "ingest_universal_diann_s"
+            )
         elif plan.shape == DatasetShape.MZML_ONLY:
             timing["ingest_universal_toppic_s"] = 0.0
             timing["ingest_universal_prsm_js_s"] = 0.0
@@ -1000,12 +1045,14 @@ def run_path_import_job(
                 conn.execute(
                     text(
                         "UPDATE datasets SET source_root = :source_root, "
-                        "source_dataset_fingerprint = :fp "
+                        "source_dataset_fingerprint = :fp, "
+                        "source_import_kind = :source_import_kind "
                         "WHERE dataset_id = :dataset_id"
                     ),
                     {
                         "source_root": str(new_source_root),
                         "fp": fp_hash,
+                        "source_import_kind": source_import_kind,
                         "dataset_id": stats.dataset_id,
                     },
                 )
@@ -1133,7 +1180,7 @@ def run_path_import_job(
                         )
         except IntegrityError as exc:
             log.warning(
-                "duplicate source_dataset_fingerprint after ingest slug=%s dataset_id=%s: %s",
+                "duplicate source fingerprint/import kind after ingest slug=%s dataset_id=%s: %s",
                 slug,
                 stats.dataset_id,
                 exc,
@@ -1143,12 +1190,13 @@ def run_path_import_job(
             except Exception:  # noqa: BLE001
                 log.exception("rollback after duplicate fingerprint failed for slug=%s", slug)
             raise RuntimeError(
-                "This dataset's fingerprint conflicts with an existing record "
+                "This dataset's fingerprint and import type conflict with an existing record "
                 "(concurrent import was rolled back). Please retry later or delete the conflicting dataset."
             ) from exc
         except Exception as exc:  # noqa: BLE001
             log.exception(
-                "could not finalize datasets row (source_root / source_dataset_fingerprint) for %s",
+                "could not finalize datasets row "
+                "(source_root / source_dataset_fingerprint / source_import_kind) for %s",
                 slug,
             )
             raise RuntimeError(
@@ -1226,6 +1274,7 @@ def start_path_import_background(
     slug: str,
     name: str,
     description: str | None,
+    import_type: str | None = None,
 ) -> None:
     thread = threading.Thread(
         target=run_path_import_job,
@@ -1235,6 +1284,7 @@ def start_path_import_background(
             "slug": slug,
             "name": name,
             "description": description,
+            "import_type": import_type,
         },
         name=f"import-{job_id}",
         daemon=True,
@@ -1248,6 +1298,7 @@ def enqueue_path_import(
     slug: str,
     name: str,
     description: str | None,
+    import_type: str | None = None,
 ) -> ImportJob:
     """Create the existing ImportJob and start its existing in-process worker."""
     job = create_job(
@@ -1255,6 +1306,7 @@ def enqueue_path_import(
         name=name,
         description=description,
         source_path=source_path,
+        import_type=import_type,
     )
     start_path_import_background(
         job_id=job.job_id,
@@ -1262,6 +1314,7 @@ def enqueue_path_import(
         slug=slug,
         name=name,
         description=description,
+        import_type=import_type,
     )
     return job
 

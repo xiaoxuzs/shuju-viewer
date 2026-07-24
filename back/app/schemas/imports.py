@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.import_types import ImportType
+
 
 class ImportEnqueueIn(BaseModel):
     """Request body for path-based dataset import."""
@@ -14,6 +16,10 @@ class ImportEnqueueIn(BaseModel):
     slug: str = Field(..., min_length=1, description="Unique slug for URLs.")
     name: str = Field(..., min_length=1, description="Human-readable dataset name.")
     description: str | None = Field(None, description="Optional description.")
+    import_type: ImportType | None = Field(
+        None,
+        description="Explicit import type. Omit only for backward-compatible automatic path import.",
+    )
 
 
 class ImportJobOut(BaseModel):

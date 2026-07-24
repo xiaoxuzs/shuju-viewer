@@ -110,7 +110,7 @@ export function BuEvidenceSummaryView({ sections }: { sections: EvidenceSection[
           Source-specific evidence summary; these metrics are not a combined identification score.
         </p>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {sections.map((section) => (
           <section
             key={section.key}

@@ -14,7 +14,14 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
 
 from app.bu.services.protein_sequence_backfill import backfill_protein_sequences_from_fasta
-from app.ingest.bu.diann_parquet_reader import find_diann_report, inspect_report, iter_filtered_rows, sibling_file
+from app.ingest.bu.bottom_up_identification import BottomUpIdentification, BottomUpSource
+from app.ingest.bu.diann_parquet_reader import (
+    DiannReportInfo,
+    find_diann_report,
+    inspect_report,
+    iter_filtered_rows,
+    sibling_file,
+)
 from app.ingest.bu.field_mapping import (
     Q_VALUE_CUTOFF,
     as_float,
@@ -130,6 +137,63 @@ def ingest_universal_diann(
     root = root.resolve()
     report_path = find_diann_report(root)
     report_info = inspect_report(report_path)
+    rows = list(iter_filtered_rows(report_path, q_value_cutoff=q_value_cutoff))
+    identifications = [
+        BottomUpIdentification(
+            report_row=row,
+            score=as_float(row.get("Global.Q.Value")) or as_float(row.get("Q.Value")),
+            q_value=as_float(row.get("Q.Value")),
+            intensity=as_float(row.get("Precursor.Quantity")) or as_float(row.get("Ms2.Area")),
+            pep=as_float(row.get("PEP")),
+            search_engine="DIA-NN",
+        )
+        for row in rows
+    ]
+    source = BottomUpSource(
+        software=SOFTWARE,
+        import_mode="diann_parquet",
+        dataset_description="DIA-NN 2.0 Bottom-Up DIA dataset imported by universal adapter",
+        identifications=identifications,
+        source_total_rows=report_info.total_rows,
+        skipped_matches=max(report_info.total_rows - len(identifications), 0),
+    )
+    return ingest_universal_bottom_up(
+        root=root,
+        database_url=database_url,
+        slug=slug,
+        name=name,
+        report_path=report_path,
+        report_info=report_info,
+        source=source,
+        replace=replace,
+        q_value_cutoff=q_value_cutoff,
+        spectra_source=spectra_source,
+        extra_mzml_roots=extra_mzml_roots,
+        raw_conversion_by_mzml_key=raw_conversion_by_mzml_key,
+        pfmb_sidecar_dir=pfmb_sidecar_dir,
+        progress_callback=progress_callback,
+    )
+
+
+def ingest_universal_bottom_up(
+    *,
+    root: Path,
+    database_url: str,
+    slug: str,
+    name: str,
+    report_path: Path,
+    report_info: DiannReportInfo,
+    source: BottomUpSource,
+    replace: bool = False,
+    q_value_cutoff: float = Q_VALUE_CUTOFF,
+    spectra_source: str | None = None,
+    extra_mzml_roots: Sequence[Path] | None = None,
+    raw_conversion_by_mzml_key: dict[str, dict[str, Any]] | None = None,
+    pfmb_sidecar_dir: Path | None = None,
+    progress_callback: ProgressCallback | None = None,
+) -> UniversalDiannImportStats:
+    """Write prepared DIA-NN-context Bottom-Up identifications into the shared schema."""
+    root = root.resolve()
     stats_path = sibling_file(report_path, ".stats.tsv")
     descriptions_path = sibling_file(report_path, ".protein_description.tsv")
     refined_report_path = report_path.with_name("target_report.parquet")
@@ -168,11 +232,17 @@ def ingest_universal_diann(
             spectra_source=spectra_source,
             stats_rows=read_stats_tsv(stats_path),
             parquet_total_rows=report_info.total_rows,
+            source=source,
             pfmb_sidecar=pfmb_sidecar,
         )
         _emit(progress_callback, ProgressEvent("init", None, 1, 1, "Dataset record created"))
 
-        run_id_by_path = _insert_runs(conn, dataset_id=dataset_id, run_files=run_files)
+        run_id_by_path = _insert_runs(
+            conn,
+            dataset_id=dataset_id,
+            run_files=run_files,
+            software=source.software,
+        )
         run_id_by_diann = {
             run_name: run_id_by_path[str(run_file.file_path.resolve())]
             for run_name, run_file in run_file_by_diann.items()
@@ -181,11 +251,10 @@ def ingest_universal_diann(
         _emit(progress_callback, ProgressEvent("runs", None, len(run_files), len(run_files), "Spectrum files registered"))
 
         description_by_accession = read_protein_descriptions(descriptions_path)
-        rows = list(iter_filtered_rows(report_path, q_value_cutoff=q_value_cutoff))
-        imported_total = len(rows)
+        imported_total = len(source.identifications)
 
         proteins, peptides, relations, match_rows = _collect_entities_and_matches(
-            rows,
+            source.identifications,
             dataset_id=dataset_id,
             run_id_by_diann=run_id_by_diann,
             description_by_accession=description_by_accession,
@@ -240,6 +309,7 @@ def ingest_universal_diann(
                     {
                         "import_stats": {
                             "parquet_total_rows": report_info.total_rows,
+                            "source_total_rows": source.source_total_rows,
                             "imported_matches": imported_total,
                             "unique_peptides": len(peptides),
                             "unique_proteins": len(proteins),
@@ -261,7 +331,7 @@ def ingest_universal_diann(
             proteoforms=0,
             protein_relations=relation_count,
             matches=imported_total,
-            skipped_matches=max(report_info.total_rows - imported_total, 0),
+            skipped_matches=source.skipped_matches,
         )
 
 
@@ -286,6 +356,7 @@ def _create_dataset(
     spectra_source: str,
     stats_rows: list[dict[str, Any]],
     parquet_total_rows: int,
+    source: BottomUpSource,
     pfmb_sidecar: dict[str, str] | None = None,
 ) -> int:
     caps = {
@@ -296,7 +367,7 @@ def _create_dataset(
         "has_im": spectra_source in {"mixed", "tdf_memory"},
         "has_dia_windows": True,
         "analysis_shape": "bottom_up_dia",
-        "import_mode": "diann_parquet",
+        "import_mode": source.import_mode,
         "entity_types": ["PEPTIDE"],
         "list_routes": ["proteins", "peptides", "matches"],
     }
@@ -306,6 +377,7 @@ def _create_dataset(
         "refined_report_path": _relative_or_abs(refined_report_path, root) if refined_report_path else None,
         "stats": stats_rows,
         "import_stats": {"parquet_total_rows": parquet_total_rows},
+        **source.extra_metadata,
     }
     if pfmb_sidecar is not None:
         extra["ms2_annotation"] = pfmb_sidecar
@@ -319,7 +391,7 @@ def _create_dataset(
             VALUES (
                 :name, :slug, 'BOTTOM_UP', :software,
                 :source_root, 'IMPORTED',
-                'DIA-NN 2.0 Bottom-Up DIA dataset imported by universal adapter',
+                :description,
                 CAST(:capabilities AS jsonb), CAST(:extra_metadata AS jsonb)
             )
             RETURNING dataset_id
@@ -328,8 +400,9 @@ def _create_dataset(
         {
             "name": name,
             "slug": slug,
-            "software": SOFTWARE,
+            "software": source.software,
             "source_root": str(root),
+            "description": source.dataset_description,
             "capabilities": _json(caps),
             "extra_metadata": _json(extra),
         },
@@ -337,7 +410,13 @@ def _create_dataset(
     return int(row.dataset_id)
 
 
-def _insert_runs(conn: Connection, *, dataset_id: int, run_files: list[BuRunFile]) -> dict[str, int]:
+def _insert_runs(
+    conn: Connection,
+    *,
+    dataset_id: int,
+    run_files: list[BuRunFile],
+    software: str = SOFTWARE,
+) -> dict[str, int]:
     out: dict[str, int] = {}
     for run_file in run_files:
         metadata = {
@@ -370,7 +449,7 @@ def _insert_runs(conn: Connection, *, dataset_id: int, run_files: list[BuRunFile
                 "dataset_id": dataset_id,
                 "file_path": str(run_file.file_path),
                 "file_name": run_file.file_name,
-                "software": SOFTWARE,
+                "software": software,
                 "run_metadata": _json(metadata),
             },
         ).one()
@@ -379,7 +458,7 @@ def _insert_runs(conn: Connection, *, dataset_id: int, run_files: list[BuRunFile
 
 
 def _collect_entities_and_matches(
-    rows: list[dict[str, Any]],
+    identifications: list[BottomUpIdentification],
     *,
     dataset_id: int,
     run_id_by_diann: dict[str, int],
@@ -391,7 +470,8 @@ def _collect_entities_and_matches(
     relations: set[tuple[str, str]] = set()
     matches: list[dict[str, Any]] = []
 
-    for row in rows:
+    for identification in identifications:
+        row = identification.report_row
         sequence = str(row.get("Stripped.Sequence") or "").strip()
         if not sequence:
             continue
@@ -428,6 +508,7 @@ def _collect_entities_and_matches(
         retention_time = as_float(row.get("RT"))
         precursor_charge = as_int(row.get("Precursor.Charge"))
         extra = match_extra_metadata(row)
+        extra.update(identification.extra_metadata)
         pfmb_block = _pfmb_match_block(index_reader, sequence, precursor_charge, retention_time)
         if pfmb_block is not None:
             extra["pfmb"] = pfmb_block
@@ -442,10 +523,11 @@ def _collect_entities_and_matches(
                 "experimental_mass": theoretical_mass_from_precursor(row.get("Precursor.Mz"), row.get("Precursor.Charge")),
                 "precursor_mz": as_float(row.get("Precursor.Mz")),
                 "precursor_charge": precursor_charge,
-                "intensity": as_float(row.get("Precursor.Quantity")) or as_float(row.get("Ms2.Area")),
-                "score": as_float(row.get("Global.Q.Value")) or as_float(row.get("Q.Value")),
-                "q_value": as_float(row.get("Q.Value")),
-                "pep": as_float(row.get("PEP")),
+                "intensity": identification.intensity,
+                "score": identification.score,
+                "q_value": identification.q_value,
+                "pep": identification.pep,
+                "search_engine": identification.search_engine,
                 "extra_metadata": extra,
             }
         )
@@ -563,7 +645,7 @@ _MATCH_INSERT_SQL = text(
         :retention_time, 2, 'PEPTIDE', :entity_id,
         :modified_sequence, :experimental_mass, :precursor_mz, :precursor_charge,
         :intensity, :score, NULL, :q_value, :pep,
-        FALSE, 'DIA-NN',
+        FALSE, :search_engine,
         NULL, NULL, CAST(:extra_metadata AS jsonb)
     )
     """
@@ -600,6 +682,7 @@ def _insert_matches(
                 "score": row["score"],
                 "q_value": row["q_value"],
                 "pep": row["pep"],
+                "search_engine": row["search_engine"],
                 "extra_metadata": _json(row["extra_metadata"]),
             }
         )

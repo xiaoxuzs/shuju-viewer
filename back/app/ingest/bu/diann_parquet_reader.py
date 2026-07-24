@@ -52,7 +52,14 @@ def find_diann_report(root: Path) -> Path:
     """Prefer ``all_report.parquet`` and fall back to ``target_report.parquet``."""
     base = root.resolve()
     for name in ("all_report.parquet", "target_report.parquet"):
-        matches = sorted((p for p in base.rglob(name) if p.is_file()), key=lambda p: str(p))
+        matches = sorted(
+            (
+                p
+                for p in base.rglob("*")
+                if p.name.casefold() == name and p.is_file()
+            ),
+            key=lambda p: str(p).casefold(),
+        )
         if matches:
             return matches[0].resolve()
     raise FileNotFoundError(f"no DIA-NN all_report.parquet or target_report.parquet under {base}")

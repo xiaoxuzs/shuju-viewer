@@ -22,7 +22,7 @@ export interface EvidenceRow {
 }
 
 export interface EvidenceSection {
-  key: "identification" | "chromatographic" | "live-ms2" | "pfmb" | "mass-accuracy";
+  key: "identification" | "diaclip" | "chromatographic" | "live-ms2" | "pfmb" | "mass-accuracy";
   title: string;
   rows: EvidenceRow[];
   empty?: string;
@@ -59,11 +59,30 @@ export function buildBuEvidenceSummary(input: BuildBuEvidenceSummaryInput): Evid
     ],
   };
 
+  const diaclip = buildDiaclipEvidence(input.match);
   const chromatographic = buildChromatographicEvidence(input);
   const liveMs2 = buildLiveMs2Evidence(input.ms2, input.match.sequence);
   const pfmb = buildPfmbEvidence(input);
   const massAccuracy = buildMassAccuracy(input.ms2, input.pfmbAnnotation);
-  return [identification, chromatographic, liveMs2, pfmb, massAccuracy];
+  return [identification, ...(diaclip ? [diaclip] : []), chromatographic, liveMs2, pfmb, massAccuracy];
+}
+
+function buildDiaclipEvidence(match: BuMatchDetailOut): EvidenceSection | null {
+  const raw = match.extra_metadata?.diaclip;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const metadata = raw as Record<string, unknown>;
+  return {
+    key: "diaclip",
+    title: "DIA-CLIP evidence",
+    rows: [
+      { label: "DIA-CLIP score", value: displayDecimal(match.score) },
+      { label: "Feature distance", value: displayMetadataDecimal(metadata.feature_distance) },
+      { label: "Cosine similarity", value: displayMetadataDecimal(metadata.cos_similarity) },
+      { label: "DIA-CLIP quantity", value: displayMetadataDecimal(metadata.quant_result) },
+      { label: "DIA-NN context Q-value", value: displayMetadataDecimal(metadata.diann_q_value) },
+      { label: "DIA-NN precursor quantity", value: displayMetadataDecimal(metadata.diann_precursor_quantity) },
+    ],
+  };
 }
 
 function buildChromatographicEvidence(input: BuildBuEvidenceSummaryInput): EvidenceSection {
@@ -230,6 +249,10 @@ function ppmText(summary: NonNullable<ReturnType<typeof summarizePpm>>): string 
 
 function displayDecimal(value: number | null | undefined): string {
   return Number.isFinite(value) ? formatDecimal(value) : "N/A";
+}
+
+function displayMetadataDecimal(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value) ? formatDecimal(value) : "N/A";
 }
 
 function displayRt(value: number | null | undefined): string {

@@ -27,9 +27,11 @@ import {
   calculateWindowedSpeed,
   formatBytes,
   formatUploadSpeed,
+  preflightDiaclipSelection,
   previewImportFiles,
   selectImportFiles,
   uploadFilesThenStart,
+  type DiaclipSelectionCheck,
   type SelectedUploadSummary,
   type SpeedSample,
   type UploadProgressSnapshot,
@@ -81,6 +83,11 @@ const IMPORT_TYPES: Array<{
   { value: "TOPPIC", label: "TopPIC", help: "A complete TopPIC result folder" },
   { value: "PRSM", label: "PrSM", help: "A PrSM result bundle folder" },
   { value: "DIA_NN", label: "DIA-NN", help: "A DIA-NN result folder" },
+  {
+    value: "DIA_CLIP",
+    label: "DIA-CLIP",
+    help: "DIA-CLIP v1 TSV plus DIA-NN all_report.parquet and one matching spectrum run",
+  },
 ];
 
 const BLOCKING_LEAVE_STATES = new Set<UploadUiState>([
@@ -118,6 +125,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
   const [datasetName, setDatasetName] = useState("");
   const [description, setDescription] = useState("");
   const [selection, setSelection] = useState<SelectedUploadSummary | null>(null);
+  const [diaclipCheck, setDiaclipCheck] = useState<DiaclipSelectionCheck | null>(null);
   const [inputKey, setInputKey] = useState(0);
   const [uiState, setUiState] = useState<UploadUiState>("idle");
   const [uploadId, setUploadId] = useState<string | null>(null);
@@ -133,10 +141,12 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
   const abortUploadRef = useRef<(() => void) | null>(null);
   const cancelRequestedRef = useRef(false);
   const pollTokenRef = useRef(0);
+  const selectionTokenRef = useRef(0);
   const speedSamplesRef = useRef<SpeedSample[]>([]);
 
   const resetForNewUpload = useCallback(() => {
     pollTokenRef.current += 1;
+    selectionTokenRef.current += 1;
     clearActiveImportJob(window.localStorage);
     window.sessionStorage.removeItem(INTERRUPTED_UPLOAD_KEY);
     uploadIdRef.current = null;
@@ -147,6 +157,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     setDatasetName("");
     setDescription("");
     setSelection(null);
+    setDiaclipCheck(null);
     setInputKey((value) => value + 1);
     setUiState("idle");
     setUploadId(null);
@@ -268,14 +279,22 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     || (uploadId !== null && uiState === "failed")
   );
 
-  const selectFiles = useCallback((event: ChangeEvent<HTMLInputElement>, mode: UploadSelectionMode) => {
+  const selectFiles = useCallback(async (event: ChangeEvent<HTMLInputElement>, mode: UploadSelectionMode) => {
+    const token = ++selectionTokenRef.current;
     try {
       const next = selectImportFiles(event.target.files ?? [], mode, importType);
+      const nextDiaclipCheck = importType === "DIA_CLIP"
+        ? await preflightDiaclipSelection(next.files)
+        : null;
+      if (token !== selectionTokenRef.current) return;
       setSelection(next);
+      setDiaclipCheck(nextDiaclipCheck);
       setUiError(null);
       setUiState("idle");
     } catch (error) {
+      if (token !== selectionTokenRef.current) return;
       setSelection(null);
+      setDiaclipCheck(null);
       setUiError({
         title: "Local file selection failed",
         message: error instanceof ImportFileSelectionError ? error.message : "Could not read the selected files.",
@@ -504,7 +523,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
         <CardContent className="space-y-5">
           <section className="space-y-2" aria-labelledby="import-type-title">
             <h3 id="import-type-title" className="text-sm font-semibold">1. Import type</h3>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" role="radiogroup" aria-label="Import type">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" role="radiogroup" aria-label="Import type">
               {IMPORT_TYPES.map((option) => (
                 <button
                   key={option.value}
@@ -521,8 +540,10 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                     "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
                   )}
                   onClick={() => {
+                    selectionTokenRef.current += 1;
                     setImportType(option.value);
                     setSelection(null);
+                    setDiaclipCheck(null);
                     setInputKey((value) => value + 1);
                     setUiError(null);
                   }}
@@ -534,6 +555,15 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
             <p className="text-xs text-muted-foreground">
               {IMPORT_TYPES.find((option) => option.value === importType)?.help}
             </p>
+            {importType === "DIA_CLIP" && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
+                DIA-CLIP v1 is a single-run Bottom-Up import. Select one folder containing exactly one supported
+                DIA-CLIP result TSV, exactly one DIA-NN <span className="font-mono">all_report.parquet</span>,
+                and the matching <span className="font-mono">.raw</span>, <span className="font-mono">.mzML</span>,
+                or Bruker <span className="font-mono">.d</span> spectrum source. The server validates this contract
+                again before importing.
+              </div>
+            )}
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2" aria-labelledby="dataset-info-title">
@@ -593,7 +623,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                     accept={importType === "RAW_ONLY" ? ".raw" : ".mzML,.mzml"}
                     disabled={controlsDisabled}
                     className="sr-only"
-                    onChange={(event) => selectFiles(event, "files")}
+                    onChange={(event) => void selectFiles(event, "files")}
                   />
                 </label>
               )}
@@ -608,7 +638,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                   multiple
                   disabled={controlsDisabled}
                   className="sr-only"
-                  onChange={(event) => selectFiles(event, "folder")}
+                  onChange={(event) => void selectFiles(event, "folder")}
                 />
               </label>
             </div>
@@ -632,6 +662,16 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                 {filePreview.remaining > 0 && (
                   <p className="text-xs text-muted-foreground">+ {filePreview.remaining.toLocaleString()} more files</p>
                 )}
+              </div>
+            )}
+            {diaclipCheck && (
+              <div className="rounded-md border border-primary/40 bg-primary/5 p-3 text-xs">
+                <div className="font-semibold text-primary">DIA-CLIP v1 preflight passed</div>
+                <dl className="mt-2 grid gap-1 text-muted-foreground">
+                  <div><dt className="inline font-medium">Result TSV: </dt><dd className="inline font-mono">{diaclipCheck.resultPath}</dd></div>
+                  <div><dt className="inline font-medium">DIA-NN context: </dt><dd className="inline font-mono">{diaclipCheck.reportPath}</dd></div>
+                  <div><dt className="inline font-medium">Spectrum sources: </dt><dd className="inline">{diaclipCheck.spectraSources.length}</dd></div>
+                </dl>
               </div>
             )}
           </section>

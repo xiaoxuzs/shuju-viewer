@@ -465,6 +465,19 @@ def test_start_rejects_client_source_path() -> None:
     assert _manifest(upload_id).job_id is None
 
 
+def test_start_rejects_client_import_type_override() -> None:
+    upload_id = _create(ImportType.DIA_CLIP)
+    _upload(upload_id, "x.mzML", b"x")
+    with pytest.raises(UploadError) as exc_info:
+        service.start_upload(
+            upload_id,
+            parameters={"slug": "x", "name": "X", "import_type": "DIA_NN"},
+        )
+    _assert_code(exc_info.value, "UPLOAD_IMPORT_PARAMETERS_INVALID")
+    assert _manifest(upload_id).state == UploadState.FAILED
+    assert _manifest(upload_id).job_id is None
+
+
 @pytest.mark.parametrize(
     ("import_type", "shape", "contains_raw"),
     [
@@ -473,9 +486,10 @@ def test_start_rejects_client_source_path() -> None:
         (ImportType.TOPPIC, DatasetShape.TOPPIC_HTML, False),
         (ImportType.PRSM, DatasetShape.PRSM_BUNDLE, False),
         (ImportType.DIA_NN, DatasetShape.DIANN_DIA, False),
+        (ImportType.DIA_CLIP, DatasetShape.DIANN_DIA, False),
     ],
 )
-def test_five_import_types_dispatch_to_existing_job_entry(
+def test_six_import_types_dispatch_to_existing_job_entry(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     import_type: ImportType,
@@ -483,6 +497,7 @@ def test_five_import_types_dispatch_to_existing_job_entry(
     contains_raw: bool,
 ) -> None:
     calls: list[dict[str, Any]] = []
+    validated: list[ImportType] = []
     monkeypatch.setattr(dispatch, "resolve_ingest_root", lambda root: root)
     monkeypatch.setattr(
         dispatch,
@@ -493,6 +508,11 @@ def test_five_import_types_dispatch_to_existing_job_entry(
             need_toppic_multirun_pass=False,
             contains_raw=contains_raw,
         ),
+    )
+    monkeypatch.setattr(
+        dispatch,
+        "validate_import_selection",
+        lambda selected, _root, _plan: validated.append(selected),
     )
 
     def fake_enqueue(**kwargs: Any) -> SimpleNamespace:
@@ -509,6 +529,8 @@ def test_five_import_types_dispatch_to_existing_job_entry(
     assert result == ImportJobCreatedOut(job_id="job-five", status="queued")
     assert calls[0]["source_path"] == str(tmp_path.resolve())
     assert calls[0]["slug"] == "five"
+    assert calls[0]["import_type"] == import_type.value
+    assert validated == [import_type]
 
 
 def test_dispatch_rejects_type_layout_mismatch_before_job_creation(
@@ -666,6 +688,17 @@ def test_existing_server_path_api_still_uses_same_contract_and_shared_enqueue(
     )
     assert result.job_id == "server-path-job"
     assert calls[0]["source_path"] == str(tmp_path.resolve())
+    assert calls[0]["import_type"] is None
+
+    imports_api.enqueue_import(
+        ImportEnqueueIn(
+            source_path=str(tmp_path),
+            slug="server-explicit",
+            name="Server explicit",
+            import_type=ImportType.MZML_ONLY,
+        )
+    )
+    assert calls[1]["import_type"] == "MZML_ONLY"
     assert _matched_route("/api/v1/imports", "POST") == "enqueue_import"
 
 

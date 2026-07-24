@@ -8,13 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-class ImportType(str, Enum):
-    RAW_ONLY = "RAW_ONLY"
-    MZML_ONLY = "MZML_ONLY"
-    TOPPIC = "TOPPIC"
-    PRSM = "PRSM"
-    DIA_NN = "DIA_NN"
+from app.import_types import ImportType
 
 
 class UploadState(str, Enum):

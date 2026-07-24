@@ -52,6 +52,7 @@ CREATE TABLE public.datasets (
     extra_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     source_dataset_fingerprint character(32),
+    source_import_kind character varying(40) DEFAULT 'LEGACY'::character varying NOT NULL,
     CONSTRAINT ck_datasets_analysis_mode CHECK (((analysis_mode)::text = ANY ((ARRAY['BOTTOM_UP'::character varying, 'TOP_DOWN'::character varying])::text[]))),
     CONSTRAINT ck_datasets_status CHECK (((status)::text = ANY ((ARRAY['IMPORTED'::character varying, 'PARSING'::character varying, 'READY'::character varying, 'ERROR'::character varying])::text[])))
 );
@@ -146,6 +147,13 @@ COMMENT ON COLUMN public.datasets.created_at IS '数据集创建或导入时间�
 --
 
 COMMENT ON COLUMN public.datasets.source_dataset_fingerprint IS '数据集源目录元数据 manifest 的 MD5（32 位小写 hex），不是文件内容哈希。';
+
+
+--
+-- Name: COLUMN datasets.source_import_kind; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.datasets.source_import_kind IS '用户选择的数据解释类型；与 source_dataset_fingerprint 共同构成重复识别键。';
 
 
 --
@@ -405,6 +413,7 @@ CREATE TABLE public.import_jobs (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     source_path text,
+    import_type character varying(40),
     CONSTRAINT ck_import_jobs_status CHECK (((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying, 'success'::character varying, 'failed'::character varying])::text[])))
 );
 
@@ -1182,10 +1191,10 @@ CREATE INDEX ix_runs_status ON public.runs USING btree (status);
 
 
 --
--- Name: uq_datasets_source_dataset_fingerprint; Type: INDEX; Schema: public; Owner: -
+-- Name: uq_datasets_source_fingerprint_import_kind; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX uq_datasets_source_dataset_fingerprint ON public.datasets USING btree (source_dataset_fingerprint) WHERE (source_dataset_fingerprint IS NOT NULL);
+CREATE UNIQUE INDEX uq_datasets_source_fingerprint_import_kind ON public.datasets USING btree (source_dataset_fingerprint, source_import_kind) WHERE (source_dataset_fingerprint IS NOT NULL);
 
 
 --

@@ -131,3 +131,42 @@ test("evidence summary provides explicit missing-source fallbacks", () => {
   expect(sections.find((section) => section.key === "pfmb")?.empty).toBe("Fragment Match annotation not available");
   expect(sections.find((section) => section.key === "mass-accuracy")?.empty).toBe("Mass accuracy not available");
 });
+
+test("DIA-CLIP metadata adds a source-specific evidence section without changing DIA-NN sections", () => {
+  const sections = buildBuEvidenceSummary({
+    match: {
+      ...match,
+      score: 0.91,
+      intensity: 1234,
+      extra_metadata: {
+        diaclip: {
+          feature_distance: 0.12,
+          cos_similarity: 0.98,
+          quant_result: 1234,
+          diann_q_value: 0.004,
+          diann_precursor_quantity: 999,
+        },
+      },
+    },
+    xic: { isLoading: false, isError: true },
+    ms2: { isLoading: false, isError: true },
+    hasPfmb: false,
+    pfmbSlots: { isLoading: false, isError: false },
+    pfmbAnnotation: { isLoading: false, isError: false },
+    activePfmbSlot: null,
+    inspectedRt: null,
+    selectedXicPoint: null,
+  });
+
+  const diaclip = sections.find((section) => section.key === "diaclip");
+  expect(diaclip?.rows.map((row) => row.label)).toEqual([
+    "DIA-CLIP score",
+    "Feature distance",
+    "Cosine similarity",
+    "DIA-CLIP quantity",
+    "DIA-NN context Q-value",
+    "DIA-NN precursor quantity",
+  ]);
+  expect(diaclip?.rows.find((row) => row.label === "DIA-CLIP score")?.value).toBe("0.91");
+  expect(sections).toHaveLength(6);
+});
