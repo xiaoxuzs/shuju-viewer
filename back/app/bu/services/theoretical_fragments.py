@@ -26,17 +26,20 @@ def _theoretical_ions(
     sequence: str,
     modified_sequence: str | None = None,
 ) -> list[_TheoIon]:
+    # 使用纯氨基酸序列作为校验基准，并将 Modified.Sequence 解析为 N 端和各残基的 UniMod 质量偏移。
     stripped = _strip_sequence(sequence)
     modifications = parse_modified_sequence(
         modified_sequence,
         expected_sequence=stripped,
     )
     ions: list[_TheoIon] = []
+    # 对每个肽键切点分别构造 N 端 b 离子和 C 端 y 离子，只累加碎片实际覆盖的修饰位点。
     for pos in range(1, len(stripped)):
         prefix = stripped[:pos]
         suffix = stripped[-pos:]
         b_delta = modifications.b_delta(pos)
         y_delta = modifications.y_delta(pos)
+        # UniMod 记录的是中性质量变化，换算为 m/z 偏移时需要除以离子电荷数。
         for charge in (1, 2):
             ions.append(
                 _TheoIon(

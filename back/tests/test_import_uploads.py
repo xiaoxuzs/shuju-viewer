@@ -483,13 +483,17 @@ def test_start_rejects_client_import_type_override() -> None:
     [
         (ImportType.RAW_ONLY, DatasetShape.MZML_ONLY, True),
         (ImportType.MZML_ONLY, DatasetShape.MZML_ONLY, False),
-        (ImportType.TOPPIC, DatasetShape.TOPPIC_HTML, False),
-        (ImportType.PRSM, DatasetShape.PRSM_BUNDLE, False),
-        (ImportType.DIA_NN, DatasetShape.DIANN_DIA, False),
-        (ImportType.DIA_CLIP, DatasetShape.DIANN_DIA, False),
+        (ImportType.TD_RAW, DatasetShape.MZML_ONLY, True),
+        (ImportType.TD_MZML, DatasetShape.MZML_ONLY, False),
+        (ImportType.TD_TOPPIC_HTML, DatasetShape.TOPPIC_HTML, False),
+        (ImportType.TD_PRSM_BUNDLE, DatasetShape.PRSM_BUNDLE, False),
+        (ImportType.TD_TOPPIC_NATIVE, DatasetShape.TOPPIC_NATIVE, False),
+        (ImportType.BU_DIA_NN, DatasetShape.DIANN_DIA, False),
+        (ImportType.BU_DIA_CLIP, DatasetShape.DIANN_DIA, False),
+        (ImportType.DDA_RAW, DatasetShape.MZML_ONLY, True),
     ],
 )
-def test_six_import_types_dispatch_to_existing_job_entry(
+def test_all_import_types_dispatch_to_existing_job_entry(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     import_type: ImportType,

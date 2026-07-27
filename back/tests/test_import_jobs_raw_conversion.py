@@ -8,8 +8,10 @@ from typing import Any
 import pytest
 
 from app.ingest.bu import universal_diann_adapter as diann_adapter
+from app.ingest.td.toppic_native_output import PreparedTopPicNativeOutput
 from app.raw_conversion.errors import RawConversionError
 from app.services import import_jobs
+from app.services.import_planner.types import DatasetShape, ImportPlan
 
 
 class _FakeFingerprint:
@@ -291,16 +293,91 @@ def test_explicit_diaclip_type_routes_the_shared_diann_layout_to_diaclip_adapter
         ),
     )
 
-    _run_job(root, import_type="DIA_CLIP")
+    _run_job(root, import_type="BU_DIA_CLIP")
 
-    assert selections == [("DIA_CLIP", root.resolve())]
+    assert selections == [("BU_DIA_CLIP", root.resolve())]
     assert clip_calls and clip_calls[0]["root"] == root.resolve()
     final_updates = [
         params
         for statement, params in state["engine"].statements
         if "source_import_kind" in statement and params and params.get("dataset_id") == 7
     ]
-    assert final_updates[-1]["source_import_kind"] == "DIA_CLIP"
+    assert final_updates[-1]["source_import_kind"] == "BU_DIA_CLIP"
+    assert not any(update.get("status") == "failed" for update in state["updates"])
+
+
+def test_toppic_native_type_prepares_details_and_uses_distinct_source_tag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "native"
+    (root / "topfd").mkdir(parents=True)
+    mzml = root / "run.mzML"
+    mzml.write_text("<mzML />", encoding="utf-8")
+    derived = tmp_path / "derived"
+    (derived / "data" / "prsms").mkdir(parents=True)
+    state = _install_common_patches(monkeypatch)
+    prepare_calls: list[dict[str, Any]] = []
+    ingest_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        import_jobs,
+        "plan_zip_ingest",
+        lambda _root: ImportPlan(
+            shape=DatasetShape.TOPPIC_NATIVE,
+            spectra_source="mzml_memory",
+            need_toppic_multirun_pass=False,
+        ),
+    )
+    monkeypatch.setattr(
+        import_jobs,
+        "prepare_toppic_native_output",
+        lambda **kwargs: (
+            prepare_calls.append(kwargs)
+            or PreparedTopPicNativeOutput(
+                root=derived,
+                prsm_count=2,
+                skipped_prsm_count=0,
+                mzml_files=(mzml,),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        import_jobs,
+        "extract_spectrum_file_names_from_prsms",
+        lambda _path: {"run.mzML"},
+    )
+    monkeypatch.setattr(
+        import_jobs,
+        "build_one_to_one_mapping",
+        lambda **_kwargs: {"run": mzml},
+    )
+    monkeypatch.setattr(
+        import_jobs,
+        "ingest_universal_prsm_js",
+        lambda **kwargs: (
+            ingest_calls.append(kwargs)
+            or SimpleNamespace(
+                dataset_id=7,
+                run_id=1,
+                proteins=1,
+                proteoforms=1,
+                matches=2,
+            )
+        ),
+    )
+
+    _run_job(root, import_type="TD_TOPPIC_NATIVE")
+
+    assert prepare_calls[0]["source_root"] == root.resolve()
+    assert ingest_calls[0]["root"] == derived
+    assert ingest_calls[0]["source_software"] == "TopPIC Native Output"
+    assert ingest_calls[0]["import_mode"] == "toppic_native"
+    final_updates = [
+        params
+        for statement, params in state["engine"].statements
+        if "source_import_kind" in statement and params and params.get("dataset_id") == 7
+    ]
+    assert final_updates[-1]["source_import_kind"] == "TD_TOPPIC_NATIVE"
     assert not any(update.get("status") == "failed" for update in state["updates"])
 
 
@@ -391,16 +468,18 @@ def test_mzml_only_import_job_does_not_call_converter(
 
     monkeypatch.setattr(import_jobs, "convert_raw_files_for_import", fail_converter)
 
-    _run_job(root)
+    _run_job(root, import_type="TD_MZML")
 
     stages = [update.get("stage") for update in state["updates"]]
     assert "raw_conversion" not in stages
     assert state["derived_calls"] == [7]
     assert state["mzml_only_calls"]
     assert state["mzml_only_calls"][0]["extra_mzml_roots"] is None
+    assert state["mzml_only_calls"][0]["analysis_mode"] == "TOP_DOWN"
+    assert state["mzml_only_calls"][0]["source_software"] == "Top-Down mzML"
 
 
-def test_raw_only_import_job_converts_before_mzml_only_adapter(
+def test_dda_raw_import_job_converts_before_mzml_only_adapter(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -424,7 +503,7 @@ def test_raw_only_import_job_converts_before_mzml_only_adapter(
 
     monkeypatch.setattr("app.raw_conversion.thermo_raw_file_parser.subprocess.run", fake_run)
 
-    _run_job(root)
+    _run_job(root, import_type="DDA_RAW")
 
     stages = [update.get("stage") for update in state["updates"]]
     assert "raw_conversion" in stages
@@ -432,6 +511,8 @@ def test_raw_only_import_job_converts_before_mzml_only_adapter(
     call = state["mzml_only_calls"][0]
     assert call["extra_mzml_roots"] is not None
     assert call["raw_conversion_by_mzml_key"]["sample"]["raw_conversion"]["status"] == "converted"
+    assert call["analysis_mode"] == "BOTTOM_UP"
+    assert call["source_software"] == "DDA Thermo RAW"
 
 
 def test_raw_only_import_job_fails_when_converter_missing(

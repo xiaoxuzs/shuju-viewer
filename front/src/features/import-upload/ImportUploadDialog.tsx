@@ -68,27 +68,53 @@ interface DirectoryInputAttributes {
   webkitdirectory: "";
 }
 
+type AnalysisType = "TOP_DOWN" | "BOTTOM_UP" | "DDA";
+
+interface ImportTypeOption {
+  value: ImportUploadType;
+  label: string;
+  help: string;
+}
+
 const DIRECTORY_INPUT_ATTRIBUTES: DirectoryInputAttributes = { webkitdirectory: "" };
 const FILE_PREVIEW_LIMIT = 8;
 const IMPORT_JOB_POLL_MS = 900;
 const INTERRUPTED_UPLOAD_KEY = "viewer.interruptedImportUpload";
 
-const IMPORT_TYPES: Array<{
-  value: ImportUploadType;
+const ANALYSIS_TYPES: Array<{
+  value: AnalysisType;
   label: string;
   help: string;
 }> = [
-  { value: "RAW_ONLY", label: "RAW", help: "Thermo .raw files or a folder containing RAW data" },
-  { value: "MZML_ONLY", label: "mzML", help: ".mzML files or a folder containing mzML data" },
-  { value: "TOPPIC", label: "TopPIC", help: "A complete TopPIC result folder" },
-  { value: "PRSM", label: "PrSM", help: "A PrSM result bundle folder" },
-  { value: "DIA_NN", label: "DIA-NN", help: "A DIA-NN result folder" },
-  {
-    value: "DIA_CLIP",
-    label: "DIA-CLIP",
-    help: "DIA-CLIP v1 TSV plus an all_report.parquet context report and one matching spectrum run",
-  },
+  { value: "TOP_DOWN", label: "Top-Down", help: "Intact proteoform and TopPIC data" },
+  { value: "BOTTOM_UP", label: "Bottom-Up", help: "DIA identification result data" },
+  { value: "DDA", label: "DDA", help: "Data-dependent acquisition from Thermo RAW spectra" },
 ];
+
+const IMPORT_TYPES_BY_ANALYSIS: Record<AnalysisType, ImportTypeOption[]> = {
+  TOP_DOWN: [
+    { value: "TD_RAW", label: "Thermo RAW", help: "Top-Down Thermo .raw spectra" },
+    { value: "TD_MZML", label: "mzML", help: "Top-Down .mzML spectra" },
+    { value: "TD_TOPPIC_HTML", label: "TopPIC HTML Output", help: "A complete TopPIC HTML result folder" },
+    { value: "TD_PRSM_BUNDLE", label: "PrSM Detail Bundle", help: "Viewer-ready PrSM detail files with mzML spectra" },
+    {
+      value: "TD_TOPPIC_NATIVE",
+      label: "TopPIC Native Output",
+      help: "TopPIC PrSM XML and TopFD MSAlign files; Viewer generates PrSM details during import",
+    },
+  ],
+  BOTTOM_UP: [
+    { value: "BU_DIA_NN", label: "DIA-NN", help: "A DIA-NN result folder" },
+    {
+      value: "BU_DIA_CLIP",
+      label: "DIA-CLIP",
+      help: "DIA-CLIP v1 TSV plus an all_report.parquet context report and one matching spectrum run",
+    },
+  ],
+  DDA: [
+    { value: "DDA_RAW", label: "Thermo RAW", help: "DDA Thermo .raw spectra" },
+  ],
+};
 
 const BLOCKING_LEAVE_STATES = new Set<UploadUiState>([
   "creating-session",
@@ -120,7 +146,8 @@ function stageTitle(state: UploadUiState, job: ImportJobOut | null): string {
 
 export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogProps) {
   const queryClient = useQueryClient();
-  const [importType, setImportType] = useState<ImportUploadType>("MZML_ONLY");
+  const [analysisType, setAnalysisType] = useState<AnalysisType | null>(null);
+  const [importType, setImportType] = useState<ImportUploadType | null>(null);
   const [slug, setSlug] = useState("");
   const [datasetName, setDatasetName] = useState("");
   const [description, setDescription] = useState("");
@@ -156,6 +183,8 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     setSlug("");
     setDatasetName("");
     setDescription("");
+    setAnalysisType(null);
+    setImportType(null);
     setSelection(null);
     setDiaclipCheck(null);
     setInputKey((value) => value + 1);
@@ -268,7 +297,10 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     () => previewImportFiles(selection?.files ?? [], FILE_PREVIEW_LIMIT),
     [selection],
   );
-  const supportsFileSelection = importType === "RAW_ONLY" || importType === "MZML_ONLY";
+  const importTypeOptions = analysisType ? IMPORT_TYPES_BY_ANALYSIS[analysisType] : [];
+  const currentImportOption = importTypeOptions.find((option) => option.value === importType);
+  const rawImport = importType === "TD_RAW" || importType === "DDA_RAW";
+  const supportsFileSelection = rawImport || importType === "TD_MZML";
   const controlsDisabled = BLOCKING_LEAVE_STATES.has(uiState)
     || uiState === "import-running"
     || uploadId !== null
@@ -282,8 +314,9 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
   const selectFiles = useCallback(async (event: ChangeEvent<HTMLInputElement>, mode: UploadSelectionMode) => {
     const token = ++selectionTokenRef.current;
     try {
+      if (!importType) throw new ImportFileSelectionError("Select an import format first.");
       const next = selectImportFiles(event.target.files ?? [], mode, importType);
-      const nextDiaclipCheck = importType === "DIA_CLIP"
+      const nextDiaclipCheck = importType === "BU_DIA_CLIP"
         ? await preflightDiaclipSelection(next.files)
         : null;
       if (token !== selectionTokenRef.current) return;
@@ -372,6 +405,11 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
   }, [finishCancellation, jobId, pollImportJob]);
 
   const runUpload = useCallback(async () => {
+    const selectedImportType = importType;
+    if (!selectedImportType) {
+      setUiError({ title: "No import format selected", message: "Select an analysis type and import format.", code: null, fileName: null });
+      return;
+    }
     if (!selection || selection.files.length === 0) {
       setUiError({ title: "No local files selected", message: "Select files before uploading.", code: null, fileName: null });
       return;
@@ -399,7 +437,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     let currentFileName: string | null = null;
     let failureTitle = "Creating upload session failed";
     try {
-      const created = await createImportUpload(importType);
+      const created = await createImportUpload(selectedImportType);
       uploadIdRef.current = created.upload_id;
       setUploadId(created.upload_id);
       if (cancelRequestedRef.current) {
@@ -451,7 +489,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
 
       const active: ActiveImportJobRecord = {
         job_id: started.job_id,
-        import_type: importType,
+        import_type: selectedImportType,
         upload_id: created.upload_id,
         created_at: new Date().toISOString(),
       };
@@ -522,26 +560,27 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
         </CardHeader>
         <CardContent className="space-y-5">
           <section className="space-y-2" aria-labelledby="import-type-title">
-            <h3 id="import-type-title" className="text-sm font-semibold">1. Import type</h3>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" role="radiogroup" aria-label="Import type">
-              {IMPORT_TYPES.map((option) => (
+            <h3 id="import-type-title" className="text-sm font-semibold">1. Analysis type</h3>
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Analysis type">
+              {ANALYSIS_TYPES.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   role="radio"
-                  aria-checked={importType === option.value}
+                  aria-checked={analysisType === option.value}
                   title={option.help}
                   disabled={controlsDisabled}
                   className={cn(
                     "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
-                    importType === option.value
+                    analysisType === option.value
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border bg-background hover:bg-muted",
                     "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
                   )}
                   onClick={() => {
                     selectionTokenRef.current += 1;
-                    setImportType(option.value);
+                    setAnalysisType(option.value);
+                    setImportType(null);
                     setSelection(null);
                     setDiaclipCheck(null);
                     setInputKey((value) => value + 1);
@@ -553,9 +592,51 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              {IMPORT_TYPES.find((option) => option.value === importType)?.help}
+              {ANALYSIS_TYPES.find((option) => option.value === analysisType)?.help
+                ?? "Select an analysis type to view its supported import formats."}
             </p>
-            {importType === "DIA_CLIP" && (
+          </section>
+
+          {analysisType && (
+            <section className="space-y-2" aria-labelledby="import-format-title">
+              <h3 id="import-format-title" className="text-sm font-semibold">2. Import format</h3>
+              <div
+                className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+                role="radiogroup"
+                aria-label="Import format"
+              >
+                {importTypeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={importType === option.value}
+                    title={option.help}
+                    disabled={controlsDisabled}
+                    className={cn(
+                      "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                      importType === option.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-background hover:bg-muted",
+                      "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
+                    )}
+                    onClick={() => {
+                      selectionTokenRef.current += 1;
+                      setImportType(option.value);
+                      setSelection(null);
+                      setDiaclipCheck(null);
+                      setInputKey((value) => value + 1);
+                      setUiError(null);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {currentImportOption && (
+                <p className="text-xs text-muted-foreground">{currentImportOption.help}</p>
+              )}
+            {importType === "BU_DIA_CLIP" && (
               <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
                 DIA-CLIP v1 is a single-run Bottom-Up import. Select one folder containing exactly one supported
                 DIA-CLIP result TSV, exactly one required context report named{" "}
@@ -565,117 +646,122 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                 before importing.
               </div>
             )}
-          </section>
+            </section>
+          )}
 
-          <section className="grid gap-3 sm:grid-cols-2" aria-labelledby="dataset-info-title">
-            <h3 id="dataset-info-title" className="text-sm font-semibold sm:col-span-2">2. Dataset information</h3>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="import-slug">Slug (URL id)</label>
-              <Input
-                id="import-slug"
-                value={slug}
-                disabled={controlsDisabled}
-                placeholder="e.g. histone_sample"
-                onChange={(event) => setSlug(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="import-name">Display name</label>
-              <Input
-                id="import-name"
-                value={datasetName}
-                disabled={controlsDisabled}
-                placeholder="Human-readable name"
-                onChange={(event) => setDatasetName(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="import-description">
-                Description (optional)
-              </label>
-              <textarea
-                id="import-description"
-                rows={2}
-                value={description}
-                disabled={controlsDisabled}
-                placeholder="Optional notes"
-                onChange={(event) => setDescription(event.target.value)}
-                className={cn(
-                  "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
-                )}
-              />
-            </div>
-          </section>
-
-          <section className="space-y-3" aria-labelledby="local-files-title">
-            <h3 id="local-files-title" className="text-sm font-semibold">3. Local files</h3>
-            <div className="flex flex-wrap gap-2">
-              {supportsFileSelection && (
-                <label className={cn(buttonVariants({ variant: "outline", size: "sm" }), controlsDisabled && "pointer-events-none opacity-50")}>
-                  <FileUp className="h-4 w-4" />
-                  Select {importType === "RAW_ONLY" ? ".raw" : ".mzML"} files
-                  <input
-                    key={`files-${inputKey}`}
-                    id="import-files"
-                    type="file"
-                    multiple
-                    accept={importType === "RAW_ONLY" ? ".raw" : ".mzML,.mzml"}
+          {importType && (
+            <>
+              <section className="grid gap-3 sm:grid-cols-2" aria-labelledby="dataset-info-title">
+                <h3 id="dataset-info-title" className="text-sm font-semibold sm:col-span-2">3. Dataset information</h3>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground" htmlFor="import-slug">Slug (URL id)</label>
+                  <Input
+                    id="import-slug"
+                    value={slug}
                     disabled={controlsDisabled}
-                    className="sr-only"
-                    onChange={(event) => void selectFiles(event, "files")}
+                    placeholder="e.g. histone_sample"
+                    onChange={(event) => setSlug(event.target.value)}
                   />
-                </label>
-              )}
-              <label className={cn(buttonVariants({ variant: "outline", size: "sm" }), controlsDisabled && "pointer-events-none opacity-50")}>
-                <FolderOpen className="h-4 w-4" />
-                Select folder
-                <input
-                  {...DIRECTORY_INPUT_ATTRIBUTES}
-                  key={`folder-${inputKey}`}
-                  id="import-folder"
-                  type="file"
-                  multiple
-                  disabled={controlsDisabled}
-                  className="sr-only"
-                  onChange={(event) => void selectFiles(event, "folder")}
-                />
-              </label>
-            </div>
-
-            {selection && (
-              <div className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-3">
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <Badge variant="outline">{selection.mode === "folder" ? "Folder" : "Files"}</Badge>
-                  <span>{selection.rootLabel}</span>
-                  <span>{selection.files.length.toLocaleString()} files</span>
-                  <span>{formatBytes(selection.totalBytes)}</span>
                 </div>
-                <ul className="space-y-1 text-xs text-muted-foreground" aria-label="Selected file summary">
-                  {filePreview.visible.map((entry) => (
-                    <li key={entry.relativePath} className="flex justify-between gap-3">
-                      <span className="min-w-0 truncate font-mono">{entry.relativePath}</span>
-                      <span className="shrink-0 tabular-nums">{formatBytes(entry.file.size)}</span>
-                    </li>
-                  ))}
-                </ul>
-                {filePreview.remaining > 0 && (
-                  <p className="text-xs text-muted-foreground">+ {filePreview.remaining.toLocaleString()} more files</p>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground" htmlFor="import-name">Display name</label>
+                  <Input
+                    id="import-name"
+                    value={datasetName}
+                    disabled={controlsDisabled}
+                    placeholder="Human-readable name"
+                    onChange={(event) => setDatasetName(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs font-medium text-muted-foreground" htmlFor="import-description">
+                    Description (optional)
+                  </label>
+                  <textarea
+                    id="import-description"
+                    rows={2}
+                    value={description}
+                    disabled={controlsDisabled}
+                    placeholder="Optional notes"
+                    onChange={(event) => setDescription(event.target.value)}
+                    className={cn(
+                      "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
+                    )}
+                  />
+                </div>
+              </section>
+
+              <section className="space-y-3" aria-labelledby="local-files-title">
+                <h3 id="local-files-title" className="text-sm font-semibold">4. Local files</h3>
+                <div className="flex flex-wrap gap-2">
+                  {supportsFileSelection && (
+                    <label className={cn(buttonVariants({ variant: "outline", size: "sm" }), controlsDisabled && "pointer-events-none opacity-50")}>
+                      <FileUp className="h-4 w-4" />
+                      Select {rawImport ? ".raw" : ".mzML"} files
+                      <input
+                        key={`files-${inputKey}`}
+                        id="import-files"
+                        type="file"
+                        multiple
+                        accept={rawImport ? ".raw" : ".mzML,.mzml"}
+                        disabled={controlsDisabled}
+                        className="sr-only"
+                        onChange={(event) => void selectFiles(event, "files")}
+                      />
+                    </label>
+                  )}
+                  <label className={cn(buttonVariants({ variant: "outline", size: "sm" }), controlsDisabled && "pointer-events-none opacity-50")}>
+                    <FolderOpen className="h-4 w-4" />
+                    Select folder
+                    <input
+                      {...DIRECTORY_INPUT_ATTRIBUTES}
+                      key={`folder-${inputKey}`}
+                      id="import-folder"
+                      type="file"
+                      multiple
+                      disabled={controlsDisabled}
+                      className="sr-only"
+                      onChange={(event) => void selectFiles(event, "folder")}
+                    />
+                  </label>
+                </div>
+
+                {selection && (
+                  <div className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-3">
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <Badge variant="outline">{selection.mode === "folder" ? "Folder" : "Files"}</Badge>
+                      <span>{selection.rootLabel}</span>
+                      <span>{selection.files.length.toLocaleString()} files</span>
+                      <span>{formatBytes(selection.totalBytes)}</span>
+                    </div>
+                    <ul className="space-y-1 text-xs text-muted-foreground" aria-label="Selected file summary">
+                      {filePreview.visible.map((entry) => (
+                        <li key={entry.relativePath} className="flex justify-between gap-3">
+                          <span className="min-w-0 truncate font-mono">{entry.relativePath}</span>
+                          <span className="shrink-0 tabular-nums">{formatBytes(entry.file.size)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {filePreview.remaining > 0 && (
+                      <p className="text-xs text-muted-foreground">+ {filePreview.remaining.toLocaleString()} more files</p>
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-            {diaclipCheck && (
-              <div className="rounded-md border border-primary/40 bg-primary/5 p-3 text-xs">
-                <div className="font-semibold text-primary">DIA-CLIP v1 preflight passed</div>
-                <dl className="mt-2 grid gap-1 text-muted-foreground">
-                  <div><dt className="inline font-medium">Result TSV: </dt><dd className="inline font-mono">{diaclipCheck.resultPath}</dd></div>
-                  <div><dt className="inline font-medium">Context report: </dt><dd className="inline font-mono">{diaclipCheck.reportPath}</dd></div>
-                  <div><dt className="inline font-medium">Spectrum sources: </dt><dd className="inline">{diaclipCheck.spectraSources.length}</dd></div>
-                </dl>
-              </div>
-            )}
-          </section>
+                {diaclipCheck && (
+                  <div className="rounded-md border border-primary/40 bg-primary/5 p-3 text-xs">
+                    <div className="font-semibold text-primary">DIA-CLIP v1 preflight passed</div>
+                    <dl className="mt-2 grid gap-1 text-muted-foreground">
+                      <div><dt className="inline font-medium">Result TSV: </dt><dd className="inline font-mono">{diaclipCheck.resultPath}</dd></div>
+                      <div><dt className="inline font-medium">Context report: </dt><dd className="inline font-mono">{diaclipCheck.reportPath}</dd></div>
+                      <div><dt className="inline font-medium">Spectrum sources: </dt><dd className="inline">{diaclipCheck.spectraSources.length}</dd></div>
+                    </dl>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
 
           {(uiState !== "idle" || recovered) && (
             <section className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3" aria-live="polite">
@@ -754,7 +840,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
               <Button
                 type="button"
                 size="sm"
-                disabled={!selection || !slug.trim() || !datasetName.trim()}
+                disabled={!importType || !selection || !slug.trim() || !datasetName.trim()}
                 onClick={() => void runUpload()}
               >
                 Start upload and import

@@ -12,6 +12,7 @@ class DatasetShape(str, Enum):
 
     TOPPIC_HTML = "toppic_html"
     PRSM_BUNDLE = "prsm_bundle"
+    TOPPIC_NATIVE = "toppic_native"
     DIANN_DIA = "diann_dia"
     MZML_ONLY = "mzml_only"
     UNSUPPORTED = "unsupported"
@@ -26,7 +27,7 @@ class ImportPlan:
     """Immutable plan produced before DB ingest or heavy I/O."""
 
     shape: DatasetShape
-    """``TOPPIC_HTML``, ``PRSM_BUNDLE``, ``DIANN_DIA``, or ``MZML_ONLY``."""
+    """Recognized physical dataset shape."""
 
     spectra_source: str
     """Spectra source string used in ``datasets.capabilities``."""

@@ -148,3 +148,38 @@ def test_plan_keeps_toppic_priority_over_mzml_only(tmp_path: Path) -> None:
     plan = plan_zip_ingest(tmp_path)
 
     assert plan.shape == DatasetShape.TOPPIC_HTML
+
+
+def test_plan_accepts_toppic_native_output_with_gzipped_mzml(tmp_path: Path) -> None:
+    toppic = tmp_path / "toppic"
+    toppic.mkdir()
+    (toppic / "run_ms2_toppic_prsm.xml").write_text(
+        "<prsm_list><prsm /></prsm_list>",
+        encoding="utf-8",
+    )
+    (toppic / "run_ms2.msalign").write_text("", encoding="utf-8")
+    (tmp_path / "run.mzML.gz").write_bytes(b"gzip placeholder")
+
+    plan = plan_zip_ingest(tmp_path)
+
+    assert plan.shape == DatasetShape.TOPPIC_NATIVE
+    assert plan.spectra_source == "mzml_memory"
+    assert plan.need_toppic_multirun_pass is False
+
+
+def test_native_output_is_used_when_html_summary_lacks_prsm_details(
+    tmp_path: Path,
+) -> None:
+    proteins = tmp_path / "toppic_prsm_cutoff" / "data_js" / "proteins.js"
+    proteins.parent.mkdir(parents=True)
+    proteins.write_text("proteins = [];", encoding="utf-8")
+    toppic = tmp_path / "toppic"
+    toppic.mkdir()
+    (toppic / "run_ms2_toppic_prsm.xml").write_text(
+        "<prsm_list><prsm /></prsm_list>",
+        encoding="utf-8",
+    )
+    (toppic / "run_ms2.msalign").write_text("", encoding="utf-8")
+    (tmp_path / "run.mzML").write_text("<mzML />", encoding="utf-8")
+
+    assert plan_zip_ingest(tmp_path).shape == DatasetShape.TOPPIC_NATIVE

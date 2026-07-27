@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+import gzip
+import json
+from pathlib import Path
+
+from app.ingest.td.toppic_native_output import prepare_toppic_native_output
+
+
+def _write_native_xml(path: Path) -> None:
+    records = []
+    for prsm_id, scan, e_value, protein_id, proteoform_id in (
+        (10, 110, "0.02", 7, 70),
+        (20, 120, "0.01", 8, 80),
+    ):
+        records.append(
+            "<prsm>"
+            f"<prsm_id>{prsm_id}</prsm_id>"
+            f"<spectrum_id>{scan}</spectrum_id>"
+            f"<spectrum_scan>{scan}</spectrum_scan>"
+            f"<extreme_value><p_value>0.001</p_value><e_value>{e_value}</e_value></extreme_value>"
+            "<fdr>0.01</fdr><proteoform>"
+            "<start_pos>0</start_pos><end_pos>2</end_pos>"
+            f"<prot_id>{protein_id}</prot_id>"
+            f"<proteo_cluster_id>{proteoform_id}</proteo_cluster_id>"
+            "<proteo_db_seq>ACD</proteo_db_seq><proteo_match_seq>ACD</proteo_match_seq>"
+            "<fasta_seq><seq_name>P00001</seq_name><seq_desc>fixture protein</seq_desc></fasta_seq>"
+            "<prot_mod><name>NONE</name></prot_mod><mass_shift_list />"
+            "</proteoform></prsm>"
+        )
+    path.write_text("<prsm_list>" + "".join(records) + "</prsm_list>", encoding="utf-8")
+
+
+def _write_msalign(path: Path) -> None:
+    blocks = []
+    for scan in (110, 120):
+        blocks.append(
+            "BEGIN IONS\n"
+            "FILE_NAME=run.mzML\n"
+            f"SPECTRUM_ID={scan}\nSCANS={scan}\n"
+            "PRECURSOR_MASS=300.0\nPRECURSOR_CHARGE=3\nPRECURSOR_MZ=100.0\n"
+            "149.0 500.0 3 1.0\nEND IONS\n"
+        )
+    path.write_text("".join(blocks), encoding="utf-8", newline="")
+
+
+def test_prepare_generates_every_prsm_and_decompresses_mzml(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    toppic = source / "toppic"
+    toppic.mkdir(parents=True)
+    _write_native_xml(toppic / "run_ms2_toppic_prsm.xml")
+    _write_msalign(toppic / "run_ms2.msalign")
+    with gzip.open(source / "run.mzML.gz", "wb") as handle:
+        handle.write(b"<mzML />")
+
+    result = prepare_toppic_native_output(
+        source_root=source,
+        output_root=tmp_path / "derived",
+    )
+
+    detail_files = sorted((result.root / "data" / "prsms").glob("prsm*.json"))
+    assert [path.name for path in detail_files] == ["prsm10.json", "prsm20.json"]
+    assert result.prsm_count == 2
+    assert result.skipped_prsm_count == 0
+    assert result.mzml_files == (result.root / "spectra" / "run.mzML",)
+    assert result.mzml_files[0].read_bytes() == b"<mzML />"
+    payload = json.loads(detail_files[0].read_text(encoding="utf-8"))
+    assert payload["prsm"]["ms"]["ms_header"]["spectrum_file_name"] == "run.mzML"
+    assert payload["prsm"]["annotated_protein"]["sequence_id"] == "7"
+    assert payload["prsm"]["annotated_protein"]["proteoform_id"] == "70"

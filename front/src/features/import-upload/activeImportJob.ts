@@ -12,10 +12,19 @@ export interface ActiveImportJobRecord {
 type StorageAccess = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 const IMPORT_TYPES = new Set<ImportUploadType>([
+  "TD_RAW",
+  "TD_MZML",
+  "TD_TOPPIC_HTML",
+  "TD_PRSM_BUNDLE",
+  "TD_TOPPIC_NATIVE",
+  "BU_DIA_NN",
+  "BU_DIA_CLIP",
+  "DDA_RAW",
   "RAW_ONLY",
   "MZML_ONLY",
   "TOPPIC",
   "PRSM",
+  "TD_TOPPIC_NATIVE",
   "DIA_NN",
   "DIA_CLIP",
 ]);

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.dataset_ingest_root.resolver import has_bu_diann_layout
+from app.ingest.td.toppic_native_output import has_toppic_native_output
 from app.raw_conversion.contracts import RAW_VENDOR_THERMO
 from app.raw_conversion.discovery import collect_raw_files
 from app.services.mzml_mapping import collect_mzml_files
@@ -24,8 +25,9 @@ _UNSUPPORTED = (
     "Expected either (1) TopPIC HTML output: toppic_prsm_cutoff or toppic_proteoform_cutoff "
     "with data_js/proteins.js plus PrSM detail files (prsm*.js|json|txt in data/, data/prsms/, or under "
     "that cutoff's data_js/prsms/), or (2) a PrSM-only bundle: supported prsm* under data/ or data/prsms/ "
-    "with mzML present in the tree so spectra use mzml_memory mode, or (3) standalone mzML-only/Thermo RAW-only "
-    "spectra files for basic spectra viewing."
+    "with mzML present in the tree so spectra use mzml_memory mode, or (3) TopPIC Native Output with "
+    "*_toppic_prsm.xml and matching *_ms2.msalign files, or (4) standalone mzML-only/Thermo RAW-only spectra "
+    "files for basic spectra viewing."
 )
 
 _PRSM_BUNDLE_NO_MZML = (
@@ -61,6 +63,7 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
     toppic = is_toppic_html_tree(root)
     bu_diann = has_bu_diann_layout(root)
     prsm_bundle = prsm_bundle_prsm_directory(root) is not None
+    toppic_native = has_toppic_native_output(root)
 
     if bu_diann:
         return ImportPlan(
@@ -70,9 +73,7 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
             **raw_kwargs,
         )
 
-    if toppic:
-        if not ingest_root_has_supported_prsm_files(root):
-            raise ImportLayoutError(_NO_PRSM_TOPPIC)
+    if toppic and ingest_root_has_supported_prsm_files(root):
         src = detect_spectra_source(root)
         return ImportPlan(
             shape=DatasetShape.TOPPIC_HTML,
@@ -81,6 +82,9 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
             **raw_kwargs,
         )
 
+    if toppic and not toppic_native:
+        raise ImportLayoutError(_NO_PRSM_TOPPIC)
+
     if prsm_bundle:
         src = detect_spectra_source(root)
         if src != "mzml_memory":
@@ -88,6 +92,18 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
         return ImportPlan(
             shape=DatasetShape.PRSM_BUNDLE,
             spectra_source=src,
+            need_toppic_multirun_pass=False,
+            **raw_kwargs,
+        )
+
+    if toppic_native:
+        if not collect_mzml_files(root) and not raw_files:
+            raise ImportLayoutError(
+                "TopPIC Native Output requires mzML, mzML.gz, or Thermo RAW spectra."
+            )
+        return ImportPlan(
+            shape=DatasetShape.TOPPIC_NATIVE,
+            spectra_source="mzml_memory",
             need_toppic_multirun_pass=False,
             **raw_kwargs,
         )

@@ -65,6 +65,9 @@ def _create_dataset(
     name: str,
     analysis_shape: str,
     run_count: int,
+    analysis_mode: str,
+    source_software: str,
+    description: str,
 ) -> int:
     caps = {
         "spectra_source": "mzml_memory",
@@ -90,9 +93,9 @@ def _create_dataset(
                 source_root, status, description, capabilities, extra_metadata
             )
             VALUES (
-                :name, :slug, 'TOP_DOWN', :software,
+                :name, :slug, :analysis_mode, :software,
                 :source_root, 'IMPORTED',
-                'Standalone mzML spectra dataset imported for basic spectra viewing',
+                :description,
                 CAST(:capabilities AS jsonb), CAST(:extra_metadata AS jsonb)
             )
             RETURNING dataset_id
@@ -101,8 +104,10 @@ def _create_dataset(
         {
             "name": name,
             "slug": slug,
-            "software": SOFTWARE,
+            "analysis_mode": analysis_mode,
+            "software": source_software,
             "source_root": str(root),
+            "description": description,
             "capabilities": _json(caps),
             "extra_metadata": _json(extra),
         },
@@ -116,16 +121,18 @@ def _insert_runs(
     dataset_id: int,
     mzml_files: Sequence[Path],
     raw_conversion_by_mzml_key: dict[str, dict[str, Any]] | None,
+    analysis_mode: str,
+    source_software: str,
 ) -> list[int]:
     raw_by_key = raw_conversion_by_mzml_key or {}
     run_ids: list[int] = []
     for mzml_path in mzml_files:
         key = normalize_spectrum_file_name(mzml_path.name)
+        raw_meta = raw_by_key.get(key)
         metadata: dict[str, Any] = {
-            "raw_format": "mzml",
+            "raw_format": "thermo_raw" if raw_meta else "mzml",
             "mzml_file_path": str(mzml_path),
         }
-        raw_meta = raw_by_key.get(key)
         if raw_meta:
             raw_path = raw_meta.get("raw_path")
             raw_conversion = raw_meta.get("raw_conversion")
@@ -142,7 +149,7 @@ def _insert_runs(
                 )
                 VALUES (
                     :dataset_id, :file_path, :file_name,
-                    'TOP_DOWN', :software, 'IMPORTED', CAST(:run_metadata AS jsonb)
+                    :analysis_mode, :software, 'IMPORTED', CAST(:run_metadata AS jsonb)
                 )
                 RETURNING run_id
                 """
@@ -151,7 +158,8 @@ def _insert_runs(
                 "dataset_id": dataset_id,
                 "file_path": str(mzml_path),
                 "file_name": mzml_path.name,
-                "software": SOFTWARE,
+                "analysis_mode": analysis_mode,
+                "software": source_software,
                 "run_metadata": _json(metadata),
             },
         ).one()
@@ -168,12 +176,17 @@ def ingest_mzml_only(
     replace: bool = False,
     extra_mzml_roots: Sequence[Path] | None = None,
     raw_conversion_by_mzml_key: dict[str, dict[str, Any]] | None = None,
+    analysis_mode: str = "TOP_DOWN",
+    source_software: str = SOFTWARE,
+    description: str = "Standalone mzML spectra dataset imported for basic spectra viewing",
 ) -> MzmlOnlyImportStats:
     """Create a spectra-only dataset with one run per mzML file."""
     resolved_root = root.resolve()
     mzml_files = _collect_viewable_mzml_files(resolved_root, extra_mzml_roots)
     if not mzml_files:
         raise ValueError(f"no uncompressed mzML files found under {resolved_root}")
+    if analysis_mode not in {"TOP_DOWN", "BOTTOM_UP"}:
+        raise ValueError(f"unsupported analysis mode: {analysis_mode}")
 
     raw_by_key = raw_conversion_by_mzml_key or {}
     has_raw_source = any(normalize_spectrum_file_name(path.name) in raw_by_key for path in mzml_files)
@@ -190,12 +203,17 @@ def ingest_mzml_only(
             name=name,
             analysis_shape=analysis_shape,
             run_count=len(mzml_files),
+            analysis_mode=analysis_mode,
+            source_software=source_software,
+            description=description,
         )
         run_ids = _insert_runs(
             conn,
             dataset_id=dataset_id,
             mzml_files=mzml_files,
             raw_conversion_by_mzml_key=raw_by_key,
+            analysis_mode=analysis_mode,
+            source_software=source_software,
         )
         conn.execute(text("UPDATE datasets SET status = 'READY' WHERE dataset_id = :dataset_id"), {"dataset_id": dataset_id})
         conn.execute(text("UPDATE runs SET status = 'READY' WHERE dataset_id = :dataset_id"), {"dataset_id": dataset_id})

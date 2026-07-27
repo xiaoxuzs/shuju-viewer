@@ -32,7 +32,7 @@ test("single-file selection uses File.name and calculates total size", () => {
   const selected = selectImportFiles([
     fakeFile("first.mzML", 10),
     fakeFile("second.mzML", 25),
-  ], "files", "MZML_ONLY");
+  ], "files", "TD_MZML");
 
   expect(selected.files.map((entry) => entry.relativePath)).toEqual(["first.mzML", "second.mzML"]);
   expect(selected.totalBytes).toBe(35);
@@ -42,26 +42,26 @@ test("single-file selection uses File.name and calculates total size", () => {
 test("folder selection preserves webkitRelativePath", () => {
   const selected = selectImportFiles([
     fakeFile("sample.mzML", 8, "bundle/nested/sample.mzML"),
-  ], "folder", "MZML_ONLY");
+  ], "folder", "TD_MZML");
 
   expect(selected.files[0]?.relativePath).toBe("bundle/nested/sample.mzML");
   expect(selected.rootLabel).toBe("bundle");
 });
 
 test("empty, missing folder paths, and duplicate relative paths are rejected", () => {
-  expect(() => selectImportFiles([], "files", "MZML_ONLY")).toThrow(ImportFileSelectionError);
-  expect(() => selectImportFiles([fakeFile("a.mzML", 1)], "folder", "MZML_ONLY"))
+  expect(() => selectImportFiles([], "files", "TD_MZML")).toThrow(ImportFileSelectionError);
+  expect(() => selectImportFiles([fakeFile("a.mzML", 1)], "folder", "TD_MZML"))
     .toThrow("did not preserve relative file paths");
   expect(() => selectImportFiles([
     fakeFile("a.mzML", 1, "root/a.mzML"),
     fakeFile("a.mzML", 2, "root/a.mzML"),
-  ], "folder", "MZML_ONLY")).toThrow("Duplicate relative path");
+  ], "folder", "TD_MZML")).toThrow("Duplicate relative path");
 });
 
 test("RAW and mzML file modes reject mismatched extensions", () => {
-  expect(() => selectImportFiles([fakeFile("wrong.txt", 1)], "files", "RAW_ONLY"))
+  expect(() => selectImportFiles([fakeFile("wrong.txt", 1)], "files", "DDA_RAW"))
     .toThrow("Only .raw files");
-  expect(() => selectImportFiles([fakeFile("wrong.raw", 1)], "files", "MZML_ONLY"))
+  expect(() => selectImportFiles([fakeFile("wrong.raw", 1)], "files", "TD_MZML"))
     .toThrow("Only .mzml files");
 });
 
@@ -70,7 +70,7 @@ test("DIA-CLIP preflight is header-based and accepts an arbitrary result filenam
     textFile("renamed-output.tsv", `${DIACLIP_HEADER}\textra\n`, "bundle/results/renamed-output.tsv"),
     textFile("all_report.parquet", "", "bundle/all_report.parquet"),
     textFile("sample.raw", "", "bundle/sample.raw"),
-  ], "folder", "DIA_CLIP");
+  ], "folder", "BU_DIA_CLIP");
 
   await expect(preflightDiaclipSelection(selected.files)).resolves.toEqual({
     resultPath: "bundle/results/renamed-output.tsv",
@@ -84,7 +84,7 @@ test("DIA-CLIP preflight rejects a TSV without the supported v1 header", async (
     textFile("wrong.tsv", "modified_peptide\tcharge\n", "bundle/wrong.tsv"),
     textFile("all_report.parquet", "", "bundle/all_report.parquet"),
     textFile("sample.mzML", "", "bundle/sample.mzML"),
-  ], "folder", "DIA_CLIP");
+  ], "folder", "BU_DIA_CLIP");
 
   await expect(preflightDiaclipSelection(selected.files)).rejects.toThrow("supported v1 header");
 });
@@ -181,7 +181,7 @@ test("active ImportJob storage validates, persists, and clears the minimal recor
   const storage = memoryStorage();
   const record = {
     job_id: "job-1",
-    import_type: "MZML_ONLY" as const,
+    import_type: "TD_MZML" as const,
     upload_id: "upload-1",
     created_at: "2026-07-17T00:00:00.000Z",
   };
@@ -195,10 +195,10 @@ test("active ImportJob storage validates, persists, and clears the minimal recor
 test("active ImportJob storage accepts DIA-CLIP as an explicit import type", () => {
   expect(parseActiveImportJob(JSON.stringify({
     job_id: "job-clip",
-    import_type: "DIA_CLIP",
+    import_type: "BU_DIA_CLIP",
     upload_id: "upload-clip",
     created_at: "2026-07-23T00:00:00.000Z",
-  }))?.import_type).toBe("DIA_CLIP");
+  }))?.import_type).toBe("BU_DIA_CLIP");
 });
 
 test("invalid active ImportJob storage is rejected and removed", () => {

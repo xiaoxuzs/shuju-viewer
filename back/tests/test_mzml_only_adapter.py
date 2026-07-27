@@ -113,4 +113,35 @@ def test_mzml_only_adapter_records_raw_conversion_metadata(monkeypatch, tmp_path
     assert caps["analysis_shape"] == "raw_mzml_only"
     metadata = json.loads(conn.runs[0]["run_metadata"])
     assert metadata["raw_path"].endswith("sample.raw")
+    assert metadata["raw_format"] == "thermo_raw"
     assert metadata["raw_conversion"]["status"] == "converted"
+
+
+def test_mzml_only_adapter_preserves_dda_identity(monkeypatch, tmp_path: Path) -> None:
+    root = tmp_path / "dda"
+    root.mkdir()
+    converted = tmp_path / "converted" / "sample.mzML"
+    converted.parent.mkdir()
+    converted.write_text("<mzML />", encoding="utf-8")
+    conn = _Connection()
+    monkeypatch.setattr(mzml_only_adapter, "create_engine", lambda *_args, **_kwargs: _Engine(conn))
+
+    mzml_only_adapter.ingest_mzml_only(
+        root=root,
+        database_url="postgresql://unused",
+        slug="dda",
+        name="DDA",
+        replace=True,
+        extra_mzml_roots=(converted.parent,),
+        raw_conversion_by_mzml_key={
+            "sample": {"raw_path": str((root / "sample.raw").resolve())}
+        },
+        analysis_mode="BOTTOM_UP",
+        source_software="DDA Thermo RAW",
+        description="DDA spectra imported from Thermo RAW",
+    )
+
+    assert conn.datasets[0]["analysis_mode"] == "BOTTOM_UP"
+    assert conn.datasets[0]["software"] == "DDA Thermo RAW"
+    assert conn.runs[0]["analysis_mode"] == "BOTTOM_UP"
+    assert conn.runs[0]["software"] == "DDA Thermo RAW"

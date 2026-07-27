@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 
 const ACTIVE_JOB_KEY = "viewer.activeImportJob";
 const NOW = "2026-07-17T00:00:00.000Z";
@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("ordinary users see only local upload choices for all six import types", async ({ page }) => {
+test("analysis type reveals only its supported second-level import formats", async ({ page }) => {
   const oldPathRequests: string[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -24,25 +24,42 @@ test("ordinary users see only local upload choices for all six import types", as
   await expect(dialog.getByText("source path", { exact: false })).toHaveCount(0);
   await expect(dialog.getByText("import source", { exact: false })).toHaveCount(0);
 
-  for (const label of ["RAW", "mzML", "TopPIC", "PrSM", "DIA-NN", "DIA-CLIP"]) {
+  for (const label of ["Top-Down", "Bottom-Up", "DDA"]) {
     await expect(dialog.getByRole("radio", { name: label, exact: true })).toBeVisible();
   }
+  await expect(dialog.getByRole("heading", { name: "2. Import format" })).toHaveCount(0);
+  await expect(dialog.getByRole("heading", { name: "3. Dataset information" })).toHaveCount(0);
+  await expect(dialog.locator("#import-folder")).toHaveCount(0);
 
-  await dialog.getByRole("radio", { name: "RAW", exact: true }).click();
+  await dialog.getByRole("radio", { name: "Top-Down", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "3. Dataset information" })).toHaveCount(0);
+  for (const label of ["Thermo RAW", "mzML", "TopPIC HTML Output", "PrSM Detail Bundle", "TopPIC Native Output"]) {
+    await expect(dialog.getByRole("radio", { name: label, exact: true })).toBeVisible();
+  }
+  await dialog.getByRole("radio", { name: "Thermo RAW", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "3. Dataset information" })).toBeVisible();
   await expect(dialog.locator("#import-files")).toHaveAttribute("accept", ".raw");
   await expect(dialog.locator("#import-folder")).toHaveAttribute("webkitdirectory", "");
 
   await dialog.getByRole("radio", { name: "mzML", exact: true }).click();
   await expect(dialog.locator("#import-files")).toHaveAttribute("accept", ".mzML,.mzml");
 
-  for (const label of ["TopPIC", "PrSM", "DIA-NN", "DIA-CLIP"]) {
+  for (const label of ["TopPIC HTML Output", "PrSM Detail Bundle", "TopPIC Native Output"]) {
     await dialog.getByRole("radio", { name: label, exact: true }).click();
     await expect(dialog.locator("#import-files")).toHaveCount(0);
     await expect(dialog.locator("#import-folder")).toHaveAttribute("webkitdirectory", "");
   }
+  await dialog.getByRole("radio", { name: "Bottom-Up", exact: true }).click();
+  await expect(dialog.getByRole("radio", { name: "DIA-NN", exact: true })).toBeVisible();
+  await dialog.getByRole("radio", { name: "DIA-CLIP", exact: true }).click();
+  await expect(dialog.getByRole("radio", { name: "TopPIC Native Output", exact: true })).toHaveCount(0);
   await expect(dialog.getByText("DIA-CLIP v1 is a single-run Bottom-Up import", { exact: false })).toBeVisible();
   await expect(dialog.getByText("required context report", { exact: false })).toBeVisible();
   await expect(dialog.getByText("DIA-NN context", { exact: false })).toHaveCount(0);
+
+  await dialog.getByRole("radio", { name: "DDA", exact: true }).click();
+  await expect(dialog.getByRole("radio", { name: "Thermo RAW", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("radio", { name: "DIA-NN", exact: true })).toHaveCount(0);
   expect(oldPathRequests).toEqual([]);
 });
 
@@ -61,10 +78,10 @@ test("local files upload sequentially, auto-start ImportJob, and clear restored 
   });
   await page.route("**/api/v1/import-uploads", async (route) => {
     expect(route.request().method()).toBe("POST");
-    expect(route.request().postDataJSON()).toEqual({ import_type: "MZML_ONLY" });
+    expect(route.request().postDataJSON()).toEqual({ import_type: "TD_MZML" });
     await json(route, {
       upload_id: "upload-one",
-      import_type: "MZML_ONLY",
+      import_type: "TD_MZML",
       state: "CREATED",
       created_at: NOW,
     }, 201);
@@ -98,6 +115,7 @@ test("local files upload sequentially, auto-start ImportJob, and clear restored 
   await page.goto("/datasets");
   await page.getByRole("button", { name: "Upload local dataset" }).click();
   const dialog = page.getByRole("dialog", { name: "Upload local dataset" });
+  await chooseTopDownMzml(dialog);
   await dialog.locator("#import-files").setInputFiles([
     { name: "first.mzML", mimeType: "application/octet-stream", buffer: Buffer.from("12345678") },
     { name: "second.mzML", mimeType: "application/octet-stream", buffer: Buffer.from("abcdefghijkl") },
@@ -140,7 +158,7 @@ test("a structured upload error stops later files and exposes the managed-sessio
   await page.route("**/api/v1/import-uploads", async (route) => {
     await json(route, {
       upload_id: "upload-failed",
-      import_type: "MZML_ONLY",
+      import_type: "TD_MZML",
       state: "CREATED",
       created_at: NOW,
     }, 201);
@@ -159,6 +177,7 @@ test("a structured upload error stops later files and exposes the managed-sessio
   await page.goto("/datasets");
   await page.getByRole("button", { name: "Upload local dataset" }).click();
   const dialog = page.getByRole("dialog", { name: "Upload local dataset" });
+  await chooseTopDownMzml(dialog);
   await dialog.locator("#import-files").setInputFiles([
     { name: "first.mzML", mimeType: "application/octet-stream", buffer: Buffer.from("first") },
     { name: "second.mzML", mimeType: "application/octet-stream", buffer: Buffer.from("second") },
@@ -183,7 +202,7 @@ test("cancel aborts the active upload, deletes the unstarted session, and hides 
   await page.route("**/api/v1/import-uploads", async (route) => {
     await json(route, {
       upload_id: "upload-cancel",
-      import_type: "MZML_ONLY",
+      import_type: "TD_MZML",
       state: "CREATED",
       created_at: NOW,
     }, 201);
@@ -212,7 +231,7 @@ test("cancel aborts the active upload, deletes the unstarted session, and hides 
     }
     await json(route, {
       upload_id: "upload-cancel",
-      import_type: "MZML_ONLY",
+      import_type: "TD_MZML",
       state: "UPLOADING",
       file_count: 0,
       total_size_bytes: 0,
@@ -225,6 +244,7 @@ test("cancel aborts the active upload, deletes the unstarted session, and hides 
   await page.goto("/datasets");
   await page.getByRole("button", { name: "Upload local dataset" }).click();
   const dialog = page.getByRole("dialog", { name: "Upload local dataset" });
+  await chooseTopDownMzml(dialog);
   await dialog.locator("#import-files").setInputFiles({
     name: "cancel.mzML",
     mimeType: "application/octet-stream",
@@ -316,10 +336,15 @@ async function seedActiveJob(page: Page, jobId: string): Promise<void> {
 function activeJobJson(jobId: string): string {
   return JSON.stringify({
     job_id: jobId,
-    import_type: "MZML_ONLY",
+    import_type: "TD_MZML",
     upload_id: "upload-restored",
     created_at: NOW,
   });
+}
+
+async function chooseTopDownMzml(dialog: Locator): Promise<void> {
+  await dialog.getByRole("radio", { name: "Top-Down", exact: true }).click();
+  await dialog.getByRole("radio", { name: "mzML", exact: true }).click();
 }
 
 function importJob(status: "queued" | "running" | "success" | "failed", datasetSlug = "local-data") {

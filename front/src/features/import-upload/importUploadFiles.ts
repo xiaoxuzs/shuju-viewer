@@ -56,8 +56,8 @@ export interface DiaclipSelectionCheck {
 }
 
 function expectedExtension(importType: ImportUploadType): string | null {
-  if (importType === "RAW_ONLY") return ".raw";
-  if (importType === "MZML_ONLY") return ".mzml";
+  if (importType === "TD_RAW" || importType === "DDA_RAW" || importType === "RAW_ONLY") return ".raw";
+  if (importType === "TD_MZML" || importType === "MZML_ONLY") return ".mzml";
   return null;
 }
 

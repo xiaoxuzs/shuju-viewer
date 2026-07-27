@@ -19,7 +19,7 @@ test("upload session create, start, and delete use the existing API client contr
     if (config.url === "/import-uploads") {
       data = {
         upload_id: "upload-one",
-        import_type: "MZML_ONLY",
+        import_type: "TD_MZML",
         state: "CREATED",
         created_at: "2026-07-17T00:00:00Z",
       };
@@ -36,7 +36,7 @@ test("upload session create, start, and delete use the existing API client contr
   };
 
   try {
-    await expect(createImportUpload("MZML_ONLY")).resolves.toMatchObject({ upload_id: "upload-one" });
+    await expect(createImportUpload("TD_MZML")).resolves.toMatchObject({ upload_id: "upload-one" });
     await expect(startImportUpload("upload-one", {
       slug: "local-data",
       name: "Local data",
@@ -52,7 +52,7 @@ test("upload session create, start, and delete use the existing API client contr
     ["post", "/import-uploads/upload-one/start"],
     ["delete", "/import-uploads/upload-one"],
   ]);
-  expect(JSON.parse(String(requests[0]?.data))).toEqual({ import_type: "MZML_ONLY" });
+  expect(JSON.parse(String(requests[0]?.data))).toEqual({ import_type: "TD_MZML" });
   const startBody = JSON.parse(String(requests[1]?.data)) as Record<string, unknown>;
   expect(startBody).toEqual({
     parameters: { slug: "local-data", name: "Local data", description: null },

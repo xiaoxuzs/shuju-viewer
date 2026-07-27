@@ -54,6 +54,9 @@ def ingest_universal_prsm_js(
     slug: str,
     name: str,
     replace: bool = True,
+    source_software: str = "TopPIC_prsm_js",
+    description: str = "Dataset imported from PrSM detail files (no TopPIC HTML tree)",
+    import_mode: str = "prsm_js",
 ) -> UniversalImportStats:
     root = root.resolve()
     prsms_dir = prsm_bundle_prsm_directory(root)
@@ -77,9 +80,9 @@ def ingest_universal_prsm_js(
                     source_root, status, description, capabilities
                 )
                 VALUES (
-                    :name, :slug, 'TOP_DOWN', 'TopPIC_prsm_js',
+                    :name, :slug, 'TOP_DOWN', :source_software,
                     :source_root, 'IMPORTED',
-                    'Dataset imported from PrSM detail files (no TopPIC HTML tree)',
+                    :description,
                     CAST(:capabilities AS jsonb)
                 )
                 RETURNING dataset_id
@@ -89,6 +92,8 @@ def ingest_universal_prsm_js(
                 "name": name,
                 "slug": slug,
                 "source_root": str(root),
+                "source_software": source_software,
+                "description": description,
                 "capabilities": (
                     '{"has_ms1": true, "has_ms2": true, "has_prsms": true, '
                     '"has_proteoforms": true, "has_spectrum_files": true, '
@@ -115,12 +120,17 @@ def ingest_universal_prsm_js(
                     )
                     VALUES (
                         :dataset_id, :file_path, :file_name,
-                        'TOP_DOWN', 'TopPIC_prsm_js', 'IMPORTED'
+                        'TOP_DOWN', :source_software, 'IMPORTED'
                     )
                     RETURNING run_id
                     """
                 ),
-                {"dataset_id": dataset_id, "file_path": str(root), "file_name": key},
+                {
+                    "dataset_id": dataset_id,
+                    "file_path": str(root),
+                    "file_name": key,
+                    "source_software": source_software,
+                },
             ).one()
             run_id = int(r.run_id)
             run_by_file[key] = run_id
@@ -295,7 +305,7 @@ def ingest_universal_prsm_js(
                             "ms2_scans": str(header.get("scans") or ""),
                             "ms1_ids": str(header.get("ms1_ids") or ""),
                             "ms2_ids": str(header.get("ids") or ""),
-                            "import_mode": "prsm_js",
+                            "import_mode": import_mode,
                         }
                     ),
                 },

@@ -42,6 +42,10 @@ from app.ingest.bu.diann_parquet_reader import find_diann_report, inspect_report
 from app.ingest.bu.run_discovery import discover_bu_runs, match_diann_runs_to_files
 from app.ingest.bu.universal_diaclip_adapter import ingest_universal_diaclip
 from app.ingest.bu.universal_diann_adapter import ingest_universal_diann
+from app.ingest.td.toppic_native_output import (
+    PreparedTopPicNativeOutput,
+    prepare_toppic_native_output,
+)
 from app.import_types import ImportType
 from app.ingest.mzml_only_adapter import ingest_mzml_only
 from app.ingest.universal_prsm_js_adapter import ingest_universal_prsm_js
@@ -59,6 +63,8 @@ from app.services.incoming_path_relocate import relocate_incoming_root
 from app.services.mzml_mapping import (
     MzmlMappingError,
     build_mapping_from_extracted_dataset,
+    build_one_to_one_mapping,
+    extract_spectrum_file_names_from_prsms,
     normalize_spectrum_file_name,
 )
 from app.services.post_import_derived_data import build_post_import_derived_data
@@ -73,6 +79,7 @@ _PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
     "duplicate_check_by_fingerprint_s",
     "plan_zip_ingest_s",
     "raw_conversion_s",
+    "toppic_native_prepare_s",
     "mzml_mapping_validate_s",
     "bu_mzml_mapping_validate_s",
     "bu_pfmb_prepare_s",
@@ -863,12 +870,47 @@ def run_path_import_job(
             _t = time.perf_counter()
 
         extra_mzml_roots = (raw_conversion_output_dir,) if raw_conversion_output_dir is not None else None
+        prepared_toppic_native: PreparedTopPicNativeOutput | None = None
+        if plan.shape == DatasetShape.TOPPIC_NATIVE:
+            _update_job(
+                job_id,
+                stage="init",
+                stage_label=_PHASE_LABELS["init"],
+                stage_detail="Generating PrSM details from TopPIC Native Output",
+                message="Preparing TopPIC Native Output",
+                progress=_PHASE_RANGES["init"][0],
+            )
+            converted_mzml_files = tuple(
+                result.mzml_path
+                for result in (raw_conversion_batch.results if raw_conversion_batch else ())
+                if result.mzml_path is not None
+            )
+            prepared_toppic_native = prepare_toppic_native_output(
+                source_root=ingest_root,
+                output_root=(
+                    settings.resolved_data_root
+                    / ".viewer-derived"
+                    / "toppic-native"
+                    / fp.fingerprint.lower()
+                ),
+                additional_mzml_files=converted_mzml_files,
+            )
+            _slice("toppic_native_prepare_s")
+        else:
+            timing["toppic_native_prepare_s"] = 0.0
+            _t = time.perf_counter()
+
         mzml_mapping: dict[str, Path] | None = None
         spectra_source = plan.spectra_source
         is_bu_diann = plan.shape == DatasetShape.DIANN_DIA
         is_mzml_only = plan.shape == DatasetShape.MZML_ONLY
         needs_prsm_mzml_mapping = (
-            plan.shape in {DatasetShape.TOPPIC_HTML, DatasetShape.PRSM_BUNDLE}
+            plan.shape
+            in {
+                DatasetShape.TOPPIC_HTML,
+                DatasetShape.PRSM_BUNDLE,
+                DatasetShape.TOPPIC_NATIVE,
+            }
             and spectra_source == "mzml_memory"
         )
         pfmb_sidecar_dir: Path | None = None
@@ -893,13 +935,26 @@ def run_path_import_job(
                 message="Validating mzML mapping…",
             )
             try:
-                mapping_result = build_mapping_from_extracted_dataset(
-                    ingest_root=ingest_root,
-                    extra_mzml_roots=extra_mzml_roots,
-                )
+                if plan.shape == DatasetShape.TOPPIC_NATIVE:
+                    if prepared_toppic_native is None:
+                        raise RuntimeError(
+                            "internal error: prepared TopPIC Native Output is missing"
+                        )
+                    spectrum_file_names = extract_spectrum_file_names_from_prsms(
+                        prepared_toppic_native.root / "data" / "prsms"
+                    )
+                    mzml_mapping = build_one_to_one_mapping(
+                        spectrum_file_names=spectrum_file_names,
+                        mzml_files=list(prepared_toppic_native.mzml_files),
+                    )
+                else:
+                    mapping_result = build_mapping_from_extracted_dataset(
+                        ingest_root=ingest_root,
+                        extra_mzml_roots=extra_mzml_roots,
+                    )
+                    mzml_mapping = mapping_result.mapping
             except MzmlMappingError as exc:
                 raise RuntimeError(f"mzML mapping validation failed: {exc}") from exc
-            mzml_mapping = mapping_result.mapping
             timing["bu_mzml_mapping_validate_s"] = 0.0
             _slice("mzml_mapping_validate_s")
         else:
@@ -945,16 +1000,34 @@ def run_path_import_job(
                     progress_callback=_make_adapter_progress_handler(job_id),
                 )
                 _slice("assign_toppic_runs_from_prsm_headers_s")
-        elif plan.shape == DatasetShape.PRSM_BUNDLE:
+        elif plan.shape in {DatasetShape.PRSM_BUNDLE, DatasetShape.TOPPIC_NATIVE}:
             timing["ingest_universal_toppic_s"] = 0.0
             timing["ingest_universal_diann_s"] = 0.0
             timing["ingest_mzml_only_s"] = 0.0
+            native_import = plan.shape == DatasetShape.TOPPIC_NATIVE
+            if native_import and prepared_toppic_native is None:
+                raise RuntimeError(
+                    "internal error: prepared TopPIC Native Output is missing"
+                )
             stats = ingest_universal_prsm_js(
-                root=ingest_root,
+                root=(
+                    prepared_toppic_native.root
+                    if prepared_toppic_native is not None
+                    else ingest_root
+                ),
                 database_url=settings.database_url,
                 slug=slug,
                 name=name,
                 replace=True,
+                source_software=(
+                    "TopPIC Native Output" if native_import else "TopPIC_prsm_js"
+                ),
+                description=(
+                    "Dataset imported from TopPIC PrSM XML and TopFD MSAlign files"
+                    if native_import
+                    else "Dataset imported from PrSM detail files (no TopPIC HTML tree)"
+                ),
+                import_mode="toppic_native" if native_import else "prsm_js",
             )
             _slice("ingest_universal_prsm_js_s")
             timing["assign_toppic_runs_from_prsm_headers_s"] = 0.0
@@ -988,7 +1061,8 @@ def run_path_import_job(
             _slice("bu_pfmb_prepare_s")
             bu_ingest = (
                 ingest_universal_diaclip
-                if selected_import_type == ImportType.DIA_CLIP
+                if selected_import_type
+                in {ImportType.BU_DIA_CLIP, ImportType.DIA_CLIP}
                 else ingest_universal_diann
             )
             stats = bu_ingest(
@@ -1005,7 +1079,8 @@ def run_path_import_job(
             )
             _slice(
                 "ingest_universal_diaclip_s"
-                if selected_import_type == ImportType.DIA_CLIP
+                if selected_import_type
+                in {ImportType.BU_DIA_CLIP, ImportType.DIA_CLIP}
                 else "ingest_universal_diann_s"
             )
         elif plan.shape == DatasetShape.MZML_ONLY:
@@ -1013,6 +1088,30 @@ def run_path_import_job(
             timing["ingest_universal_prsm_js_s"] = 0.0
             timing["ingest_universal_diann_s"] = 0.0
             timing["assign_toppic_runs_from_prsm_headers_s"] = 0.0
+            spectra_profile = {
+                ImportType.TD_RAW: (
+                    "TOP_DOWN",
+                    "Top-Down Thermo RAW",
+                    "Top-Down spectra imported from Thermo RAW",
+                ),
+                ImportType.TD_MZML: (
+                    "TOP_DOWN",
+                    "Top-Down mzML",
+                    "Top-Down spectra imported from mzML",
+                ),
+                ImportType.DDA_RAW: (
+                    "BOTTOM_UP",
+                    "DDA Thermo RAW",
+                    "DDA spectra imported from Thermo RAW",
+                ),
+            }.get(
+                selected_import_type,
+                (
+                    "TOP_DOWN",
+                    "mzML_only",
+                    "Standalone mzML spectra dataset imported for basic spectra viewing",
+                ),
+            )
             stats = ingest_mzml_only(
                 root=ingest_root,
                 database_url=settings.database_url,
@@ -1021,6 +1120,9 @@ def run_path_import_job(
                 replace=True,
                 extra_mzml_roots=extra_mzml_roots,
                 raw_conversion_by_mzml_key=raw_conversion_by_mzml_key,
+                analysis_mode=spectra_profile[0],
+                source_software=spectra_profile[1],
+                description=spectra_profile[2],
             )
             _slice("ingest_mzml_only_s")
         else:
