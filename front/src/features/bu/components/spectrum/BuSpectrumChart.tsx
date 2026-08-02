@@ -15,11 +15,13 @@ import { toProductIonSelection } from "@/features/bu/components/match-detail/pro
 interface ChartPeak {
   mz: number;
   intensity: number;
+  relativeIntensity: number;
   ion?: BuMatchedIon;
   externalAnnotations: SpectrumExternalAnnotation[];
 }
 
 type PeakPrimarySource = "pfmb" | "live" | "none";
+type SpectrumIntensityMode = "relative" | "raw";
 
 const EMPTY_EXTERNAL_ANNOTATIONS: SpectrumExternalAnnotation[] = [];
 
@@ -110,6 +112,17 @@ function theoreticalCount(sequence: string): number {
   return Math.max(0, sequence.length * 2 - 2);
 }
 
+function formatRelativeIntensity(value: number): string {
+  if (!Number.isFinite(value)) return "-";
+  const abs = Math.abs(value);
+  if (abs < 0.05) return "0%";
+  return `${abs >= 10 ? value.toFixed(0) : value.toFixed(1)}%`;
+}
+
+function peakDisplayIntensity(peak: ChartPeak, mode: SpectrumIntensityMode): number {
+  return mode === "relative" ? peak.relativeIntensity : peak.intensity;
+}
+
 export function BuSpectrumChart({
   spectrum,
   sequence,
@@ -165,8 +178,15 @@ export function BuSpectrumChart({
     const mapped: ChartPeak[] = spectrum.mz.map((mz, index) => ({
       mz,
       intensity: spectrum.intensity[index] ?? 0,
+      relativeIntensity: 0,
       externalAnnotations: [],
     }));
+    const maxIntensity = Math.max(0, ...mapped.map((peak) => peak.intensity));
+    if (maxIntensity > 0) {
+      for (const peak of mapped) {
+        peak.relativeIntensity = Math.max(0, peak.intensity) / maxIntensity * 100;
+      }
+    }
     if (showLiveAnnotations) {
       for (const ion of spectrum.matched_ions) {
         const idx = nearestPeakIndex(mapped, ion.exp_mz);
@@ -191,6 +211,7 @@ export function BuSpectrumChart({
   const [tooltip, setTooltip] = useState<{ x: number; y: number; peak: ChartPeak } | null>(null);
   const [internalZoom, setInternalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const [labelMode, setLabelMode] = useState<SpectrumLabelMode>("top");
+  const [intensityMode, setIntensityMode] = useState<SpectrumIntensityMode>("relative");
   const zoom = zoomProp ?? internalZoom;
   const controlled = zoomProp !== undefined;
   const zoomRef = useRef(zoom);
@@ -203,6 +224,11 @@ export function BuSpectrumChart({
   commitZoomRef.current = (next) => {
     onZoomChange?.(next);
     if (!controlled) setInternalZoom(next);
+  };
+  const changeIntensityMode = (mode: SpectrumIntensityMode) => {
+    if (mode === intensityMode) return;
+    setIntensityMode(mode);
+    commitZoomRef.current({ x: zoomRef.current.x, y: null });
   };
 
   const fullX = useMemo<[number, number]>(() => {
@@ -258,8 +284,9 @@ export function BuSpectrumChart({
     const labelsG = plotG.append("g").attr("pointer-events", "none");
     const brushG = g.append("g");
 
+    const yAxisLabel = intensityMode === "relative" ? "Relative intensity (%)" : "Intensity";
     g.append("text").attr("x", innerW / 2).attr("y", innerH + 38).attr("text-anchor", "middle").attr("fill", BU_CHART.text).attr("font-size", 12).text("m/z");
-    g.append("text").attr("transform", `rotate(-90) translate(${-innerH / 2},${-52})`).attr("text-anchor", "middle").attr("fill", BU_CHART.text).attr("font-size", 12).text("Intensity");
+    g.append("text").attr("transform", `rotate(-90) translate(${-innerH / 2},${-52})`).attr("text-anchor", "middle").attr("fill", BU_CHART.text).attr("font-size", 12).text(yAxisLabel);
 
     let xScale = d3.scaleLinear().domain(fullX).range([0, innerW]);
     let yScale = d3.scaleLinear().domain([0, 1]).range([innerH, 0]);
@@ -270,14 +297,16 @@ export function BuSpectrumChart({
       const [x0, x1] = nextZoom.x ?? fullX;
       xScale = d3.scaleLinear().domain([x0, x1]).range([0, innerW]);
       visible = peaks.filter((p) => p.mz >= x0 && p.mz <= x1);
-      const yMax = Math.max(...visible.map((p) => p.intensity), 1);
+      const yMax = Math.max(...visible.map((p) => peakDisplayIntensity(p, intensityMode)), 1);
       yScale = d3.scaleLinear().domain(nextZoom.y ?? [0, yMax]).range([innerH, 0]);
 
       xAxisG.call(d3.axisBottom(xScale).ticks(Math.max(5, Math.floor(innerW / 100))) as any).call((sel) => {
         sel.selectAll("text").attr("fill", BU_CHART.text).attr("font-size", 11);
         sel.selectAll("line, path").attr("stroke", BU_CHART.axis);
       });
-      yAxisG.call(d3.axisLeft(yScale).ticks(5).tickFormat((d) => formatIntensity(Number(d))) as any).call((sel) => {
+      yAxisG.call(d3.axisLeft(yScale).ticks(5).tickFormat((d) =>
+        intensityMode === "relative" ? formatRelativeIntensity(Number(d)) : formatIntensity(Number(d)),
+      ) as any).call((sel) => {
         sel.selectAll("text").attr("fill", BU_CHART.text).attr("font-size", 11);
         sel.selectAll("line, path").attr("stroke", BU_CHART.axis);
       });
@@ -314,7 +343,7 @@ export function BuSpectrumChart({
         .attr("x1", (d) => xScale(d.mz))
         .attr("x2", (d) => xScale(d.mz))
         .attr("y1", y0)
-        .attr("y2", (d) => yScale(d.intensity))
+        .attr("y2", (d) => yScale(peakDisplayIntensity(d, intensityMode)))
         .attr("stroke", (d) => colorFor(d))
         .attr("stroke-width", (d) => {
           if (primarySourceFor(d) === "pfmb") return 1.8;
@@ -350,7 +379,7 @@ export function BuSpectrumChart({
       const annotated = visible.filter((p) => primarySourceFor(p) !== "none").sort((a, b) => b.intensity - a.intensity);
       const candidates = annotated.flatMap((peak) => {
         const px = xScale(peak.mz);
-        const py = yScale(peak.intensity);
+        const py = yScale(peakDisplayIntensity(peak, intensityMode));
         if (px < 0 || px > innerW || py < 0 || py > innerH) return [];
         const label = primaryLabelFor(peak);
         if (!label) return [];
@@ -424,7 +453,7 @@ export function BuSpectrumChart({
         (a, b) => Math.abs(xScale(a.mz) - cx) - Math.abs(xScale(b.mz) - cx),
       )[0];
       if (!selected?.ion || Math.abs(xScale(selected.mz) - cx) > 8) return;
-      const peakY = yScale(selected.intensity);
+      const peakY = yScale(peakDisplayIntensity(selected, intensityMode));
       if (cy < peakY - 8 || cy > yScale(0) + 8) return;
       clickTimer = setTimeout(() => {
         onMatchedIonClickRef.current?.(selected.ion!);
@@ -491,7 +520,7 @@ export function BuSpectrumChart({
       if (clickTimer) clearTimeout(clickTimer);
       applyZoomRef.current = null;
     };
-  }, [fullX, height, labelMode, peaks, selectedProductIonIds, spectrum.markers, width]);
+  }, [fullX, height, intensityMode, labelMode, peaks, selectedProductIonIds, spectrum.markers, width]);
 
   useEffect(() => {
     applyZoomRef.current?.(zoom);
@@ -552,6 +581,28 @@ export function BuSpectrumChart({
         </div>
       )}
       <div className="absolute right-2 top-12 flex items-center gap-1">
+        <div
+          className="inline-flex overflow-hidden rounded-md border border-border bg-card text-[11px] shadow-sm"
+          data-testid="spectrum-intensity-mode"
+        >
+          {([
+            ["relative", "Relative %"],
+            ["raw", "Raw intensity"],
+          ] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => changeIntensityMode(mode)}
+              aria-pressed={intensityMode === mode}
+              className={cn(
+                "px-2 py-0.5 transition-colors",
+                intensityMode === mode ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={() => commitZoomRef.current(DEFAULT_ZOOM)}
@@ -578,7 +629,16 @@ export function BuSpectrumChart({
           style={{ left: tooltip.x + 8, top: Math.max(0, tooltip.y + 16) }}
         >
           <div className="font-mono">m/z {tooltip.peak.mz.toFixed(4)}</div>
-          <div className="font-mono text-muted-foreground">int {formatIntensity(tooltip.peak.intensity)}</div>
+          {intensityMode === "relative" ? (
+            <>
+              <div className="font-mono text-muted-foreground">
+                rel {formatRelativeIntensity(tooltip.peak.relativeIntensity)}
+              </div>
+              <div className="font-mono text-muted-foreground">int {formatIntensity(tooltip.peak.intensity)}</div>
+            </>
+          ) : (
+            <div className="font-mono text-muted-foreground">int {formatIntensity(tooltip.peak.intensity)}</div>
+          )}
           {orderedPfmbAnnotations(tooltip.peak).length > 0 ? (
             <>
               {orderedPfmbAnnotations(tooltip.peak).map((annotation, index) => (

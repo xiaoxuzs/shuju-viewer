@@ -602,6 +602,34 @@ test("labels identification, MS1, and MS2 retention times independently", async 
   await expect(page.getByText(/MS2 scan RT: 92.4600 min/)).toBeVisible();
 });
 
+test("MS1 and MS2 spectra default to relative intensity and can switch to raw intensity", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+
+  const modes = page.getByTestId("spectrum-intensity-mode");
+  await expect(modes).toHaveCount(2);
+  const ms1Mode = modes.nth(0);
+  const ms2Mode = modes.nth(1);
+  const ms1Svg = page.locator('svg[aria-label^="MS1 scan #500"]');
+  const ms2Svg = page.locator('svg[aria-label^="MS2 scan #67726"]');
+
+  await expect(ms1Mode.getByRole("button", { name: "Relative %" })).toHaveAttribute("aria-pressed", "true");
+  await expect(ms2Mode.getByRole("button", { name: "Relative %" })).toHaveAttribute("aria-pressed", "true");
+  await expect(ms1Svg.getByText("Relative intensity (%)")).toBeVisible();
+  await expect(ms2Svg.getByText("Relative intensity (%)")).toBeVisible();
+
+  await ms1Mode.getByRole("button", { name: "Raw intensity" }).click();
+  await ms2Mode.getByRole("button", { name: "Raw intensity" }).click();
+  await expect(ms1Mode.getByRole("button", { name: "Raw intensity" })).toHaveAttribute("aria-pressed", "true");
+  await expect(ms2Mode.getByRole("button", { name: "Raw intensity" })).toHaveAttribute("aria-pressed", "true");
+  await expect(ms1Svg.getByText("Intensity", { exact: true })).toBeVisible();
+  await expect(ms2Svg.getByText("Intensity", { exact: true })).toBeVisible();
+
+  await ms2Mode.getByRole("button", { name: "Relative %" }).click();
+  await expect(ms2Mode.getByRole("button", { name: "Relative %" })).toHaveAttribute("aria-pressed", "true");
+  await expect(ms2Svg.getByText("Relative intensity (%)")).toBeVisible();
+});
+
 test("Evidence Summary shows PFMB fallback without hiding live evidence", async ({ page }) => {
   await mockMzmlMatch(page);
   await page.goto("/datasets/demo/matches/1");
