@@ -117,6 +117,23 @@ class Settings(BaseSettings):
     raw_conversion_output_dir: Path | None = Field(default=None)
     #: Force reconversion even when a same-stem mzML already exists.
     raw_conversion_force: bool = Field(default=False)
+    #: Optional Python executable for the isolated viewer-two conversion environment.
+    zp_worker_python: Path | None = Field(default=None)
+    #: Optional PYTHONPATH entries for the isolated ZP worker, comma-separated.
+    zp_worker_pythonpath: str = Field(default="")
+    #: Operator-pinned viewer-two/binary-layer commit or release label.
+    zp_binary_layer_commit: str | None = Field(default=None)
+    #: Optional storage root for committed .zp artifacts. Relative paths resolve under DATA_ROOT.
+    zp_output_root: Path | None = Field(default=None)
+    #: Optional temporary root for ZP conversion jobs. Relative paths resolve under ZP_OUTPUT_ROOT.
+    zp_temp_root: Path | None = Field(default=None)
+    #: Additional source roots allowed for ZP conversion, comma-separated. DATA_ROOT is always allowed.
+    zp_allowed_source_roots: str = Field(default="")
+    zp_default_format_version: int = Field(default=1, ge=1, le=3)
+    zp_conversion_timeout_seconds: int = Field(default=7200, ge=1)
+    zp_conversion_worker_threads: int = Field(default=6, ge=1, le=32)
+    zp_conversion_max_concurrent_jobs: int = Field(default=1, ge=1)
+    zp_v3_array_compression: str = Field(default="zstd")
 
     @property
     def pfmb_v2_reference_root_list(self) -> list[Path]:
@@ -152,6 +169,48 @@ class Settings(BaseSettings):
         if not root.is_absolute():
             root = (BACKEND_ROOT / root).resolve()
         return root
+
+    @property
+    def resolved_zp_output_root(self) -> Path:
+        root = self.zp_output_root or (self.resolved_data_root / ".viewer-zp")
+        if not root.is_absolute():
+            root = (self.resolved_data_root / root).resolve()
+        return root
+
+    @property
+    def resolved_zp_temp_root(self) -> Path:
+        root = self.zp_temp_root or (self.resolved_zp_output_root / ".tmp")
+        if not root.is_absolute():
+            root = (self.resolved_zp_output_root / root).resolve()
+        return root
+
+    @property
+    def zp_allowed_source_root_list(self) -> list[Path]:
+        roots = [self.resolved_data_root]
+        for part in self.zp_allowed_source_roots.split(","):
+            text = part.strip()
+            if not text:
+                continue
+            path = Path(text)
+            if not path.is_absolute():
+                path = (self.resolved_data_root / path).resolve()
+            roots.append(path)
+        return roots
+
+    @property
+    def zp_worker_pythonpath_list(self) -> list[str]:
+        return [part.strip() for part in self.zp_worker_pythonpath.split(",") if part.strip()]
+
+    def resolved_zp_worker_python(self) -> Path | None:
+        path = self.zp_worker_python
+        if path is None:
+            return None
+        if not path.is_absolute():
+            path = (BACKEND_ROOT / path).resolve()
+        return path
+
+    def resolved_zp_thermo_converter(self) -> Path | None:
+        return self.thermo_raw_file_parser_exe
 
 
 def load_settings() -> Settings:

@@ -15,6 +15,7 @@ from app.services.import_jobs import (
     ensure_jobs_table,
     ensure_runs_metadata_schema,
 )
+from app.zp_conversion.repository import ensure_zp_conversion_schema
 
 log = get_logger(__name__)
 
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
     ensure_jobs_table()
     ensure_dataset_fingerprint_schema()
     ensure_runs_metadata_schema()
+    ensure_zp_conversion_schema()
     yield
 
 
