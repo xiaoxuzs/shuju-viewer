@@ -197,14 +197,18 @@ try:
     from binary_layer.service import convert_source_to_zp, validate_zp
 
     converter = request.get("converter_path")
-    options = ConversionOptions(
-        converter_path=Path(converter) if converter else None,
-        temporary_directory=temp_dir / "intermediate",
-        keep_intermediate=False,
-        timeout_seconds=float(request["timeout_seconds"]),
-        worker_threads=int(request["worker_threads"]),
-        v3_array_compression=str(request.get("v3_array_compression") or "zstd"),
-    )
+    option_kwargs = {
+        "converter_path": Path(converter) if converter else None,
+        "temporary_directory": temp_dir / "intermediate",
+        "keep_intermediate": False,
+        "timeout_seconds": float(request["timeout_seconds"]),
+    }
+    option_fields = getattr(ConversionOptions, "__dataclass_fields__", {})
+    if "worker_threads" in option_fields:
+        option_kwargs["worker_threads"] = int(request["worker_threads"])
+    if "v3_array_compression" in option_fields:
+        option_kwargs["v3_array_compression"] = str(request.get("v3_array_compression") or "zstd")
+    options = ConversionOptions(**option_kwargs)
     result = convert_source_to_zp(
         source,
         partial,
