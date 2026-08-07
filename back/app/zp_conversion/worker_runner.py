@@ -242,6 +242,9 @@ try:
         }
     )
 except BaseException as exc:  # noqa: BLE001
+    # _finish() ends with SystemExit; re-raise so success (code=0) is not rewritten as failure.
+    if isinstance(exc, SystemExit):
+        raise
     code = getattr(exc, "code", None) or "ZP_WORKER_FAILED"
     _finish({"ok": False, "code": str(code)}, 1)
 '''
