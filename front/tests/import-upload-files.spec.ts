@@ -73,10 +73,43 @@ test("DIA-CLIP preflight is header-based and accepts an arbitrary result filenam
   ], "folder", "BU_DIA_CLIP");
 
   await expect(preflightDiaclipSelection(selected.files)).resolves.toEqual({
+    mode: "legacy_tsv_context",
     resultPath: "bundle/results/renamed-output.tsv",
     reportPath: "bundle/all_report.parquet",
     spectraSources: ["bundle/sample.raw"],
   });
+});
+
+test("DIA-CLIP preflight accepts one FDR parquet with matching mzML", async () => {
+  const selected = selectImportFiles([
+    fakeFile(
+      "Fig2HeLa-0-5h_MHRM_R01_T0.diaclip.fdr.parquet",
+      10,
+      "bundle/Fig2HeLa-0-5h_MHRM_R01_T0.diaclip.fdr.parquet",
+    ),
+    textFile(
+      "Fig2HeLa-0-5h_MHRM_R01_T0.diaclip.fdr.tsv",
+      "same result as TSV\n",
+      "bundle/Fig2HeLa-0-5h_MHRM_R01_T0.diaclip.fdr.tsv",
+    ),
+    textFile("sample.mzML", "", "bundle/sample.mzML"),
+  ], "folder", "BU_DIA_CLIP");
+
+  await expect(preflightDiaclipSelection(selected.files)).resolves.toEqual({
+    mode: "fdr_parquet",
+    resultPath: "bundle/Fig2HeLa-0-5h_MHRM_R01_T0.diaclip.fdr.parquet",
+    reportPath: null,
+    spectraSources: ["bundle/sample.mzML"],
+  });
+});
+
+test("DIA-CLIP FDR preflight requires mzML instead of raw", async () => {
+  const selected = selectImportFiles([
+    fakeFile("result.diaclip.fdr.parquet", 10, "bundle/result.diaclip.fdr.parquet"),
+    textFile("sample.raw", "", "bundle/sample.raw"),
+  ], "folder", "BU_DIA_CLIP");
+
+  await expect(preflightDiaclipSelection(selected.files)).rejects.toThrow("matching .mzML");
 });
 
 test("DIA-CLIP preflight rejects a TSV without the supported v1 header", async () => {

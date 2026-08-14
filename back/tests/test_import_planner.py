@@ -2,10 +2,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
+from app.ingest.bu.diaclip_fdr_result_reader import DIACLIP_FDR_COLUMNS
 from app.services.import_planner import ImportLayoutError, plan_zip_ingest
 from app.services.import_planner.types import DatasetShape
+
+
+def _write_empty_fdr_parquet(path: Path) -> None:
+    fields = []
+    for name in DIACLIP_FDR_COLUMNS:
+        if name in {"Run", "Precursor.Id", "Modified.Sequence", "Stripped.Sequence", "Protein.Ids", "Protein.Group", "Protein.Names", "Genes"}:
+            fields.append(pa.field(name, pa.string()))
+        elif name == "DIAClip.Passed":
+            fields.append(pa.field(name, pa.bool_()))
+        elif name in {"Run.Index", "Precursor.Charge", "Decoy", "Proteotypic"}:
+            fields.append(pa.field(name, pa.int64()))
+        else:
+            fields.append(pa.field(name, pa.float64()))
+    pq.write_table(pa.Table.from_arrays([pa.array([], type=field.type) for field in fields], schema=pa.schema(fields)), path)
 
 
 def test_plan_rejects_toppic_html_without_prsm(tmp_path: Path) -> None:
@@ -121,6 +138,18 @@ def test_plan_bu_diann_mixed(tmp_path: Path) -> None:
     assert plan.shape == DatasetShape.DIANN_DIA
     assert plan.spectra_source == "mixed"
     assert plan.need_toppic_multirun_pass is False
+
+
+def test_plan_accepts_diaclip_fdr_parquet_with_mzml_as_bottom_up_dia(tmp_path: Path) -> None:
+    _write_empty_fdr_parquet(tmp_path / "sample.diaclip.fdr.parquet")
+    mzml = tmp_path / "sample.mzML"
+    mzml.write_text("<mzML />", encoding="utf-8")
+
+    plan = plan_zip_ingest(tmp_path)
+
+    assert plan.shape == DatasetShape.DIANN_DIA
+    assert plan.spectra_source == "mzml_memory"
+    assert plan.mzml_files == (mzml.resolve(),)
 
 
 def test_plan_accepts_mzml_only(tmp_path: Path) -> None:

@@ -50,8 +50,9 @@ export const DIACLIP_REQUIRED_COLUMNS = [
 ] as const;
 
 export interface DiaclipSelectionCheck {
+  mode: "legacy_tsv_context" | "fdr_parquet";
   resultPath: string;
-  reportPath: string;
+  reportPath: string | null;
   spectraSources: string[];
 }
 
@@ -108,12 +109,12 @@ export function selectImportFiles(
 export async function preflightDiaclipSelection(
   files: SelectedUploadFile[],
 ): Promise<DiaclipSelectionCheck> {
-  const reportFiles = files.filter(({ relativePath }) => (
-    relativePath.split("/").at(-1)?.toLocaleLowerCase() === "all_report.parquet"
+  const fdrParquetFiles = files.filter(({ relativePath }) => (
+    relativePath.split("/").at(-1)?.toLocaleLowerCase().endsWith(".diaclip.fdr.parquet")
   ));
-  if (reportFiles.length !== 1) {
+  if (fdrParquetFiles.length > 1) {
     throw new ImportFileSelectionError(
-      `DIA-CLIP requires exactly one all_report.parquet; found ${reportFiles.length}.`,
+      `DIA-CLIP FDR import requires exactly one .diaclip.fdr.parquet; found ${fdrParquetFiles.length}.`,
     );
   }
 
@@ -127,6 +128,30 @@ export async function preflightDiaclipSelection(
   if (spectraSources.length === 0) {
     throw new ImportFileSelectionError(
       "DIA-CLIP requires one spectrum source: a .raw file, .mzML file, or Bruker .d directory.",
+    );
+  }
+
+  if (fdrParquetFiles.length === 1) {
+    const mzmlSources = spectraSources.filter((path) => path.toLocaleLowerCase().endsWith(".mzml"));
+    if (mzmlSources.length === 0) {
+      throw new ImportFileSelectionError(
+        "DIA-CLIP FDR parquet import requires one matching .mzML file.",
+      );
+    }
+    return {
+      mode: "fdr_parquet",
+      resultPath: fdrParquetFiles[0]!.relativePath,
+      reportPath: null,
+      spectraSources: mzmlSources,
+    };
+  }
+
+  const reportFiles = files.filter(({ relativePath }) => (
+    relativePath.split("/").at(-1)?.toLocaleLowerCase() === "all_report.parquet"
+  ));
+  if (reportFiles.length !== 1) {
+    throw new ImportFileSelectionError(
+      `DIA-CLIP requires exactly one all_report.parquet; found ${reportFiles.length}.`,
     );
   }
 
@@ -148,6 +173,7 @@ export async function preflightDiaclipSelection(
   }
 
   return {
+    mode: "legacy_tsv_context",
     resultPath: matchingResults[0]!.relativePath,
     reportPath: reportFiles[0]!.relativePath,
     spectraSources,

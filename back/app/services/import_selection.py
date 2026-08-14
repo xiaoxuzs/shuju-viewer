@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.import_types import ImportType
-from app.ingest.bu.diaclip_result_reader import inspect_diaclip_bundle
+from app.ingest.bu.diaclip_source import inspect_diaclip_source
 from app.services.import_planner.types import DatasetShape, ImportPlan
 
 
@@ -25,6 +25,15 @@ def validate_import_selection(
     prsm_bundle_types = {ImportType.TD_PRSM_BUNDLE, ImportType.PRSM}
     dia_nn_types = {ImportType.BU_DIA_NN, ImportType.DIA_NN}
     dia_clip_types = {ImportType.BU_DIA_CLIP, ImportType.DIA_CLIP}
+    if import_type in dia_clip_types:
+        if plan.shape != DatasetShape.DIANN_DIA:
+            raise ImportSelectionError(
+                f"The selected import type {import_type.value} does not match the dataset layout. "
+                "Choose the matching import type or provide the files described by the upload form."
+            )
+        inspect_diaclip_source(ingest_root)
+        return
+
     matches = (
         (import_type in raw_types and plan.shape == DatasetShape.MZML_ONLY and plan.contains_raw)
         or (import_type in mzml_types and plan.shape == DatasetShape.MZML_ONLY and not plan.contains_raw)
@@ -32,16 +41,12 @@ def validate_import_selection(
         or (import_type in prsm_bundle_types and plan.shape == DatasetShape.PRSM_BUNDLE)
         or (import_type == ImportType.TD_TOPPIC_NATIVE and plan.shape == DatasetShape.TOPPIC_NATIVE)
         or (import_type in dia_nn_types and plan.shape == DatasetShape.DIANN_DIA)
-        or (import_type in dia_clip_types and plan.shape == DatasetShape.DIANN_DIA)
     )
     if not matches:
         raise ImportSelectionError(
             f"The selected import type {import_type.value} does not match the dataset layout. "
             "Choose the matching import type or provide the files described by the upload form."
         )
-    if import_type in dia_clip_types:
-        inspect_diaclip_bundle(ingest_root)
-
 
 def default_import_kind(plan: ImportPlan) -> str:
     """Stable duplicate-key kind for legacy path imports without an explicit type."""

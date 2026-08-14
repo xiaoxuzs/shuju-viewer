@@ -7,8 +7,9 @@ DIA-CLIP 已作为 Bottom-Up 的独立导入类型接入，但没有复制一套
 当前边界是：
 
 - 用户在导入前明确选择 `DIA_CLIP`；后端不替用户猜测业务类型。
-- DIA-CLIP v1 负责读取候选、逻辑前体去重、target/decoy FDR、重打分和定量。
-- DIA-NN `all_report.parquet` 继续提供 Run、RT、precursor m/z、蛋白和肽段等展示上下文。
+- 旧版 DIA-CLIP v1 负责读取候选、逻辑前体去重、target/decoy FDR、重打分和定量。
+- 新版 DIA-CLIP FDR parquet 已经包含 Run、RT、precursor m/z、蛋白、肽段、score、q-value 和 quantity，可直接作为展示上下文。
+- 旧版导入仍由 DIA-NN `all_report.parquet` 提供 Run、RT、precursor m/z、蛋白和肽段等展示上下文。
 - 两者在适配完成后都进入同一个 `BottomUpSource` 窄接口，再复用现有 Bottom-Up 写入、XIC、MS2、PFMB 和列表/详情 API。
 - 页面仍使用 DIA-NN 已有的 Bottom-Up 视图；只有存在 `extra_metadata.diaclip` 时才增加 “DIA-CLIP evidence” 卡片。
 
@@ -28,7 +29,57 @@ flowchart LR
 
 ## 2. 当前支持的数据契约
 
-用户选择 DIA-CLIP 后，所选目录必须同时满足以下条件：
+用户选择 DIA-CLIP 后，后端支持两种互斥契约。
+
+### 2.1 FDR parquet + mzML
+
+这是当前推荐的服务器上传契约。所选目录必须同时满足以下条件：
+
+1. 恰好存在一个 DIA-CLIP FDR parquet，当前按完整 schema 识别，样例文件名为 `*.diaclip.fdr.parquet`。
+2. FDR parquet 必须恰好包含一个 `Run`。
+3. 目录中必须存在可与 `Run` 匹配的未压缩 `.mzML`。若目录中只有一个 mzML，可使用单运行 fallback；多 mzML 时必须按 run 名精确匹配。
+4. 一次导入只使用一个结果 parquet；同结果 TSV 只作为人工检查副本，不参与导入。
+
+当前 FDR parquet 契约字段为：
+
+```text
+Run.Index
+Run
+Precursor.Id
+Modified.Sequence
+Stripped.Sequence
+Precursor.Charge
+Decoy
+Proteotypic
+Precursor.Mz
+Protein.Ids
+Protein.Group
+Protein.Names
+Genes
+RT
+iRT
+Predicted.RT
+Predicted.iRT
+IM
+iIM
+Predicted.IM
+Predicted.iIM
+RT.Start
+RT.Stop
+FWHM
+DIAClip.Score
+DIAClip.Q.Value
+DIAClip.Feature.Distance
+DIAClip.Cosine.Similarity
+DIAClip.Quantity
+DIAClip.Passed
+```
+
+导入过滤为：`Decoy == 0`、`DIAClip.Passed == true`、`DIAClip.Q.Value < 0.01`。
+
+### 2.2 旧版 TSV + all_report.parquet
+
+旧版所选目录必须同时满足以下条件：
 
 1. 目录整体满足现有 DIA-NN Bottom-Up 物理布局：报告加 `.raw`、未压缩 `.mzML` 或 Bruker `.d` 谱图源。
 2. 恰好存在一个名为 `all_report.parquet` 的 DIA-NN 完整报告。`target_report.parquet` 不能替代它，因为 FDR 后通过的 DIA-CLIP target 必须能回连完整候选上下文。
@@ -98,15 +149,15 @@ C(Carbamidomethyl) -> C(UniMod:4)
 
 | 来源 | Viewer 落点 | 说明 |
 | --- | --- | --- |
-| DIA-CLIP `score` | `identification_matches.score` | 重打分结果 |
-| 计算所得 q-value | `identification_matches.q_value` | Viewer 的筛选 q-value |
-| `quant_result` | `identification_matches.intensity` | DIA-CLIP 定量主值 |
-| `feature_distance`、`cos_similarity` | `identification_matches.extra_metadata.diaclip` | 来源专属证据 |
+| DIA-CLIP `score` 或 `DIAClip.Score` | `identification_matches.score` | 重打分结果 |
+| 计算所得 q-value 或 `DIAClip.Q.Value` | `identification_matches.q_value` | Viewer 的筛选 q-value |
+| `quant_result` 或 `DIAClip.Quantity` | `identification_matches.intensity` | DIA-CLIP 定量主值 |
+| `feature_distance`/`DIAClip.Feature.Distance`、`cos_similarity`/`DIAClip.Cosine.Similarity` | `identification_matches.extra_metadata.diaclip` | 来源专属证据 |
 | 原始 DIA-NN Q/Global Q/quantity | `identification_matches.extra_metadata.diaclip` | 内部上下文与审计；前端仅以 Reference 字段展示，不覆盖 DIA-CLIP 主值 |
-| DIA-NN Run、RT、m/z、序列、蛋白 | 现有公共字段 | 内部复用公共数据；DIA-CLIP 页面不暴露 DIA-NN 来源名称 |
+| DIA-NN 或 FDR parquet 的 Run、RT、m/z、序列、蛋白 | 现有公共字段 | 统一复用 Bottom-Up 展示链路 |
 | 搜索引擎/来源软件 | `DIA-CLIP` | 页面 badge 和详情可识别来源 |
 
-当前 v1 TSV 只提供 `feature_distance`、`cos_similarity` 等标量，没有导出 DIA-CLIP 模型内部使用的 XIC 向量、张量或逐点表征。因此 Viewer 当前能可靠展示的是：
+旧版 v1 TSV 与新版 FDR parquet 都只提供表格标量，没有导出 DIA-CLIP 模型内部使用的 XIC 向量、张量或逐点表征。因此 Viewer 当前能可靠展示的是：
 
 - 从原始谱图读取的现有 precursor/product XIC；
 - DIA-CLIP 的重打分、FDR、定量和两个表征相关标量。
@@ -125,8 +176,12 @@ Viewer 不会根据这些标量臆造模型内部 XIC 表征。若未来 DIA-CLI
   - `BottomUpIdentification` 与 `BottomUpSource` 公共窄接口。
 - `back/app/ingest/bu/diaclip_result_reader.py`
   - DIA-CLIP v1 表头发现、严格解析、去重、FDR、单运行限制及 DIA-NN 回连。
+- `back/app/ingest/bu/diaclip_fdr_result_reader.py`
+  - DIA-CLIP FDR parquet schema 校验、单运行限制、target/passed/q-value 过滤和直接 Bottom-Up 映射。
+- `back/app/ingest/bu/diaclip_source.py`
+  - 统一检测旧版 TSV+context 与新版 FDR parquet 两种 DIA-CLIP 契约。
 - `back/app/ingest/bu/universal_diaclip_adapter.py`
-  - 薄适配器，把准备好的 DIA-CLIP 数据交给公共 Bottom-Up 写入器。
+  - 薄适配器，把准备好的 DIA-CLIP 数据交给公共 Bottom-Up 写入器；优先使用 FDR parquet，缺失时回退旧版 TSV+context。
 
 ### 4.2 修改后端模块
 

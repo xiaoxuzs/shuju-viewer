@@ -116,6 +116,11 @@ def _install_common_patches(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(import_jobs, "_validate_bu_mzml_mapping", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         import_jobs,
+        "inspect_diaclip_source",
+        lambda *_args, **_kwargs: SimpleNamespace(report_info=SimpleNamespace(run_names={"sample"})),
+    )
+    monkeypatch.setattr(
+        import_jobs,
         "prepare_bu_pfmb_sidecar",
         lambda *_args, **_kwargs: SimpleNamespace(status="skipped_no_pfmb", sidecar_dir=None, message="skipped"),
     )

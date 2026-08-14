@@ -16,6 +16,12 @@ from app.ingest.bu.diaclip_result_reader import (
     prepare_diaclip_source,
     read_diaclip_candidates,
 )
+from app.ingest.bu.diaclip_fdr_result_reader import (
+    DIACLIP_FDR_COLUMNS,
+    DIACLIP_FDR_SCHEMA_VERSION,
+    detect_diaclip_fdr_parquet,
+    prepare_diaclip_fdr_source,
+)
 
 
 def _write_tsv(path: Path, rows: list[list[object]], *, extra_column: bool = False) -> None:
@@ -33,6 +39,85 @@ def _write_tsv(path: Path, rows: list[list[object]], *, extra_column: bool = Fal
 
 def _write_report(path: Path, rows: list[dict[str, object]]) -> None:
     pq.write_table(pa.Table.from_pylist(rows), path)
+
+
+def _fdr_row(**overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "Run.Index": 0,
+        "Run": "run-one",
+        "Precursor.Id": "PEPTIDE2",
+        "Modified.Sequence": "PEPTIDE",
+        "Stripped.Sequence": "PEPTIDE",
+        "Precursor.Charge": 2,
+        "Decoy": 0,
+        "Proteotypic": 1,
+        "Precursor.Mz": 456.25,
+        "Protein.Ids": "P1",
+        "Protein.Group": "P1",
+        "Protein.Names": "",
+        "Genes": "GENE1",
+        "RT": 12.3,
+        "iRT": 10.0,
+        "Predicted.RT": 12.25,
+        "Predicted.iRT": 10.1,
+        "IM": 0.0,
+        "iIM": 1.0,
+        "Predicted.IM": 0.0,
+        "Predicted.iIM": 1.1,
+        "RT.Start": 12.0,
+        "RT.Stop": 12.6,
+        "FWHM": 0.1,
+        "DIAClip.Score": 0.98,
+        "DIAClip.Q.Value": 0.001,
+        "DIAClip.Feature.Distance": -0.2,
+        "DIAClip.Cosine.Similarity": 0.91,
+        "DIAClip.Quantity": 1234.0,
+        "DIAClip.Passed": True,
+    }
+    row.update(overrides)
+    return row
+
+
+def _write_fdr_parquet(path: Path, rows: list[dict[str, object]]) -> None:
+    schema = pa.schema(
+        [
+            pa.field("Run.Index", pa.int64()),
+            pa.field("Run", pa.string()),
+            pa.field("Precursor.Id", pa.string()),
+            pa.field("Modified.Sequence", pa.string()),
+            pa.field("Stripped.Sequence", pa.string()),
+            pa.field("Precursor.Charge", pa.int64()),
+            pa.field("Decoy", pa.int64()),
+            pa.field("Proteotypic", pa.int64()),
+            pa.field("Precursor.Mz", pa.float64()),
+            pa.field("Protein.Ids", pa.string()),
+            pa.field("Protein.Group", pa.string()),
+            pa.field("Protein.Names", pa.string()),
+            pa.field("Genes", pa.string()),
+            pa.field("RT", pa.float64()),
+            pa.field("iRT", pa.float64()),
+            pa.field("Predicted.RT", pa.float64()),
+            pa.field("Predicted.iRT", pa.float64()),
+            pa.field("IM", pa.float64()),
+            pa.field("iIM", pa.float64()),
+            pa.field("Predicted.IM", pa.float64()),
+            pa.field("Predicted.iIM", pa.float64()),
+            pa.field("RT.Start", pa.float64()),
+            pa.field("RT.Stop", pa.float64()),
+            pa.field("FWHM", pa.float64()),
+            pa.field("DIAClip.Score", pa.float64()),
+            pa.field("DIAClip.Q.Value", pa.float64()),
+            pa.field("DIAClip.Feature.Distance", pa.float64()),
+            pa.field("DIAClip.Cosine.Similarity", pa.float64()),
+            pa.field("DIAClip.Quantity", pa.float64()),
+            pa.field("DIAClip.Passed", pa.bool_()),
+        ]
+    )
+    table = pa.Table.from_pylist(
+        [{name: row.get(name) for name in DIACLIP_FDR_COLUMNS} for row in rows],
+        schema=schema,
+    )
+    pq.write_table(table, path)
 
 
 def _candidate(score: float, label: int, suffix: str) -> DiaclipCandidate:
@@ -198,3 +283,43 @@ def test_prepare_source_rejects_multiple_report_runs(tmp_path: Path) -> None:
 
     with pytest.raises(DiaclipLayoutError, match="exactly one DIA-NN Run"):
         prepare_diaclip_source(tmp_path)
+
+
+def test_fdr_parquet_detection_and_prepare_source_filters_to_passed_targets(tmp_path: Path) -> None:
+    fdr = tmp_path / "sample.diaclip.fdr.parquet"
+    _write_fdr_parquet(
+        fdr,
+        [
+            _fdr_row(),
+            _fdr_row(**{"Precursor.Id": "DECOY2", "Decoy": 1}),
+            _fdr_row(**{"Precursor.Id": "FAILED2", "DIAClip.Passed": False}),
+            _fdr_row(**{"Precursor.Id": "QHIGH2", "DIAClip.Q.Value": 0.02}),
+        ],
+    )
+    (tmp_path / "run-one.mzML").write_text("<mzML />", encoding="utf-8")
+
+    assert detect_diaclip_fdr_parquet(tmp_path) == fdr.resolve()
+    prepared = prepare_diaclip_fdr_source(tmp_path)
+
+    assert prepared.source.software == "DIA-CLIP"
+    assert prepared.source.import_mode == "diaclip_fdr_parquet"
+    assert prepared.source.extra_metadata["diaclip_schema_version"] == DIACLIP_FDR_SCHEMA_VERSION
+    assert prepared.stats.parquet_total_rows == 4
+    assert prepared.stats.accepted_targets == 1
+    assert prepared.stats.decoy_rows == 1
+    assert prepared.stats.failed_rows == 1
+    identification = prepared.source.identifications[0]
+    assert identification.report_row["Run"] == "run-one"
+    assert identification.report_row["RT.Start"] == 12.0
+    assert identification.score == 0.98
+    assert identification.q_value == 0.001
+    assert identification.intensity == 1234.0
+    assert identification.extra_metadata["diaclip"]["source_format"] == "fdr_parquet"
+    assert identification.extra_metadata["diaclip"]["quant_result"] == 1234.0
+
+
+def test_fdr_parquet_requires_matching_mzml(tmp_path: Path) -> None:
+    _write_fdr_parquet(tmp_path / "sample.diaclip.fdr.parquet", [_fdr_row()])
+
+    with pytest.raises(DiaclipLayoutError, match="requires one matching mzML"):
+        prepare_diaclip_fdr_source(tmp_path)

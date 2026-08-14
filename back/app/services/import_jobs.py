@@ -40,6 +40,7 @@ from app.ingest.universal_toppic_adapter import (
 )
 from app.ingest.bu.diann_parquet_reader import find_diann_report, inspect_report
 from app.ingest.bu.run_discovery import discover_bu_runs, match_diann_runs_to_files
+from app.ingest.bu.diaclip_source import inspect_diaclip_source
 from app.ingest.bu.universal_diaclip_adapter import ingest_universal_diaclip
 from app.ingest.bu.universal_diann_adapter import ingest_universal_diann
 from app.ingest.td.toppic_native_output import (
@@ -607,16 +608,24 @@ def _make_bu_adapter_progress_handler(job_id: str) -> Callable[[ProgressEvent], 
     return handle
 
 
-def _validate_bu_mzml_mapping(ingest_root: Path, *, extra_mzml_roots: tuple[Path, ...] | None = None) -> None:
+def _validate_bu_mzml_mapping(
+    ingest_root: Path,
+    *,
+    extra_mzml_roots: tuple[Path, ...] | None = None,
+    run_names: set[str] | None = None,
+    source_label: str = "DIA-NN",
+) -> None:
     """Validate DIA-NN Run values against discovered mzML files before ingest."""
-    report = find_diann_report(ingest_root)
-    info = inspect_report(report)
+    if run_names is None:
+        report = find_diann_report(ingest_root)
+        info = inspect_report(report)
+        run_names = info.run_names
     run_files = discover_bu_runs(ingest_root, extra_mzml_roots=extra_mzml_roots)
     if not any(run_file.raw_format == "mzml" for run_file in run_files):
-        raise RuntimeError("DIA-NN dataset requires mzML mapping validation, but no mzML files were found.")
-    matched = match_diann_runs_to_files(info.run_names, run_files)
+        raise RuntimeError(f"{source_label} dataset requires mzML mapping validation, but no mzML files were found.")
+    matched = match_diann_runs_to_files(run_names, run_files)
     if not any(run_file.raw_format == "mzml" for run_file in matched.values()):
-        raise RuntimeError("DIA-NN report did not map any Run value to an mzML file.")
+        raise RuntimeError(f"{source_label} result did not map any Run value to an mzML file.")
 
 
 def _run_post_import_derived_data(job_id: str, dataset_id: int) -> str | None:
@@ -987,15 +996,27 @@ def run_path_import_job(
         pfmb_sidecar_dir: Path | None = None
         pfmb_prepare_message: str | None = None
         if is_bu_diann and spectra_source in {"mzml_memory", "mixed"}:
+            is_diaclip_import = selected_import_type in {ImportType.BU_DIA_CLIP, ImportType.DIA_CLIP}
+            source_label = "DIA-CLIP" if is_diaclip_import else "DIA-NN"
+            run_names = (
+                inspect_diaclip_source(ingest_root).report_info.run_names
+                if is_diaclip_import
+                else None
+            )
             _update_job(
                 job_id,
-                stage_detail="Validating DIA-NN mzML mapping…",
-                message="Validating DIA-NN mzML mapping…",
+                stage_detail=f"Validating {source_label} mzML mapping...",
+                message=f"Validating {source_label} mzML mapping...",
             )
             try:
-                _validate_bu_mzml_mapping(ingest_root, extra_mzml_roots=extra_mzml_roots)
+                _validate_bu_mzml_mapping(
+                    ingest_root,
+                    extra_mzml_roots=extra_mzml_roots,
+                    run_names=run_names,
+                    source_label=source_label,
+                )
             except Exception as exc:  # noqa: BLE001
-                raise RuntimeError(f"DIA-NN mzML mapping validation failed: {exc}") from exc
+                raise RuntimeError(f"{source_label} mzML mapping validation failed: {exc}") from exc
             _slice("bu_mzml_mapping_validate_s")
             timing["mzml_mapping_validate_s"] = 0.0
             _t = time.perf_counter()

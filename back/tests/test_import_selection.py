@@ -26,7 +26,7 @@ def test_dia_nn_and_dia_clip_share_physical_diann_layout(
     checked: list[Path] = []
     monkeypatch.setattr(
         import_selection,
-        "inspect_diaclip_bundle",
+        "inspect_diaclip_source",
         lambda root: checked.append(root),
     )
 

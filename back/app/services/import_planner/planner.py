@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.dataset_ingest_root.resolver import has_bu_diann_layout
+from app.ingest.bu.diaclip_fdr_result_reader import has_diaclip_fdr_layout
 from app.ingest.td.toppic_native_output import has_toppic_native_output
 from app.raw_conversion.contracts import RAW_VENDOR_THERMO
 from app.raw_conversion.discovery import collect_raw_files
@@ -26,8 +27,8 @@ _UNSUPPORTED = (
     "with data_js/proteins.js plus PrSM detail files (prsm*.js|json|txt in data/, data/prsms/, or under "
     "that cutoff's data_js/prsms/), or (2) a PrSM-only bundle: supported prsm* under data/ or data/prsms/ "
     "with mzML present in the tree so spectra use mzml_memory mode, or (3) TopPIC Native Output with "
-    "*_toppic_prsm.xml and matching *_ms2.msalign files, or (4) standalone mzML-only/Thermo RAW-only spectra "
-    "files for basic spectra viewing."
+    "*_toppic_prsm.xml and matching *_ms2.msalign files, or (4) DIA-CLIP FDR parquet plus matching mzML, "
+    "or (5) standalone mzML-only/Thermo RAW-only spectra files for basic spectra viewing."
 )
 
 _PRSM_BUNDLE_NO_MZML = (
@@ -62,10 +63,11 @@ def plan_zip_ingest(ingest_root: Path) -> ImportPlan:
     }
     toppic = is_toppic_html_tree(root)
     bu_diann = has_bu_diann_layout(root)
+    bu_diaclip_fdr = has_diaclip_fdr_layout(root)
     prsm_bundle = prsm_bundle_prsm_directory(root) is not None
     toppic_native = has_toppic_native_output(root)
 
-    if bu_diann:
+    if bu_diann or bu_diaclip_fdr:
         return ImportPlan(
             shape=DatasetShape.DIANN_DIA,
             spectra_source=detect_bu_spectra_source(root),
