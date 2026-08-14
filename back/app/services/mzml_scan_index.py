@@ -257,6 +257,25 @@ def load_scan_index(
     *,
     derived_root: Path | None = None,
 ) -> MzmlScanIndex:
+    if session is not None:
+        from app.zp_runtime import (
+            ZpAssetReadError,
+            ZpRunMappingError,
+            ZpRunNotFoundError,
+            get_binary_scan_index,
+        )
+
+        try:
+            binary_index = get_binary_scan_index(session, dataset_id, run_id)
+        except ZpRunNotFoundError as exc:
+            raise RunNotFoundError("run not found") from exc
+        except ZpRunMappingError as exc:
+            raise ScanIndexUnsupportedError(str(exc)) from exc
+        except ZpAssetReadError as exc:
+            raise ScanIndexError(str(exc)) from exc
+        if binary_index is not None:
+            return binary_index
+
     source_path = _resolve_source_path(session, dataset_id, run_id)
     npz_path, metadata_path = scan_index_paths(dataset_id, run_id, derived_root=derived_root)
     if not npz_path.is_file() or not metadata_path.is_file():

@@ -1,7 +1,7 @@
 """Managed .zp conversion jobs and artifact metadata for Viewer.
 
-The module owns orchestration only. Final .zp bytes are produced by viewer-two's
-public binary_layer API in an isolated worker process.
+The module owns orchestration only. Final .zp bytes are produced by Viewer's
+binary layer in an isolated worker process.
 """
 
 from app.zp_conversion.contracts import ZpConversionError, ZpConversionJob

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -117,12 +118,18 @@ class Settings(BaseSettings):
     raw_conversion_output_dir: Path | None = Field(default=None)
     #: Force reconversion even when a same-stem mzML already exists.
     raw_conversion_force: bool = Field(default=False)
-    #: Optional Python executable for the isolated viewer-two conversion environment.
+    #: Optional Python executable for the isolated ZP conversion environment.
     zp_worker_python: Path | None = Field(default=None)
     #: Optional PYTHONPATH entries for the isolated ZP worker, comma-separated.
     zp_worker_pythonpath: str = Field(default="")
-    #: Operator-pinned viewer-two/binary-layer commit or release label.
+    #: Local path containing the Viewer-managed ZP binary layer package.
+    zp_engine_path: Path = Field(default=BACKEND_ROOT / "vendor" / "zp_engine")
+    #: Operator-pinned binary-layer commit or release label.
     zp_binary_layer_commit: str | None = Field(default=None)
+    #: Backend-only guard for ZP schema bootstrap and management/debug APIs.
+    zp_management_enabled: bool = Field(default=False)
+    #: Backend-only production guard. Keep disabled until ZP import E2E verification passes.
+    zp_import_conversion_enabled: bool = Field(default=False)
     #: Optional storage root for committed .zp artifacts. Relative paths resolve under DATA_ROOT.
     zp_output_root: Path | None = Field(default=None)
     #: Optional temporary root for ZP conversion jobs. Relative paths resolve under ZP_OUTPUT_ROOT.
@@ -201,10 +208,16 @@ class Settings(BaseSettings):
     def zp_worker_pythonpath_list(self) -> list[str]:
         return [part.strip() for part in self.zp_worker_pythonpath.split(",") if part.strip()]
 
+    def resolved_zp_engine_path(self) -> Path:
+        path = self.zp_engine_path
+        if not path.is_absolute():
+            path = (BACKEND_ROOT / path).resolve()
+        return path
+
     def resolved_zp_worker_python(self) -> Path | None:
         path = self.zp_worker_python
         if path is None:
-            return None
+            return Path(sys.executable)
         if not path.is_absolute():
             path = (BACKEND_ROOT / path).resolve()
         return path

@@ -13,6 +13,7 @@ from app.api.deps import get_db
 from app.bu.services import chromatogram_summary
 from app.schemas import BuChromatogramOut
 from app.services.mzml_scan_index import (
+    ScanIndexError,
     ScanIndexMissingError,
     ScanIndexStaleError,
     ScanIndexUnsupportedError,
@@ -28,6 +29,13 @@ from app.services.mzml_scan_reader import (
     get_spectrum_by_scan,
 )
 from app.spectrum_memory import release_dataset
+from app.zp_runtime import (
+    ZpAssetReadError,
+    ZpChromatogramNotFoundError,
+    ZpRunMappingError,
+    ZpRunNotFoundError,
+    get_binary_chromatogram,
+)
 
 
 router = APIRouter(tags=["mzml-spectra"])
@@ -166,6 +174,26 @@ def mzml_run_chromatogram(
 ) -> BuChromatogramOut:
     if type not in {"tic", "bpc"}:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid_chromatogram_type")
+    try:
+        binary_trace = get_binary_chromatogram(session, dataset_id, run_id, type)
+    except ZpRunNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="run_not_found") from exc
+    except ZpChromatogramNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ZpRunMappingError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ZpAssetReadError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    if binary_trace is not None:
+        rt, intensity, downsampled = _downsample(binary_trace.rt, binary_trace.intensity)
+        return BuChromatogramOut(
+            type=type,  # type: ignore[arg-type]
+            rt=rt,
+            intensity=intensity,
+            downsampled=downsampled,
+            point_count_original=binary_trace.point_count_original,
+        )
+
     run = _run_row(session, dataset_id, run_id)
     metadata = _run_metadata(run)
     raw_format = str(metadata.get("raw_format") or "").lower()
@@ -229,6 +257,8 @@ def mzml_run_scan_index(
         ) from exc
     except (ScanIndexUnsupportedError, RunNotFoundError, MzmlFileNotFoundError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ScanIndexError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
     positions = range(index.scan_count)
     if ms_level is not None:

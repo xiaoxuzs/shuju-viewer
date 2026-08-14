@@ -21,6 +21,14 @@ from app.schemas import (
     BuRunDetail,
     Page,
 )
+from app.zp_runtime import (
+    ZpBottomUpMatch,
+    ZpBottomUpPeptide,
+    ZpBottomUpProtein,
+    get_binary_bottom_up_match,
+    get_binary_bottom_up_peptide,
+    get_binary_bottom_up_protein,
+)
 
 
 def _json_object(raw: Any) -> dict[str, Any]:
@@ -237,8 +245,15 @@ def list_proteins(
         ),
         params,
     ).mappings().all()
+    items = []
+    for row in rows:
+        payload = dict(row)
+        binary = get_binary_bottom_up_protein(session, int(dataset["dataset_id"]), str(payload.get("accession") or ""))
+        if binary is not None:
+            payload = _binary_protein_list_payload(payload, binary)
+        items.append(BuProteinListItemOut(**payload))
     return Page[BuProteinListItemOut](
-        items=[BuProteinListItemOut(**dict(row)) for row in rows],
+        items=items,
         total=total,
         page=page,
         page_size=page_size,
@@ -308,8 +323,15 @@ def list_peptides(
         ),
         params,
     ).mappings().all()
+    items = []
+    for row in rows:
+        payload = dict(row)
+        binary = get_binary_bottom_up_peptide(session, int(dataset["dataset_id"]), str(payload.get("sequence") or ""))
+        if binary is not None:
+            payload = _binary_peptide_list_payload(payload, binary)
+        items.append(BuPeptideListItemOut(**payload))
     return Page[BuPeptideListItemOut](
-        items=[BuPeptideListItemOut(**dict(row)) for row in rows],
+        items=items,
         total=total,
         page=page,
         page_size=page_size,
@@ -321,9 +343,15 @@ def get_match_detail(
     dataset: dict[str, Any],
     match: dict[str, Any],
 ) -> BuMatchDetailOut:
+    binary = get_binary_bottom_up_match(session, int(dataset["dataset_id"]), match)
     meta = _json_object(match.get("extra_metadata"))
     run_meta = _json_object(match.get("run_metadata"))
-    scan_number = int(match["scan_number"])
+    if binary is not None:
+        meta = _binary_match_metadata(meta, binary)
+    binary_identification = binary.identification if binary is not None else {}
+    binary_spectrum = binary.spectrum if binary is not None else None
+    binary_typed = _json_object(binary_identification.get("typed_fields"))
+    scan_number = _binary_scan_number(binary_spectrum, match["scan_number"])
     scan_available = scan_number >= 0
     proteins = session.execute(
         text(
@@ -343,20 +371,24 @@ def get_match_detail(
     ).mappings().all()
     protein_group = meta.get("protein_group")
     links_base = f"/api/v1/datasets/{dataset['slug']}/matches/{match['match_id']}"
+    rt_apex = _first_value(
+        _seconds_to_minutes(binary_identification.get("rt_seconds")),
+        match.get("retention_time"),
+    )
     list_item = BuMatchListItemOut(
         id=int(match["match_id"]),
         run_id=int(match["run_id"]),
         run_name=str(match["run_name"] or ""),
         peptide_id=int(match["entity_id"]),
-        sequence=str(match["sequence"] or ""),
-        modified_sequence=match.get("modified_sequence"),
-        precursor_mz=match.get("precursor_mz"),
-        precursor_charge=match.get("precursor_charge"),
-        retention_time=match.get("retention_time"),
-        experimental_mass=match.get("experimental_mass"),
-        q_value=match.get("q_value"),
-        score=match.get("score"),
-        intensity=match.get("intensity"),
+        sequence=str(_first_value(binary_identification.get("stripped_sequence"), match.get("sequence"), "")),
+        modified_sequence=_first_value(binary_identification.get("modified_sequence"), match.get("modified_sequence")),
+        precursor_mz=_first_value(binary_identification.get("precursor_mz"), match.get("precursor_mz")),
+        precursor_charge=_first_value(binary_identification.get("charge"), match.get("precursor_charge")),
+        retention_time=rt_apex,
+        experimental_mass=_first_value(binary_identification.get("neutral_mass"), match.get("experimental_mass")),
+        q_value=_first_value(binary_typed.get("q_value"), match.get("q_value")),
+        score=_first_value(binary_typed.get("global_q_value"), binary_typed.get("q_value"), match.get("score")),
+        intensity=_first_value(_binary_identification_intensity(binary), match.get("intensity")),
         is_decoy_match=bool(match.get("is_decoy_match")),
         scan_number=scan_number,
         protein_group=protein_group,
@@ -366,11 +398,14 @@ def get_match_detail(
     )
     return BuMatchDetailOut(
         **list_item.model_dump(),
-        identification_rt_apex=match.get("retention_time"),
+        identification_rt_apex=rt_apex,
         scan_available=scan_available,
         scan_unavailable_reason=None if scan_available else "Not available from imported match metadata",
-        spectrum_native_id=match.get("spectrum_native_id"),
-        ms_level=int(match.get("ms_level") or 2),
+        spectrum_native_id=_first_value(
+            (binary_spectrum or {}).get("native_id") if binary_spectrum else None,
+            match.get("spectrum_native_id"),
+        ),
+        ms_level=int(_first_value((binary_spectrum or {}).get("ms_level") if binary_spectrum else None, match.get("ms_level"), 2)),
         run=BuRunDetail(
             run_id=int(match["run_id"]),
             file_name=str(match["run_name"] or ""),
@@ -379,9 +414,9 @@ def get_match_detail(
             diann_run_name=run_meta.get("diann_run_name"),
         ),
         rt_window=BuRtWindow(
-            rt_start=meta.get("rt_start"),
-            rt_stop=meta.get("rt_stop"),
-            rt_apex=match.get("retention_time"),
+            rt_start=_first_value(_seconds_to_minutes(binary_identification.get("rt_start_seconds")), meta.get("rt_start")),
+            rt_stop=_first_value(_seconds_to_minutes(binary_identification.get("rt_stop_seconds")), meta.get("rt_stop")),
+            rt_apex=rt_apex,
         ),
         proteins=[BuProteinMini(**dict(row)) for row in proteins],
         diann={
@@ -390,6 +425,8 @@ def get_match_detail(
             "mass_accuracy": meta.get("mass_evidence"),
             "ms2_scan": meta.get("ms2_scan"),
             "resolved_scan": meta.get("resolved_scan"),
+            "binary_identification_id": binary_identification.get("identification_id"),
+            "binary_spectrum_id": binary_identification.get("spectrum_id"),
         },
         spectrum_links={
             "xic": f"{links_base}/xic",
@@ -399,6 +436,176 @@ def get_match_detail(
         },
         extra_metadata=meta,
     )
+
+
+def _binary_match_metadata(
+    meta: dict[str, Any],
+    binary: ZpBottomUpMatch,
+) -> dict[str, Any]:
+    identification = binary.identification
+    typed = _json_object(identification.get("typed_fields"))
+    source = _json_object(identification.get("source_fields"))
+    protein_group = binary.protein_group or {}
+    out = dict(meta)
+    updates = {
+        "precursor_id": identification.get("source_precursor_id"),
+        "rt_start": _seconds_to_minutes(identification.get("rt_start_seconds")),
+        "rt_stop": _seconds_to_minutes(identification.get("rt_stop_seconds")),
+        "protein_group": _first_value(protein_group.get("source_group"), source.get("Protein.Group"), meta.get("protein_group")),
+        "genes": _first_value(source.get("Genes"), meta.get("genes")),
+        "lib_qvalue": _first_value(typed.get("lib_q_value"), meta.get("lib_qvalue")),
+        "mass_evidence": _first_value(typed.get("mass_evidence"), meta.get("mass_evidence")),
+        "binary_identification_id": identification.get("identification_id"),
+        "binary_spectrum_id": identification.get("spectrum_id"),
+    }
+    for key, value in updates.items():
+        if value is not None:
+            out[key] = value
+    return out
+
+
+def _binary_scan_number(spectrum: dict[str, Any] | None, fallback: Any) -> int:
+    if spectrum is not None:
+        try:
+            return int(spectrum["scan_number"])
+        except (KeyError, TypeError, ValueError):
+            pass
+    return int(fallback)
+
+
+def _binary_identification_intensity(binary: ZpBottomUpMatch | None) -> float | None:
+    if binary is None:
+        return None
+    for record in binary.quantification:
+        if record.get("entity_kind") != "identification":
+            continue
+        measurements = _json_object(record.get("measurements"))
+        for key in (
+            "precursor_quantity",
+            "precursor_normalised",
+            "ms1_area",
+            "ms1_apex_area",
+        ):
+            value = measurements.get(key)
+            if value is not None:
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    continue
+    return None
+
+
+def _binary_peptide_list_payload(
+    payload: dict[str, Any],
+    binary: ZpBottomUpPeptide,
+) -> dict[str, Any]:
+    peptide = binary.peptide
+    best = _best_bottom_up_identification(binary.identifications)
+    out = dict(payload)
+    out["sequence"] = _first_value(peptide.get("sequence"), out.get("sequence"))
+    out["length"] = _first_value(peptide.get("length"), out.get("length"))
+    out["match_count"] = len(binary.identifications)
+    out["protein_count"] = len(binary.proteins)
+    out["best_q_value"] = _first_value(_bottom_up_q_value(best), out.get("best_q_value"))
+    out["best_precursor_mz"] = _first_value((best or {}).get("precursor_mz"), out.get("best_precursor_mz"))
+    out["best_charge"] = _first_value((best or {}).get("charge"), out.get("best_charge"))
+    out["protein_groups"] = _first_value(_joined_values(binary.protein_groups, "source_group"), out.get("protein_groups"))
+    out["genes"] = _first_value(_joined_values(binary.proteins, "gene"), out.get("genes"))
+    out["example_modified"] = _first_value(
+        _first_list_value(peptide.get("modified_sequences")),
+        (best or {}).get("modified_sequence"),
+        out.get("example_modified"),
+    )
+    return out
+
+
+def _binary_protein_list_payload(
+    payload: dict[str, Any],
+    binary: ZpBottomUpProtein,
+) -> dict[str, Any]:
+    protein = binary.protein
+    out = dict(payload)
+    out["accession"] = _first_value(protein.get("accession"), out.get("accession"))
+    out["gene_name"] = _first_value(protein.get("gene"), protein.get("name"), out.get("gene_name"))
+    out["description"] = _first_value(protein.get("description"), out.get("description"))
+    out["is_decoy"] = bool(_first_value(protein.get("is_decoy"), out.get("is_decoy")))
+    out["protein_group"] = _first_value(_joined_values(binary.protein_groups, "source_group"), out.get("protein_group"))
+    out["peptide_count"] = len(binary.peptides)
+    out["match_count"] = len(binary.identifications)
+    out["best_q_value"] = _first_value(_best_bottom_up_q_value(binary.identifications), out.get("best_q_value"))
+    out["pg_q_value"] = _first_value(protein.get("q_value"), out.get("pg_q_value"))
+    return out
+
+
+def _binary_peptide_metadata(
+    meta: dict[str, Any],
+    binary: ZpBottomUpPeptide,
+) -> dict[str, Any]:
+    out = dict(meta)
+    peptide = binary.peptide
+    updates = {
+        "binary_peptide_id": peptide.get("peptide_id"),
+        "binary_identification_ids": [item.get("identification_id") for item in binary.identifications],
+        "binary_protein_ids": [item.get("protein_id") for item in binary.proteins],
+        "binary_protein_group_ids": [item.get("protein_group_id") for item in binary.protein_groups],
+        "binary_modified_sequences": peptide.get("modified_sequences"),
+        "binary_precursor_charges": peptide.get("precursor_charges"),
+        "binary_modification_count": len(binary.modifications),
+        "binary_quantification_count": len(binary.quantification),
+    }
+    for key, value in updates.items():
+        if value is not None:
+            out[key] = value
+    return out
+
+
+def _best_bottom_up_identification(records: tuple[dict[str, Any], ...]) -> dict[str, Any] | None:
+    if not records:
+        return None
+    return min(records, key=lambda item: (_bottom_up_q_value(item) is None, _bottom_up_q_value(item) or 0.0))
+
+
+def _best_bottom_up_q_value(records: tuple[dict[str, Any], ...]) -> float | None:
+    best = _best_bottom_up_identification(records)
+    return _bottom_up_q_value(best) if best is not None else None
+
+
+def _bottom_up_q_value(record: dict[str, Any] | None) -> float | None:
+    if record is None:
+        return None
+    typed = _json_object(record.get("typed_fields"))
+    try:
+        return float(typed.get("q_value")) if typed.get("q_value") is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _joined_values(records: tuple[dict[str, Any], ...], field_name: str) -> str | None:
+    values = [
+        str(item.get(field_name)).strip()
+        for item in records
+        if item.get(field_name) is not None and str(item.get(field_name)).strip()
+    ]
+    unique = list(dict.fromkeys(values))
+    return ";".join(unique) if unique else None
+
+
+def _first_list_value(value: Any) -> Any:
+    return value[0] if isinstance(value, list) and value else None
+
+
+def _seconds_to_minutes(value: Any) -> float | None:
+    try:
+        return float(value) / 60.0 if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_value(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
 
 
 def get_peptide_detail(session: Session, dataset: dict[str, Any], peptide_id: int) -> BuPeptideDetailOut | None:
@@ -513,12 +720,18 @@ def get_peptide_detail(session: Session, dataset: dict[str, Any], peptide_id: in
         )
         or 0
     )
+    binary = get_binary_bottom_up_peptide(session, int(dataset["dataset_id"]), str(item_rows.get("sequence") or ""))
+    base_payload = base.model_dump()
+    extra_metadata = _json_object(item_rows.get("extra_metadata"))
+    if binary is not None:
+        base_payload = _binary_peptide_list_payload(base_payload, binary)
+        extra_metadata = _binary_peptide_metadata(extra_metadata, binary)
     return BuPeptideDetailOut(
-        **base.model_dump(),
+        **base_payload,
         proteins=[BuPeptideProteinRef(**dict(row)) for row in protein_rows],
         matches_summary=BuPeptideMatchesSummary(
             total=total_matches,
             items=[BuPeptideMatchSummaryItem(**dict(row)) for row in match_rows],
         ),
-        extra_metadata=_json_object(item_rows.get("extra_metadata")),
+        extra_metadata=extra_metadata,
     )

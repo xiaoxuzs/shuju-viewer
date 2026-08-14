@@ -30,6 +30,7 @@ def _run(source_path: Path) -> dict[str, Any]:
 
 
 def _install_no_full_load_guards(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(chromatogram_service, "get_binary_chromatogram", lambda *_args: None)
     monkeypatch.setattr(spectrum_facade, "get_run_spectra", _fail)
     monkeypatch.setattr(spectrum_memory_wiring, "ensure_mzml_dataset_resident", _fail)
     monkeypatch.setattr(DatasetMzmlBundle, "load", _fail)
@@ -258,6 +259,7 @@ def test_mzml_chromatogram_preserves_downsampling(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    monkeypatch.setattr(chromatogram_service, "get_binary_chromatogram", lambda *_args: None)
     source_path = tmp_path / "run.mzML"
     source_path.write_bytes(b"source")
     point_count = chromatogram_service.MAX_POINTS + 10

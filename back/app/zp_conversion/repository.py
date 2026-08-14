@@ -22,6 +22,7 @@ def ensure_zp_conversion_schema() -> None:
         with _db_engine.begin() as conn:
             for statement in _schema_sql():
                 conn.execute(text(statement))
+            _migrate_binary_layer_version_column(conn)
     except Exception:  # noqa: BLE001
         log.exception("could not bootstrap ZP conversion schema")
 
@@ -79,7 +80,7 @@ def get_job(job_id: str) -> ZpConversionJob | None:
                 """
                 SELECT job_id, status, stage, progress, dataset_slug, input_root,
                        zp_temp_path, zp_final_path, worker_pid, format_version,
-                       viewer_two_version, input_bytes, output_bytes, output_sha256,
+                       binary_layer_version, input_bytes, output_bytes, output_sha256,
                        validation_mode, validation_certificate_path, error_code,
                        error_message, created_at, updated_at, finished_at
                 FROM zp_conversion_jobs
@@ -99,7 +100,7 @@ def update_job(job_id: str, **kwargs: Any) -> None:
         "stage",
         "progress",
         "worker_pid",
-        "viewer_two_version",
+        "binary_layer_version",
         "output_bytes",
         "output_sha256",
         "validation_mode",
@@ -239,7 +240,7 @@ def latest_job_for_dataset_slug(slug: str | None) -> ZpConversionJob | None:
                 """
                 SELECT job_id, status, stage, progress, dataset_slug, input_root,
                        zp_temp_path, zp_final_path, worker_pid, format_version,
-                       viewer_two_version, input_bytes, output_bytes, output_sha256,
+                       binary_layer_version, input_bytes, output_bytes, output_sha256,
                        validation_mode, validation_certificate_path, error_code,
                        error_message, created_at, updated_at, finished_at
                 FROM zp_conversion_jobs
@@ -251,6 +252,45 @@ def latest_job_for_dataset_slug(slug: str | None) -> ZpConversionJob | None:
             {"slug": slug},
         ).mappings().one_or_none()
     return _row_to_job(dict(row)) if row is not None else None
+
+
+def _migrate_binary_layer_version_column(conn: Any) -> None:
+    legacy_column = "viewer" + "_two_version"
+    columns = _table_columns(conn, "zp_conversion_jobs")
+    has_legacy = legacy_column in columns
+    has_current = "binary_layer_version" in columns
+    if has_legacy and not has_current:
+        conn.execute(text(f"ALTER TABLE zp_conversion_jobs RENAME COLUMN {legacy_column} TO binary_layer_version"))
+        return
+    if not has_current:
+        conn.execute(text("ALTER TABLE zp_conversion_jobs ADD COLUMN binary_layer_version TEXT NULL"))
+        return
+    if has_legacy:
+        conn.execute(
+            text(
+                f"""
+                UPDATE zp_conversion_jobs
+                SET binary_layer_version = COALESCE(binary_layer_version, {legacy_column})
+                """
+            )
+        )
+
+
+def _table_columns(conn: Any, table_name: str) -> set[str]:
+    if _is_sqlite():
+        rows = conn.execute(text(f"PRAGMA table_info({table_name})")).mappings().all()
+        return {str(row["name"]) for row in rows}
+    rows = conn.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = :table_name
+            """
+        ),
+        {"table_name": table_name},
+    ).scalars().all()
+    return {str(row) for row in rows}
 
 
 def _schema_sql() -> tuple[str, ...]:
@@ -268,7 +308,7 @@ def _schema_sql() -> tuple[str, ...]:
                 zp_final_path TEXT NULL,
                 worker_pid INTEGER NULL,
                 format_version INTEGER NOT NULL,
-                viewer_two_version TEXT NULL,
+                binary_layer_version TEXT NULL,
                 input_bytes INTEGER NULL,
                 output_bytes INTEGER NULL,
                 output_sha256 TEXT NULL,
@@ -318,7 +358,7 @@ def _schema_sql() -> tuple[str, ...]:
             zp_final_path TEXT NULL,
             worker_pid INTEGER NULL,
             format_version INTEGER NOT NULL,
-            viewer_two_version TEXT NULL,
+            binary_layer_version TEXT NULL,
             input_bytes BIGINT NULL,
             output_bytes BIGINT NULL,
             output_sha256 CHAR(64) NULL,
@@ -370,7 +410,7 @@ def _row_to_job(row: dict[str, Any]) -> ZpConversionJob:
         zp_final_path=_path_or_none(row.get("zp_final_path")),
         worker_pid=_int_or_none(row.get("worker_pid")),
         format_version=int(row["format_version"]),
-        viewer_two_version=row.get("viewer_two_version"),
+        binary_layer_version=row.get("binary_layer_version"),
         input_bytes=_int_or_none(row.get("input_bytes")),
         output_bytes=_int_or_none(row.get("output_bytes")),
         output_sha256=row.get("output_sha256"),

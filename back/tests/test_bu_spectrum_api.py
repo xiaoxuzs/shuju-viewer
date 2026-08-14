@@ -831,6 +831,7 @@ def test_product_xic_batch_route_matches_old_get(
 
 
 def test_chromatogram_accepts_bruker_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(chromatogram_service, "get_binary_chromatogram", lambda *_args: None)
     monkeypatch.setattr(
         chromatogram_service,
         "_run_row",

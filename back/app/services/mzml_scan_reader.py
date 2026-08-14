@@ -319,5 +319,27 @@ def get_spectrum_by_scan(
     run_id: int,
     scan_number: int,
 ) -> tuple[dict[str, Any], bool]:
+    if session is not None:
+        from app.zp_runtime import (
+            ZpAssetReadError,
+            ZpRunMappingError,
+            ZpRunNotFoundError,
+            ZpSpectrumNotFoundError,
+            get_binary_spectrum_by_scan,
+        )
+
+        try:
+            binary_spec = get_binary_spectrum_by_scan(session, dataset_id, run_id, scan_number)
+        except ZpRunNotFoundError as exc:
+            raise RunNotFoundError("run not found") from exc
+        except ZpSpectrumNotFoundError as exc:
+            raise SpectrumNotFoundError("scan not found in binary") from exc
+        except ZpRunMappingError as exc:
+            raise MzmlMappingError(str(exc)) from exc
+        except ZpAssetReadError as exc:
+            raise MzmlIndexError(str(exc)) from exc
+        if binary_spec is not None:
+            return binary_spec, False
+
     path, path_committed = resolve_run_mzml_path(session, dataset_id, run_id)
     return read_indexed_spectrum(path, scan_number), path_committed

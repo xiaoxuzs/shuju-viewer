@@ -13,6 +13,13 @@ from app.bu.tdf_reader import dia_windows as tdf_dia_windows
 from app.bu.tdf_reader.session_cache import TdfpyUnavailable
 from app.bu.services import chromatogram_summary
 from app.schemas import BuChromatogramOut, BuDiaWindowsOut
+from app.zp_runtime import (
+    ZpAssetReadError,
+    ZpChromatogramNotFoundError,
+    ZpRunMappingError,
+    ZpRunNotFoundError,
+    get_binary_chromatogram,
+)
 
 MAX_POINTS = 8000
 
@@ -58,6 +65,26 @@ def get_chromatogram(
             detail="invalid_chromatogram_type",
         )
     dataset_id = int(dataset["dataset_id"])
+    try:
+        binary_trace = get_binary_chromatogram(session, dataset_id, run_id, chrom_type)
+    except ZpRunNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="run_not_found") from exc
+    except ZpChromatogramNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ZpRunMappingError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ZpAssetReadError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    if binary_trace is not None:
+        rt, intensity, downsampled = _downsample(binary_trace.rt, binary_trace.intensity)
+        return BuChromatogramOut(
+            type=chrom_type,
+            rt=rt,
+            intensity=intensity,
+            downsampled=downsampled,
+            point_count_original=binary_trace.point_count_original,
+        )
+
     run = _run_row(session, dataset_id, run_id)
     run_meta = _json_object(run.get("run_metadata"))
     raw_format = str(run_meta.get("raw_format") or "").lower()

@@ -66,3 +66,31 @@ class ZpDatasetStatusOut(BaseModel):
     active_asset_count: int
     assets: list[ZpAssetOut]
     latest_job: ZpConversionJobOut | None = None
+
+
+class ZpExtensionSummaryOut(BaseModel):
+    extension_type: str
+    extension_version: str
+    owner: str | None = None
+    schema_name: str | None = None
+    schema_version: int | str | None = None
+    record_count: int | None = None
+
+
+class ZpExtensionListOut(BaseModel):
+    dataset_id: int
+    extensions: list[ZpExtensionSummaryOut]
+
+
+class ZpExtensionPayloadOut(BaseModel):
+    dataset_id: int
+    extension_type: str
+    extension_version: str
+    owner: str | None = None
+    schema_name: str | None = None
+    schema_version: int | str | None = None
+    record_count: int | None = None
+    offset: int = 0
+    limit: int = 100
+    returned_record_count: int | None = None
+    payload: dict[str, Any]

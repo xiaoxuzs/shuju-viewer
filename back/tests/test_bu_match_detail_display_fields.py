@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from app.bu.services import lists_service
 
 
@@ -44,7 +46,8 @@ def _match(scan_number: int) -> dict[str, Any]:
     }
 
 
-def test_match_detail_keeps_scan_sentinel_and_adds_display_safe_fields() -> None:
+def test_match_detail_keeps_scan_sentinel_and_adds_display_safe_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(lists_service, "get_binary_bottom_up_match", lambda *_args, **_kwargs: None)
     out = lists_service.get_match_detail(
         _Session(),  # type: ignore[arg-type]
         {"dataset_id": 39, "slug": "demo"},
@@ -58,7 +61,8 @@ def test_match_detail_keeps_scan_sentinel_and_adds_display_safe_fields() -> None
     assert out.rt_window.rt_apex == 92.46
 
 
-def test_match_detail_marks_real_imported_scan_as_available() -> None:
+def test_match_detail_marks_real_imported_scan_as_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(lists_service, "get_binary_bottom_up_match", lambda *_args, **_kwargs: None)
     out = lists_service.get_match_detail(
         _Session(),  # type: ignore[arg-type]
         {"dataset_id": 39, "slug": "demo"},

@@ -102,6 +102,7 @@ def test_mzml_spectrum_returns_404_when_run_is_not_in_dataset(
 
 
 def test_generic_chromatogram_endpoint_does_not_require_bu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mzml_spectra_api, "get_binary_chromatogram", lambda *_args: None)
     monkeypatch.setattr(
         mzml_spectra_api,
         "_run_row",

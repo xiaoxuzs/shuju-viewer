@@ -54,7 +54,7 @@ class ZpConversionJob:
     zp_final_path: Path | None
     format_version: int
     worker_pid: int | None = None
-    viewer_two_version: str | None = None
+    binary_layer_version: str | None = None
     input_bytes: int | None = None
     output_bytes: int | None = None
     output_sha256: str | None = None

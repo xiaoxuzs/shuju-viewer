@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.schemas import BuOverviewOut, BuOverviewCounts, BuQcBlock, BuRtMzHeatmapOut, BuRunSummary
+from app.zp_runtime import ZpBottomUpOverview, get_binary_bottom_up_overview
 
 
 def _json_object(raw: Any) -> dict[str, Any]:
@@ -79,8 +80,47 @@ def _runs(session: Session, dataset_id: int) -> list[BuRunSummary]:
     return out
 
 
+def _binary_runs(
+    session: Session,
+    dataset_id: int,
+    *,
+    match_count: int,
+) -> list[BuRunSummary]:
+    rows = session.execute(
+        text(
+            """
+            SELECT run_id, file_name, run_metadata
+            FROM runs
+            WHERE dataset_id = :dataset_id
+            ORDER BY run_id
+            """
+        ),
+        {"dataset_id": dataset_id},
+    ).mappings().all()
+    out: list[BuRunSummary] = []
+    single_run_match_count = match_count if len(rows) == 1 else None
+    for row in rows:
+        meta = _run_meta(row.get("run_metadata"))
+        raw_format = meta.get("raw_format")
+        out.append(
+            BuRunSummary(
+                run_id=int(row["run_id"]),
+                file_name=str(row["file_name"] or ""),
+                raw_format=raw_format,
+                diann_run_name=meta.get("diann_run_name"),
+                match_count=single_run_match_count,
+                has_im=(raw_format == "bruker_d"),
+            )
+        )
+    return out
+
+
 def get_overview(session: Session, dataset: dict[str, Any]) -> BuOverviewOut:
     dataset_id = int(dataset["dataset_id"])
+    binary = get_binary_bottom_up_overview(session, dataset_id)
+    if binary is not None:
+        return _binary_overview(session, dataset, binary)
+
     counts_row = session.execute(
         text(
             """
@@ -118,6 +158,61 @@ def get_overview(session: Session, dataset: dict[str, Any]) -> BuOverviewOut:
         import_stats=_json_object(extra.get("import_stats")),
         created_at=dataset["created_at"],
     )
+
+
+def _binary_overview(
+    session: Session,
+    dataset: dict[str, Any],
+    binary: ZpBottomUpOverview,
+) -> BuOverviewOut:
+    dataset_id = int(dataset["dataset_id"])
+    extra = _json_object(dataset.get("extra_metadata"))
+    summary = binary.summary
+    metadata = binary.metadata
+    matches = _int_count(summary.get("identification"))
+    runs = _binary_runs(session, dataset_id, match_count=matches)
+    qc_rows = _qc_rows(extra)
+    capabilities = _json_object(dataset.get("capabilities"))
+    capabilities["binary_layer"] = {
+        "available": True,
+        "identifications": True,
+        "summary": True,
+        "source_type": summary.get("source_type"),
+        "adapter_flavor": summary.get("adapter_flavor"),
+        "identification_kind": summary.get("identification_kind"),
+        "fragment_support": summary.get("fragment_support"),
+        "quantification": binary.quantification_summary,
+    }
+    selection = _json_object(metadata.get("selection_policy"))
+    return BuOverviewOut(
+        dataset_id=dataset_id,
+        slug=str(dataset["slug"]),
+        name=str(dataset["dataset_name"]),
+        source_software=metadata.get("source_software") or dataset.get("source_software"),
+        status=str(dataset["status"]),
+        source_root=str(dataset["source_root"]),
+        q_value_cutoff=selection.get("q_value_cutoff") or extra.get("q_value_cutoff"),
+        counts=BuOverviewCounts(
+            matches=matches,
+            peptides=_int_count(summary.get("peptide")),
+            proteins=_int_count(summary.get("protein")),
+            protein_groups=_int_count(summary.get("protein_group")),
+            runs=len(runs),
+            decoy_matches=0,
+        ),
+        qc=BuQcBlock(by_run=qc_rows, aggregated=_aggregate_qc(qc_rows)),
+        runs=runs,
+        capabilities=capabilities,
+        import_stats=_json_object(extra.get("import_stats")),
+        created_at=dataset["created_at"],
+    )
+
+
+def _int_count(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def get_rt_mz_heatmap(

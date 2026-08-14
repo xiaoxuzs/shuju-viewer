@@ -57,7 +57,7 @@ from app.raw_conversion import (
     convert_raw_files_for_import,
 )
 from app.services.import_planner import ImportLayoutError, plan_zip_ingest
-from app.services.import_planner.types import DatasetShape
+from app.services.import_planner.types import DatasetShape, ImportPlan
 from app.services.import_selection import default_import_kind, validate_import_selection
 from app.services.incoming_path_relocate import relocate_incoming_root
 from app.services.mzml_mapping import (
@@ -92,6 +92,7 @@ _PATH_IMPORT_WORKER_TIMING_ORDER: tuple[str, ...] = (
     "assign_toppic_runs_from_prsm_headers_s",
     "description_update_s",
     "db_finalize_paths_and_metadata_s",
+    "zp_conversion_s",
     "derived_data_backfill_s",
     "job_status_success_update_s",
     "total_path_import_worker_s",
@@ -752,6 +753,76 @@ def _dataset_raw_conversion_summary(batch: RawConversionBatch | None) -> dict[st
     return {"raw_conversion_summary": batch.summary()}
 
 
+def _run_zp_conversion_for_import(
+    *,
+    job_id: str,
+    ingest_root: Path,
+    slug: str,
+    plan: ImportPlan,
+    raw_conversion_batch: RawConversionBatch | None,
+    prepared_toppic_native: PreparedTopPicNativeOutput | None,
+) -> None:
+    source = _zp_source_for_import(
+        ingest_root=ingest_root,
+        plan=plan,
+        raw_conversion_batch=raw_conversion_batch,
+        prepared_toppic_native=prepared_toppic_native,
+    )
+    _update_job(
+        job_id,
+        stage="finalize",
+        stage_label=_PHASE_LABELS["finalize"],
+        stage_detail="Generating ZP artifact",
+        message="Generating ZP artifact",
+        progress=98.0,
+    )
+    # Keep ZP conversion lazy so disabled production imports do not load worker-only code.
+    from app.zp_conversion import service as zp_conversion_service
+    from app.zp_conversion.contracts import ZpConversionError
+
+    try:
+        zp_job = zp_conversion_service.enqueue_conversion(
+            source_path=source,
+            dataset_slug=slug,
+            start_background=False,
+        )
+    except ZpConversionError as exc:
+        raise RuntimeError(f"ZP conversion could not be queued: {exc.message}") from exc
+    finished = zp_conversion_service.run_conversion_job(zp_job.job_id)
+    if finished is None:
+        raise RuntimeError("ZP conversion job disappeared before completion.")
+    if finished.status != "success":
+        message = finished.public_error_message or finished.error_message or finished.error_code or "ZP conversion failed."
+        raise RuntimeError(f"ZP conversion failed: {message}")
+
+
+def _zp_source_for_import(
+    *,
+    ingest_root: Path,
+    plan: ImportPlan,
+    raw_conversion_batch: RawConversionBatch | None,
+    prepared_toppic_native: PreparedTopPicNativeOutput | None,
+) -> Path:
+    if plan.shape == DatasetShape.TOPPIC_NATIVE:
+        if prepared_toppic_native is None:
+            raise RuntimeError("internal error: prepared TopPIC Native Output is missing for ZP conversion")
+        return prepared_toppic_native.root
+    if plan.shape != DatasetShape.MZML_ONLY:
+        return ingest_root
+
+    converted_mzml = tuple(
+        result.mzml_path
+        for result in (raw_conversion_batch.results if raw_conversion_batch else ())
+        if result.mzml_path is not None
+    )
+    candidates = converted_mzml or plan.mzml_files or plan.raw_files
+    if len(candidates) != 1:
+        raise RuntimeError(
+            f"ZP conversion requires exactly one spectra source for mzML-only imports; found {len(candidates)}."
+        )
+    return candidates[0]
+
+
 def run_path_import_job(
     *,
     job_id: str,
@@ -1305,6 +1376,22 @@ def run_path_import_job(
                 f"Import finished, but failed to persist dataset path / fingerprint: {exc}"
             ) from exc
         _slice("db_finalize_paths_and_metadata_s")
+
+        if settings.zp_management_enabled and settings.zp_import_conversion_enabled:
+            _run_zp_conversion_for_import(
+                job_id=job_id,
+                ingest_root=ingest_root,
+                slug=slug,
+                plan=plan,
+                raw_conversion_batch=raw_conversion_batch,
+                prepared_toppic_native=prepared_toppic_native,
+            )
+            _slice("zp_conversion_s")
+        else:
+            # Backend-only production guard: default servers must keep legacy imports unblocked
+            # until real .zp import-to-visualization verification has passed.
+            timing["zp_conversion_s"] = 0.0
+            _t = time.perf_counter()
 
         derived_data_warning = _run_post_import_derived_data(
             job_id,

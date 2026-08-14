@@ -128,6 +128,8 @@ def _install_common_patches(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(import_jobs.settings, "raw_conversion_output_dir", None)
     monkeypatch.setattr(import_jobs.settings, "raw_conversion_timeout_seconds", 10)
     monkeypatch.setattr(import_jobs.settings, "raw_conversion_force", False)
+    monkeypatch.setattr(import_jobs.settings, "zp_management_enabled", False)
+    monkeypatch.setattr(import_jobs.settings, "zp_import_conversion_enabled", False)
 
     def fake_ingest_universal_diann(
         *,
@@ -261,6 +263,90 @@ def test_import_job_without_raw_does_not_call_converter(
     assert metadata["raw_format"] == "mzml"
     assert "raw_conversion" not in metadata
     assert not any(update.get("status") == "failed" for update in state["updates"])
+
+
+def test_import_job_skips_zp_conversion_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = _make_diann_root(tmp_path, raw=False, mzml=True)
+    state = _install_common_patches(monkeypatch)
+
+    def fail_zp_if_called(**_kwargs: Any) -> None:
+        raise AssertionError("automatic ZP conversion must be disabled by default")
+
+    monkeypatch.setattr(import_jobs, "_run_zp_conversion_for_import", fail_zp_if_called)
+
+    _run_job(root)
+
+    assert state["derived_calls"] == [7]
+    assert not any(update.get("status") == "failed" for update in state["updates"])
+
+
+def test_import_job_calls_zp_conversion_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = _make_diann_root(tmp_path, raw=False, mzml=True)
+    state = _install_common_patches(monkeypatch)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(import_jobs.settings, "zp_management_enabled", True)
+    monkeypatch.setattr(import_jobs.settings, "zp_import_conversion_enabled", True)
+
+    def record_zp_call(**kwargs: Any) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(import_jobs, "_run_zp_conversion_for_import", record_zp_call)
+
+    _run_job(root)
+
+    assert len(calls) == 1
+    assert calls[0]["job_id"] == "job-raw"
+    assert calls[0]["slug"] == "raw-test"
+    assert calls[0]["ingest_root"] == root.resolve()
+    assert state["derived_calls"] == [7]
+    assert not any(update.get("status") == "failed" for update in state["updates"])
+
+
+def test_import_job_skips_zp_conversion_without_management_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = _make_diann_root(tmp_path, raw=False, mzml=True)
+    state = _install_common_patches(monkeypatch)
+    monkeypatch.setattr(import_jobs.settings, "zp_import_conversion_enabled", True)
+
+    def fail_zp_if_called(**_kwargs: Any) -> None:
+        raise AssertionError("automatic ZP conversion requires ZP management to be enabled")
+
+    monkeypatch.setattr(import_jobs, "_run_zp_conversion_for_import", fail_zp_if_called)
+
+    _run_job(root)
+
+    assert state["derived_calls"] == [7]
+    assert not any(update.get("status") == "failed" for update in state["updates"])
+
+
+def test_import_job_fails_when_zp_conversion_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = _make_diann_root(tmp_path, raw=False, mzml=True)
+    state = _install_common_patches(monkeypatch)
+    monkeypatch.setattr(import_jobs.settings, "zp_management_enabled", True)
+    monkeypatch.setattr(import_jobs.settings, "zp_import_conversion_enabled", True)
+
+    def fail_zp(**_kwargs: Any) -> None:
+        raise RuntimeError("ZP conversion failed: test failure")
+
+    monkeypatch.setattr(import_jobs, "_run_zp_conversion_for_import", fail_zp)
+
+    _run_job(root)
+
+    failed = [update for update in state["updates"] if update.get("status") == "failed"]
+    assert failed
+    assert "ZP conversion failed: test failure" in str(failed[-1].get("error"))
+    assert state["derived_calls"] == []
 
 
 def test_explicit_diaclip_type_routes_the_shared_diann_layout_to_diaclip_adapter(

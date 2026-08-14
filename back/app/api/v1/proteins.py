@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.api.v1.universal_compat import require_cutoff, require_dataset
 from app.schemas import Page, ProteinDetailOut, ProteinListItemOut, ProteoformListItemOut
+from app.zp_runtime import (
+    ZpTopDownProtein,
+    ZpTopDownProteoform,
+    get_binary_top_down_protein,
+    get_binary_top_down_proteoform,
+)
 
 router = APIRouter(tags=["proteins"])
 
@@ -87,7 +93,10 @@ def list_proteins(
     total = session.scalar(text(count_sql), params) or 0
     rows = session.execute(text(base_sql), params).mappings().all()
     return Page[ProteinListItemOut](
-        items=[ProteinListItemOut(**dict(r)) for r in rows],
+        items=[
+            ProteinListItemOut(**_binary_protein_payload(session, int(dataset["dataset_id"]), dict(r)))
+            for r in rows
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -174,7 +183,120 @@ def get_protein(
         ),
         {"dataset_id": dataset["dataset_id"], "protein_id": protein_id, "cutoff": cutoff},
     ).mappings().all()
-    return ProteinDetailOut(
-        **dict(protein),
-        proteoforms=[ProteoformListItemOut(**dict(pf)) for pf in pfs],
+    protein_payload = dict(protein)
+    binary = get_binary_top_down_protein(
+        session,
+        int(dataset["dataset_id"]),
+        sequence_id=protein_payload.get("sequence_id"),
+        sequence_name=str(protein_payload.get("sequence_name") or ""),
     )
+    if binary is not None:
+        protein_payload = _apply_binary_protein_item(protein_payload, binary)
+    return ProteinDetailOut(
+        **protein_payload,
+        proteoforms=[
+            ProteoformListItemOut(**_binary_proteoform_payload(session, int(dataset["dataset_id"]), dict(pf)))
+            for pf in pfs
+        ],
+    )
+
+
+def _binary_protein_payload(
+    session: Session,
+    dataset_id: int,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    binary = get_binary_top_down_protein(
+        session,
+        dataset_id,
+        sequence_id=payload.get("sequence_id"),
+        sequence_name=str(payload.get("sequence_name") or ""),
+    )
+    return _apply_binary_protein_item(payload, binary) if binary is not None else payload
+
+
+def _apply_binary_protein_item(
+    payload: dict[str, object],
+    binary: ZpTopDownProtein,
+) -> dict[str, object]:
+    best_prsm = _best_prsm(binary.prsms)
+    out = dict(payload)
+    out["sequence_id"] = _int_first(binary.sequence_id, out.get("sequence_id"))
+    out["sequence_name"] = _first_value(binary.protein_accession, out.get("sequence_name"))
+    out["sequence_description"] = _first_value(binary.protein_description, out.get("sequence_description"))
+    out["compatible_proteoform_number"] = len(binary.proteoforms)
+    out["prsm_number"] = len(binary.prsms)
+    out["best_prsm_id"] = _int_or_none(_first_value((best_prsm or {}).get("prsm_id"), out.get("best_prsm_id")))
+    out["best_prsm_e_value"] = _first_value((best_prsm or {}).get("e_value"), out.get("best_prsm_e_value"))
+    return out
+
+
+def _binary_proteoform_payload(
+    session: Session,
+    dataset_id: int,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    binary = get_binary_top_down_proteoform(
+        session,
+        dataset_id,
+        payload.get("proteoform_id"),
+        sequence_id=payload.get("sequence_id"),
+    )
+    return _apply_binary_proteoform_item(payload, binary) if binary is not None else payload
+
+
+def _apply_binary_proteoform_item(
+    payload: dict[str, object],
+    binary: ZpTopDownProteoform,
+) -> dict[str, object]:
+    proteoform = binary.proteoform
+    best_prsm = _best_prsm(binary.prsms)
+    out = dict(payload)
+    out["sequence_id"] = _int_first(proteoform.get("sequence_id"), out.get("sequence_id"))
+    out["sequence_name"] = _first_value(proteoform.get("protein_accession"), out.get("sequence_name"))
+    out["proteoform_mass"] = _first_value(
+        proteoform.get("theoretical_mass"),
+        proteoform.get("experimental_mass"),
+        out.get("proteoform_mass"),
+    )
+    out["prsm_number"] = len(binary.prsms)
+    out["best_prsm_id"] = _int_or_none(_first_value(proteoform.get("best_prsm_id"), (best_prsm or {}).get("prsm_id"), out.get("best_prsm_id")))
+    out["best_prsm_e_value"] = _first_value((best_prsm or {}).get("e_value"), out.get("best_prsm_e_value"))
+    out["n_acetylation"] = 1 if proteoform.get("terminal_state") == "N_ACETYLATION" else out.get("n_acetylation")
+    return out
+
+
+def _best_prsm(records: tuple[dict[str, object], ...]) -> dict[str, object] | None:
+    if not records:
+        return None
+    return min(records, key=lambda item: (_float_or_none(item.get("e_value")) is None, _float_or_none(item.get("e_value")) or 0.0))
+
+
+def _first_value(*values: object) -> object:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _int_first(*values: object) -> int:
+    for value in values:
+        try:
+            return int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+    return 0
+
+
+def _int_or_none(value: object) -> int | None:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_none(value: object) -> float | None:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None

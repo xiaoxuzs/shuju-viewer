@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import text
 from starlette.routing import Match
 
+from app import main as app_main
+from app.api.v1 import build_api_router
 from app.api.v1 import zp_conversions as api
 from app.core.config import settings
 from app.core.db import engine
@@ -29,6 +33,7 @@ def isolated_zp_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
     monkeypatch.setattr(settings, "zp_allowed_source_roots", "")
     monkeypatch.setattr(settings, "zp_worker_python", None)
     monkeypatch.setattr(settings, "zp_worker_pythonpath", "")
+    monkeypatch.setattr(settings, "zp_engine_path", tmp_path / "zp-engine")
     monkeypatch.setattr(settings, "zp_default_format_version", 1)
     monkeypatch.setattr(settings, "zp_conversion_timeout_seconds", 60)
     monkeypatch.setattr(settings, "zp_conversion_worker_threads", 2)
@@ -88,7 +93,7 @@ def test_run_conversion_with_injected_runner_marks_success_and_cleans_temp() -> 
                 validation_mode="deep",
                 validation_certificate_path=request.certificate_path,
                 format_version=request.format_version,
-                viewer_two_version="test-commit",
+                binary_layer_version="test-commit",
             )
 
     finished = service.run_conversion_job(queued.job_id, runner=SuccessfulRunner())
@@ -108,6 +113,7 @@ def test_run_conversion_with_injected_runner_marks_success_and_cleans_temp() -> 
 def test_default_unconfigured_worker_fails_closed_without_exposing_paths() -> None:
     source = settings.resolved_data_root / "sample.mzML"
     source.write_bytes(b"mzml")
+    settings.zp_worker_python = settings.resolved_data_root / "missing-python.exe"
     queued = service.enqueue_conversion(source_path=source, start_background=False)
 
     failed = service.run_conversion_job(queued.job_id)
@@ -179,11 +185,61 @@ def _matched_route(path: str, method: str) -> str | None:
     return None
 
 
-def test_zp_routes_are_registered_without_shadowing_import_routes() -> None:
-    schema = app.openapi()
-    assert "/api/v1/zp-conversions" in schema["paths"]
-    assert "/api/v1/zp-conversions/{job_id}" in schema["paths"]
-    assert "/api/v1/zp-conversions/{job_id}/cancel" in schema["paths"]
-    assert "/api/v1/datasets/{dataset_id}/zp-status" in schema["paths"]
-    assert _matched_route("/api/v1/zp-conversions", "POST") == "create_zp_conversion"
+def _matched_router_route(routes: list[Any], path: str, method: str) -> str | None:
+    scope = {"type": "http", "method": method, "path": path, "headers": []}
+    for route in routes:
+        match, _child = route.matches(scope)
+        if match == Match.FULL:
+            return route.name
+    return None
+
+
+def test_zp_routes_are_not_registered_by_default() -> None:
+    paths = {route.path for route in app.routes}
+    assert "/api/v1/zp-conversions" not in paths
+    assert "/api/v1/zp-conversions/{job_id}" not in paths
+    assert "/api/v1/zp-conversions/{job_id}/cancel" not in paths
+    assert "/api/v1/datasets/{dataset_id}/zp-status" not in paths
+    assert "/api/v1/datasets/{dataset_id}/binary-extensions" not in paths
+    assert "/api/v1/datasets/{dataset_id}/binary-extensions/{extension_type}" not in paths
+    assert _matched_route("/api/v1/zp-conversions", "POST") is None
     assert _matched_route("/api/v1/imports", "POST") == "enqueue_import"
+
+
+def test_zp_routes_are_registered_when_management_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "zp_management_enabled", True)
+    router = build_api_router()
+    paths = {route.path for route in router.routes}
+
+    assert "/api/v1/zp-conversions" in paths
+    assert "/api/v1/zp-conversions/{job_id}" in paths
+    assert "/api/v1/zp-conversions/{job_id}/cancel" in paths
+    assert "/api/v1/datasets/{dataset_id}/zp-status" in paths
+    assert "/api/v1/datasets/{dataset_id}/binary-extensions" in paths
+    assert "/api/v1/datasets/{dataset_id}/binary-extensions/{extension_type}" in paths
+    assert _matched_router_route(router.routes, "/api/v1/zp-conversions", "POST") == "create_zp_conversion"
+    assert _matched_router_route(router.routes, "/api/v1/imports", "POST") == "enqueue_import"
+
+
+def test_zp_schema_bootstrap_is_skipped_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "zp_management_enabled", False)
+    real_import = builtins.__import__
+
+    def fail_repository_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "app.zp_conversion.repository":
+            raise AssertionError("ZP schema bootstrap must stay disabled by default")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fail_repository_import)
+
+    app_main._ensure_zp_conversion_schema_if_enabled()
+
+
+def test_zp_schema_bootstrap_runs_when_management_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+    monkeypatch.setattr(settings, "zp_management_enabled", True)
+    monkeypatch.setattr(repository, "ensure_zp_conversion_schema", lambda: calls.append(True))
+
+    app_main._ensure_zp_conversion_schema_if_enabled()
+
+    assert calls == [True]

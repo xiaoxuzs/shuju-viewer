@@ -98,7 +98,7 @@ def run_conversion_job(job_id: str, *, runner: ZpWorkerRunner | None = None) -> 
             output_bytes=result.output_bytes,
             output_sha256=result.output_sha256,
             validation_mode=result.validation_mode,
-            viewer_two_version=result.viewer_two_version,
+            binary_layer_version=result.binary_layer_version,
         )
         _register_success_asset(get_job(job_id))
         cleanup_job_paths(temp_dir=request.temp_dir, partial_path=request.partial_path)

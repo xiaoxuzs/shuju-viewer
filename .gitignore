@@ -31,6 +31,7 @@ front/.env.local
 front/.env.*.local
 
 # ---- 日志与临时文件 ----
+.tmp/
 logs/
 *.log
 npm-debug.log*

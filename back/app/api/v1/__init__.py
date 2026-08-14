@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from app.core.config import settings
 from app.api.v1 import (
     bu,
     datasets,
@@ -12,17 +13,27 @@ from app.api.v1 import (
     proteoforms,
     prsms,
     spectra,
-    zp_conversions,
 )
 
-api_router = APIRouter(prefix="/api/v1")
-api_router.include_router(datasets.router)
-api_router.include_router(imports.router)
-api_router.include_router(import_uploads.router)
-api_router.include_router(proteins.router)
-api_router.include_router(proteoforms.router)
-api_router.include_router(prsms.router)
-api_router.include_router(spectra.router)
-api_router.include_router(mzml_spectra.router)
-api_router.include_router(bu.router)
-api_router.include_router(zp_conversions.router)
+
+def build_api_router() -> APIRouter:
+    router = APIRouter(prefix="/api/v1")
+    router.include_router(datasets.router)
+    router.include_router(imports.router)
+    router.include_router(import_uploads.router)
+    router.include_router(proteins.router)
+    router.include_router(proteoforms.router)
+    router.include_router(prsms.router)
+    router.include_router(spectra.router)
+    router.include_router(mzml_spectra.router)
+    router.include_router(bu.router)
+    if settings.zp_management_enabled:
+        # ZP management/debug endpoints are optional so default server deploys
+        # do not expose inactive binary-layer controls.
+        from app.api.v1 import zp_conversions
+
+        router.include_router(zp_conversions.router)
+    return router
+
+
+api_router = build_api_router()

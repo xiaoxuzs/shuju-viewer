@@ -1,7 +1,7 @@
 """ZP worker runners.
 
-Production conversion is a subprocess that imports viewer-two's public
-``binary_layer`` API. The web process never parses or writes .zp bytes itself.
+Production conversion is a subprocess that imports Viewer's ZP binary layer.
+The web process never parses or writes .zp bytes itself.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ class WorkerResult:
     validation_mode: str
     validation_certificate_path: Path
     format_version: int
-    viewer_two_version: str | None = None
+    binary_layer_version: str | None = None
 
 
 class WorkerExecutionError(Exception):
@@ -113,7 +113,7 @@ class SubprocessZpWorkerRunner:
                 validation_mode=str(payload.get("validation_mode") or "deep"),
                 validation_certificate_path=Path(str(payload["validation_certificate_path"])),
                 format_version=int(payload.get("format_version") or request.format_version),
-                viewer_two_version=str(payload.get("viewer_two_version") or "unknown"),
+                binary_layer_version=str(payload.get("binary_layer_version") or "unknown"),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise WorkerExecutionError("ZP_WORKER_INVALID_RESULT") from exc
@@ -143,7 +143,7 @@ def _request_payload(request: WorkerRequest) -> dict[str, object]:
 
 def _worker_env() -> dict[str, str]:
     env = os.environ.copy()
-    entries = settings.zp_worker_pythonpath_list
+    entries = [str(settings.resolved_zp_engine_path()), *settings.zp_worker_pythonpath_list]
     if entries:
         existing = env.get("PYTHONPATH")
         env["PYTHONPATH"] = os.pathsep.join(entries + ([existing] if existing else []))
@@ -226,10 +226,14 @@ try:
     except OSError:
         _finish({"ok": False, "code": "ZP_WORKER_FAILED"}, 4)
     output_sha256 = getattr(result, "output_sha256", None) or getattr(validation, "file_sha256", None) or _sha256(final)
-    try:
-        package_version = importlib.metadata.version("binary-layer")
-    except importlib.metadata.PackageNotFoundError:
-        package_version = str(request.get("binary_layer_commit") or "unknown")
+    for package_name in ("zp-binary-layer", "binary-layer"):
+        try:
+            package_version = importlib.metadata.version(package_name)
+            break
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    else:
+        package_version = str(request.get("binary_layer_commit") or "vendored")
     _finish(
         {
             "ok": True,
@@ -238,7 +242,7 @@ try:
             "validation_mode": "deep",
             "validation_certificate_path": str(certificate),
             "format_version": int(request["format_version"]),
-            "viewer_two_version": str(request.get("binary_layer_commit") or package_version),
+            "binary_layer_version": str(request.get("binary_layer_commit") or package_version),
         }
     )
 except BaseException as exc:  # noqa: BLE001

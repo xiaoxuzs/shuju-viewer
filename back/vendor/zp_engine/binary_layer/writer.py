@@ -1,0 +1,561 @@
+from __future__ import annotations
+
+import hashlib
+import os
+import time
+from pathlib import Path
+
+from .blocks import (
+    ArrayBlock,
+    BlockCollection,
+    ChromatogramBlock,
+    ExtensionBlock,
+    GlobalMetaBlock,
+    IndexBlock,
+    PrecursorBlock,
+    RunBlock,
+    SpectrumBlock,
+    StringPoolBlock,
+)
+from .constants import (
+    BLOCK_NAMES,
+    DEFAULT_ZP_WRITE_VERSION,
+    DIRECTORY_LENGTH_STRUCT,
+    HEADER_SIZE,
+    HEADER_STRUCT,
+    KNOWN_ZP_VERSIONS,
+    SUPPORTED_ZP_WRITE_VERSIONS,
+    ZP_ENDIANNESS_LITTLE,
+    ZP_EXTENSION,
+    ZP_MAGIC,
+    ZP_VERSION,
+    ZP_VERSION_V1,
+    ZP_VERSION_V2,
+    ZP_VERSION_V3,
+)
+from .exceptions import UnsupportedVersionError, ZpVersionNotImplementedError, ZpWriteError
+from .models import BlockDirectoryEntry
+from .serialization import canonical_json_bytes, iter_canonical_json_bytes, to_primitive
+from .v2_arrays_writer import (
+    DEFAULT_V2_ARRAY_WRITE_LIMITS,
+    ZpV2ArrayWriteLimits,
+    prepare_v2_arrays_layout,
+    write_v2_arrays_block,
+)
+from .v3_extensions import V3_EXTENSIONS_ENCODING, encode_v3_extensions
+from .v3_arrays import (
+    V3_ARRAYS_ENCODING,
+    V3_ARRAY_COMPRESSION_ZSTD,
+    write_v3_arrays_block,
+)
+from .v3_limits import V3_ARRAY_WRITE_LIMITS
+
+
+class ZpWriter:
+    def __init__(self) -> None:
+        self.last_metrics: dict[str, int | float | str] = {}
+
+    def write(
+        self,
+        target: str | Path,
+        blocks: BlockCollection,
+        *,
+        format_version: int = DEFAULT_ZP_WRITE_VERSION,
+        v2_limits: ZpV2ArrayWriteLimits | None = None,
+        v3_limits: ZpV2ArrayWriteLimits | None = None,
+        worker_threads: int = 6,
+        v3_array_compression: str = V3_ARRAY_COMPRESSION_ZSTD,
+        created_at_millis: int | None = None,
+    ) -> Path:
+        if created_at_millis is not None and (
+            type(created_at_millis) is not int or created_at_millis < 0
+        ):
+            raise ZpWriteError("created_at_millis must be a non-negative plain integer or None")
+        if format_version not in SUPPORTED_ZP_WRITE_VERSIONS:
+            if format_version in KNOWN_ZP_VERSIONS:
+                raise ZpVersionNotImplementedError(format_version, "write")
+            raise UnsupportedVersionError(format_version, "write")
+        if format_version == ZP_VERSION_V1:
+            return self._write_v1(
+                target,
+                blocks,
+                created_at_millis=created_at_millis,
+            )
+        if format_version == ZP_VERSION_V2:
+            return self._write_v2(
+                target,
+                blocks,
+                v2_limits=v2_limits,
+                created_at_millis=created_at_millis,
+            )
+        if format_version == ZP_VERSION_V3:
+            return self._write_v3(
+                target,
+                blocks,
+                v3_limits=v3_limits,
+                worker_threads=worker_threads,
+                v3_array_compression=v3_array_compression,
+                created_at_millis=created_at_millis,
+            )
+        raise UnsupportedVersionError(format_version, "write")
+
+    def _write_v1(
+        self,
+        target: str | Path,
+        blocks: BlockCollection,
+        *,
+        created_at_millis: int | None,
+    ) -> Path:
+        path = Path(target)
+        if path.suffix != ZP_EXTENSION:
+            raise ZpWriteError(f"Output extension must be exactly {ZP_EXTENSION}: {path}")
+        if not isinstance(blocks, BlockCollection):
+            raise ZpWriteError("blocks must be a BlockCollection")
+        if blocks.global_meta is None or blocks.string_pool is None or blocks.indexes is None:
+            raise ZpWriteError("global_meta, string_pool, and indexes must be built before writing")
+        list_blocks = (blocks.runs, blocks.spectra, blocks.precursors, blocks.chromatograms, blocks.arrays, blocks.extensions)
+        if any(not isinstance(value, list) for value in list_blocks):
+            raise ZpWriteError("core collection blocks, arrays, and extensions must be lists")
+
+        payloads = self._serialize_blocks(blocks)
+        temporary = path.with_name(path.name + ".tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with temporary.open("w+b") as stream:
+                stream.write(b"\x00" * HEADER_SIZE)
+                entries: list[BlockDirectoryEntry] = []
+                for block_name in BLOCK_NAMES:
+                    payload = payloads[block_name]
+                    offset = stream.tell()
+                    stream.write(payload)
+                    entries.append(
+                        BlockDirectoryEntry(
+                            block_name=block_name,
+                            offset=offset,
+                            length=len(payload),
+                            encoding="json",
+                            checksum=hashlib.sha256(payload).hexdigest(),
+                        )
+                    )
+                directory_offset = stream.tell()
+                directory_payload = canonical_json_bytes(entries)
+                stream.write(DIRECTORY_LENGTH_STRUCT.pack(len(directory_payload)))
+                stream.write(directory_payload)
+                created_at = (
+                    int(time.time() * 1000)
+                    if created_at_millis is None
+                    else created_at_millis
+                )
+                stream.seek(0)
+                stream.write(
+                    HEADER_STRUCT.pack(
+                        ZP_MAGIC,
+                        ZP_VERSION,
+                        ZP_ENDIANNESS_LITTLE,
+                        0,
+                        created_at,
+                        directory_offset,
+                    )
+                )
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            return path
+        except Exception as exc:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+            if isinstance(exc, ZpWriteError):
+                raise
+            raise ZpWriteError(f"Failed to write {path}: {exc}") from exc
+
+    def _write_v2(
+        self,
+        target: str | Path,
+        blocks: BlockCollection,
+        *,
+        v2_limits: ZpV2ArrayWriteLimits | None,
+        created_at_millis: int | None,
+    ) -> Path:
+        return self._write_binary(
+            target,
+            blocks,
+            format_version=ZP_VERSION_V2,
+            array_limits=DEFAULT_V2_ARRAY_WRITE_LIMITS if v2_limits is None else v2_limits,
+            created_at_millis=created_at_millis,
+        )
+
+    def _write_v3(
+        self,
+        target: str | Path,
+        blocks: BlockCollection,
+        *,
+        v3_limits: ZpV2ArrayWriteLimits | None,
+        worker_threads: int,
+        v3_array_compression: str,
+        created_at_millis: int | None,
+    ) -> Path:
+        return self._write_binary(
+            target,
+            blocks,
+            format_version=ZP_VERSION_V3,
+            array_limits=V3_ARRAY_WRITE_LIMITS if v3_limits is None else v3_limits,
+            worker_threads=worker_threads,
+            v3_array_compression=v3_array_compression,
+            created_at_millis=created_at_millis,
+        )
+
+    def _write_binary(
+        self,
+        target: str | Path,
+        blocks: BlockCollection,
+        *,
+        format_version: int,
+        array_limits: ZpV2ArrayWriteLimits,
+        created_at_millis: int | None,
+        worker_threads: int = 1,
+        v3_array_compression: str = V3_ARRAY_COMPRESSION_ZSTD,
+    ) -> Path:
+        path = Path(target)
+        if path.suffix != ZP_EXTENSION:
+            raise ZpWriteError(f"Output extension must be exactly {ZP_EXTENSION}: {path}")
+        if not isinstance(blocks, BlockCollection):
+            raise ZpWriteError("blocks must be a BlockCollection")
+        wall_started = time.perf_counter()
+        cpu_started = time.process_time()
+        layout_started = time.perf_counter()
+        arrays_layout = prepare_v2_arrays_layout(blocks.arrays, limits=array_limits)
+        layout_seconds = time.perf_counter() - layout_started
+        validation_started = time.perf_counter()
+        self._validate_v2_blocks(blocks)
+        block_validation_seconds = time.perf_counter() - validation_started
+        json_started = time.perf_counter()
+        payloads = self._serialize_binary_json_blocks(
+            blocks,
+            format_version=format_version,
+        )
+        json_block_seconds = time.perf_counter() - json_started
+        encoded_v3_extensions = None
+        extension_encode_seconds = 0.0
+        if format_version == ZP_VERSION_V3:
+            extension_encode_started = time.perf_counter()
+            encoded_v3_extensions = encode_v3_extensions(blocks.extensions)
+            extension_encode_seconds = time.perf_counter() - extension_encode_started
+
+        temporary = path.with_name(path.name + ".tmp")
+        arrays_write_seconds = 0.0
+        v3_arrays_metrics = None
+        extension_json_seconds = 0.0
+        extension_json_bytes = 0
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with temporary.open("w+b") as stream:
+                stream.write(b"\x00" * HEADER_SIZE)
+                entries: list[BlockDirectoryEntry] = []
+                for block_name in BLOCK_NAMES:
+                    offset = stream.tell()
+                    if block_name == "arrays":
+                        arrays_started = time.perf_counter()
+                        if format_version == ZP_VERSION_V3:
+                            length, checksum, v3_arrays_metrics = write_v3_arrays_block(
+                                stream,
+                                arrays_layout,
+                                worker_threads=worker_threads,
+                                compression_strategy=v3_array_compression,
+                            )
+                            encoding = V3_ARRAYS_ENCODING
+                        else:
+                            length, checksum = write_v2_arrays_block(stream, arrays_layout)
+                            encoding = "zp-arrays-v2"
+                        arrays_write_seconds = time.perf_counter() - arrays_started
+                    elif block_name == "extensions" and format_version == ZP_VERSION_V2:
+                        extension_started = time.perf_counter()
+                        length, checksum = self._write_streamed_json(
+                            stream,
+                            blocks.extensions,
+                        )
+                        extension_json_seconds = time.perf_counter() - extension_started
+                        extension_json_bytes = length
+                        encoding = "utf-8-json"
+                    elif block_name == "extensions":
+                        assert encoded_v3_extensions is not None
+                        extension_started = time.perf_counter()
+                        payload = encoded_v3_extensions.payload
+                        stream.write(payload)
+                        length = len(payload)
+                        checksum = hashlib.sha256(payload).hexdigest()
+                        extension_json_seconds = time.perf_counter() - extension_started
+                        extension_json_bytes = length
+                        encoding = V3_EXTENSIONS_ENCODING
+                    else:
+                        payload = payloads[block_name]
+                        stream.write(payload)
+                        length = len(payload)
+                        checksum = hashlib.sha256(payload).hexdigest()
+                        encoding = "utf-8-json"
+                    entries.append(
+                        BlockDirectoryEntry(
+                            block_name=block_name,
+                            offset=offset,
+                            length=length,
+                            encoding=encoding,
+                            checksum=checksum,
+                        )
+                    )
+                directory_offset = stream.tell()
+                directory_payload = canonical_json_bytes(entries)
+                stream.write(DIRECTORY_LENGTH_STRUCT.pack(len(directory_payload)))
+                stream.write(directory_payload)
+                created_at = (
+                    int(time.time() * 1000)
+                    if created_at_millis is None
+                    else created_at_millis
+                )
+                stream.seek(0)
+                stream.write(
+                    HEADER_STRUCT.pack(
+                        ZP_MAGIC,
+                        format_version,
+                        ZP_ENDIANNESS_LITTLE,
+                        0,
+                        created_at,
+                        directory_offset,
+                    )
+                )
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            self.last_metrics = {
+                "wall_seconds": time.perf_counter() - wall_started,
+                "cpu_seconds": time.process_time() - cpu_started,
+                "arrays_directory_checksum_seconds": layout_seconds,
+                "block_validation_seconds": block_validation_seconds,
+                "json_blocks_serialization_seconds": json_block_seconds,
+                "extension_json_serialization_write_seconds": extension_json_seconds,
+                "extension_encode_seconds": extension_encode_seconds,
+                "extension_encoding": (
+                    V3_EXTENSIONS_ENCODING
+                    if format_version == ZP_VERSION_V3
+                    else "utf-8-json"
+                ),
+                "arrays_payload_write_seconds": arrays_write_seconds,
+                "arrays_compression_strategy": (
+                    v3_array_compression
+                    if format_version == ZP_VERSION_V3
+                    else "raw"
+                ),
+                "array_count": len(arrays_layout.entries),
+                "array_value_count": sum(
+                    entry.value_count for entry in arrays_layout.entries
+                ),
+                "arrays_payload_bytes": arrays_layout.payload_length,
+                "arrays_stored_payload_bytes": (
+                    v3_arrays_metrics.stored_payload_bytes
+                    if v3_arrays_metrics is not None
+                    else arrays_layout.payload_length
+                ),
+                "arrays_compression_ratio": (
+                    v3_arrays_metrics.stored_payload_bytes / arrays_layout.payload_length
+                    if v3_arrays_metrics is not None and arrays_layout.payload_length
+                    else 1.0
+                ),
+                "arrays_chunk_count": (
+                    v3_arrays_metrics.chunk_count
+                    if v3_arrays_metrics is not None
+                    else 0
+                ),
+                "extension_json_bytes": extension_json_bytes,
+                "array_pass_count": 2,
+                "array_record_loop_count": 2 * len(arrays_layout.entries),
+                "bytes_written": path.stat().st_size,
+            }
+            return path
+        except Exception as exc:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+            if isinstance(exc, ZpWriteError):
+                raise
+            raise ZpWriteError(f"Failed to write {path}: {exc}") from exc
+
+    @staticmethod
+    def _serialize_blocks(blocks: BlockCollection) -> dict[str, bytes]:
+        logical_blocks = {
+            "global_meta": blocks.global_meta,
+            "string_pool": blocks.string_pool,
+            "core_runs": blocks.runs,
+            "core_spectra": blocks.spectra,
+            "core_precursors": blocks.precursors,
+            "core_chromatograms": blocks.chromatograms,
+            "arrays": blocks.arrays,
+            "indexes": blocks.indexes,
+            "extensions": blocks.extensions,
+        }
+        try:
+            return {name: canonical_json_bytes(logical_blocks[name]) for name in BLOCK_NAMES}
+        except (TypeError, ValueError) as exc:
+            raise ZpWriteError(f"A required logical block is not serializable: {exc}") from exc
+
+    @staticmethod
+    def _serialize_binary_json_blocks(
+        blocks: BlockCollection,
+        *,
+        format_version: int,
+    ) -> dict[str, bytes]:
+        global_meta = to_primitive(blocks.global_meta)
+        if not isinstance(global_meta, dict):
+            raise ZpWriteError("global_meta must serialize to an object")
+        global_meta["format_version"] = format_version
+        logical_blocks = {
+            "global_meta": global_meta,
+            "string_pool": blocks.string_pool,
+            "core_runs": blocks.runs,
+            "core_spectra": blocks.spectra,
+            "core_precursors": blocks.precursors,
+            "core_chromatograms": blocks.chromatograms,
+            "indexes": blocks.indexes,
+        }
+        try:
+            return {name: canonical_json_bytes(value) for name, value in logical_blocks.items()}
+        except (TypeError, ValueError) as exc:
+            raise ZpWriteError(f"A required logical block is not serializable: {exc}") from exc
+
+    @staticmethod
+    def _write_streamed_json(stream: object, value: object) -> tuple[int, str]:
+        digest = hashlib.sha256()
+        length = 0
+        try:
+            for chunk in iter_canonical_json_bytes(value):
+                written = stream.write(chunk)  # type: ignore[attr-defined]
+                if written != len(chunk):
+                    raise OSError(
+                        f"short write: expected {len(chunk)} bytes, wrote {written}"
+                    )
+                digest.update(chunk)
+                length += len(chunk)
+        except (TypeError, ValueError) as exc:
+            raise ZpWriteError(
+                f"A required logical block is not serializable: {exc}"
+            ) from exc
+        return length, digest.hexdigest()
+
+    @classmethod
+    def _validate_v2_blocks(cls, blocks: BlockCollection) -> None:
+        if blocks.global_meta is None or blocks.string_pool is None or blocks.indexes is None:
+            raise ZpWriteError("global_meta, string_pool, and indexes must be built before writing")
+        singleton_types = (
+            (blocks.global_meta, GlobalMetaBlock, "global_meta"),
+            (blocks.string_pool, StringPoolBlock, "string_pool"),
+            (blocks.indexes, IndexBlock, "indexes"),
+        )
+        for value, expected, name in singleton_types:
+            if not isinstance(value, expected):
+                raise ZpWriteError(f"{name} must be a {expected.__name__}")
+        list_types = (
+            (blocks.runs, RunBlock, "core_runs"),
+            (blocks.spectra, SpectrumBlock, "core_spectra"),
+            (blocks.precursors, PrecursorBlock, "core_precursors"),
+            (blocks.chromatograms, ChromatogramBlock, "core_chromatograms"),
+            (blocks.arrays, ArrayBlock, "arrays"),
+            (blocks.extensions, ExtensionBlock, "extensions"),
+        )
+        for values, expected, name in list_types:
+            if not isinstance(values, list):
+                raise ZpWriteError(f"{name} must be a list")
+            for position, value in enumerate(values):
+                if not isinstance(value, expected):
+                    raise ZpWriteError(f"{name}[{position}] must be a {expected.__name__}")
+
+        meta = blocks.global_meta
+        counts = {
+            "run_count": len(blocks.runs),
+            "spectrum_count": len(blocks.spectra),
+            "chromatogram_count": len(blocks.chromatograms),
+            "array_count": len(blocks.arrays),
+        }
+        for field, actual in counts.items():
+            if getattr(meta, field) != actual:
+                raise ZpWriteError(f"global_meta.{field} does not match the logical blocks")
+
+        run_map = cls._unique_map(blocks.runs, "run_id", "core_runs")
+        spectrum_map = cls._unique_map(blocks.spectra, "spectrum_id", "core_spectra")
+        precursor_map = cls._unique_map(blocks.precursors, "precursor_id", "core_precursors")
+        cls._unique_map(blocks.chromatograms, "chromatogram_id", "core_chromatograms")
+        array_map = cls._unique_map(blocks.arrays, "array_id", "arrays")
+
+        for run in blocks.runs:
+            spectrum_count = sum(item.run_id == run.run_id for item in blocks.spectra)
+            chromatogram_count = sum(item.run_id == run.run_id for item in blocks.chromatograms)
+            if run.spectrum_count != spectrum_count or run.chromatogram_count != chromatogram_count:
+                raise ZpWriteError(f"Run {run.run_id} counts do not match referenced logical blocks")
+        for spectrum in blocks.spectra:
+            if spectrum.run_id not in run_map:
+                raise ZpWriteError(f"Spectrum {spectrum.spectrum_id} references missing run {spectrum.run_id}")
+            mz_array = array_map.get(spectrum.mz_array_id)
+            intensity_array = array_map.get(spectrum.intensity_array_id)
+            if mz_array is None or mz_array.array_type != "mz":
+                raise ZpWriteError(f"Spectrum {spectrum.spectrum_id} has an invalid m/z array reference")
+            if intensity_array is None or intensity_array.array_type != "intensity":
+                raise ZpWriteError(f"Spectrum {spectrum.spectrum_id} has an invalid intensity array reference")
+            if len(mz_array.values) != len(intensity_array.values):
+                raise ZpWriteError(f"Spectrum {spectrum.spectrum_id} arrays have different lengths")
+            if spectrum.precursor_id is not None:
+                precursor = precursor_map.get(spectrum.precursor_id)
+                if precursor is None or precursor.spectrum_id != spectrum.spectrum_id:
+                    raise ZpWriteError(f"Spectrum {spectrum.spectrum_id} has an invalid precursor reference")
+        for precursor in blocks.precursors:
+            spectrum = spectrum_map.get(precursor.spectrum_id)
+            if spectrum is None or spectrum.precursor_id != precursor.precursor_id:
+                raise ZpWriteError(f"Precursor {precursor.precursor_id} has an invalid spectrum reference")
+        for chromatogram in blocks.chromatograms:
+            if chromatogram.run_id not in run_map:
+                raise ZpWriteError(f"Chromatogram {chromatogram.chromatogram_id} references a missing run")
+            time_array = array_map.get(chromatogram.time_array_id)
+            intensity_array = array_map.get(chromatogram.intensity_array_id)
+            if time_array is None or time_array.array_type != "time":
+                raise ZpWriteError(f"Chromatogram {chromatogram.chromatogram_id} has an invalid time array reference")
+            if intensity_array is None or intensity_array.array_type != "intensity":
+                raise ZpWriteError(f"Chromatogram {chromatogram.chromatogram_id} has an invalid intensity array reference")
+            if len(time_array.values) != len(intensity_array.values):
+                raise ZpWriteError(f"Chromatogram {chromatogram.chromatogram_id} arrays have different lengths")
+
+        if not isinstance(blocks.string_pool.strings, list) or any(
+            not isinstance(value, str) for value in blocks.string_pool.strings
+        ):
+            raise ZpWriteError("string_pool.strings must be a list of strings")
+        cls._validate_indexes(blocks.indexes, blocks.spectra, spectrum_map)
+
+    @staticmethod
+    def _unique_map(values: list[object], field: str, block_name: str) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for value in values:
+            identifier = getattr(value, field)
+            if not isinstance(identifier, str) or not identifier:
+                raise ZpWriteError(f"{block_name}.{field} values must be nonempty strings")
+            if identifier in result:
+                raise ZpWriteError(f"Duplicate {block_name}.{field}: {identifier}")
+            result[identifier] = value
+        return result
+
+    @staticmethod
+    def _validate_indexes(indexes: IndexBlock, spectra: list[SpectrumBlock], spectrum_map: dict[str, object]) -> None:
+        for name in ("scan_index", "rt_index", "spectrum_id_index"):
+            records = getattr(indexes, name)
+            if not isinstance(records, list):
+                raise ZpWriteError(f"indexes.{name} must be a list")
+            for record in records:
+                if not isinstance(record, dict) or record.get("spectrum_id") not in spectrum_map:
+                    raise ZpWriteError(f"indexes.{name} references a missing spectrum")
+        for record in indexes.spectrum_id_index:
+            position = record.get("position")
+            spectrum_id = record.get("spectrum_id")
+            if (
+                isinstance(position, bool)
+                or not isinstance(position, int)
+                or position < 0
+                or position >= len(spectra)
+                or spectra[position].spectrum_id != spectrum_id
+            ):
+                raise ZpWriteError("indexes.spectrum_id_index contains an invalid position")
