@@ -124,10 +124,10 @@ test("DIA-CLIP overview uses DIA-CLIP presentation without exposing DIA-NN prove
   await mockDataset(page, "dia-clip", "DIA-CLIP");
   await page.goto("/datasets/dia-clip");
 
-  await expect(page.getByText("DIA-CLIP Bottom-Up DIA dataset with reference context")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "DIA-CLIP QC" })).toBeVisible();
-  await expect(page.getByText("DIA-CLIP q-value cutoff")).toBeVisible();
-  await expect(page.getByText("DIA-CLIP run: run")).toBeVisible();
+  await expect(page.getByText("πdia-clip Bottom-Up DIA dataset with reference context")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "πdia-clip QC" })).toBeVisible();
+  await expect(page.getByText("πdia-clip q-value cutoff")).toBeVisible();
+  await expect(page.getByText("πdia-clip run: run")).toBeVisible();
   await expect(page.getByText("DIA-NN", { exact: false })).toHaveCount(0);
 });
 
@@ -135,9 +135,9 @@ test("match columns are source-specific for DIA-CLIP and remain unchanged for DI
   await mockDataset(page, "dia-clip", "DIA-CLIP");
   await page.goto("/datasets/dia-clip/matches");
 
-  await expect(page.getByRole("columnheader", { name: "DIA-CLIP score" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "DIA-CLIP q-value" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "DIA-CLIP quantity" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "πdia-clip score" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "πdia-clip q-value" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "πdia-clip quantity" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Q.Value" })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "Intensity" })).toHaveCount(0);
 
@@ -147,5 +147,5 @@ test("match columns are source-specific for DIA-CLIP and remain unchanged for DI
 
   await expect(page.getByRole("columnheader", { name: "Q.Value" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Intensity" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "DIA-CLIP score" })).toHaveCount(0);
+  await expect(page.getByRole("columnheader", { name: "πdia-clip score" })).toHaveCount(0);
 });

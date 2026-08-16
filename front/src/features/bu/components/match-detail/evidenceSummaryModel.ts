@@ -9,6 +9,7 @@ import type {
 import type { BuXicPointSelection } from "@/features/bu/components/spectrum/BuXicChart";
 import { cleavageSite, pfmbResidues } from "@/features/bu/components/match-detail/pfmbSeries";
 import {
+  DIACLIP_DISPLAY_NAME,
   formatCount,
   formatDecimal,
   inspectedRtSourceLabel,
@@ -73,12 +74,12 @@ function buildDiaclipEvidence(match: BuMatchDetailOut): EvidenceSection | null {
   const metadata = raw as Record<string, unknown>;
   return {
     key: "diaclip",
-    title: "DIA-CLIP evidence",
+    title: `${DIACLIP_DISPLAY_NAME} evidence`,
     rows: [
-      { label: "DIA-CLIP score", value: displayDecimal(match.score) },
+      { label: `${DIACLIP_DISPLAY_NAME} score`, value: displayDecimal(match.score) },
       { label: "Feature distance", value: displayMetadataDecimal(metadata.feature_distance) },
       { label: "Cosine similarity", value: displayMetadataDecimal(metadata.cos_similarity) },
-      { label: "DIA-CLIP quantity", value: displayMetadataDecimal(metadata.quant_result) },
+      { label: `${DIACLIP_DISPLAY_NAME} quantity`, value: displayMetadataDecimal(metadata.quant_result) },
       { label: "Reference q-value", value: displayMetadataDecimal(metadata.diann_q_value) },
       { label: "Reference precursor quantity", value: displayMetadataDecimal(metadata.diann_precursor_quantity) },
     ],

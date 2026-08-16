@@ -4,7 +4,7 @@ import type { DatasetOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/common/page-header";
 import { cn } from "@/lib/utils";
-import { getBuDatasetDisplayDescription, getBuDefaultQMax } from "@/features/bu/utils";
+import { formatSourceSoftwareName, getBuDatasetDisplayDescription, getBuDefaultQMax } from "@/features/bu/utils";
 import { TransitionNavLink } from "@/features/page-transition";
 
 export interface BuDatasetContext {
@@ -30,7 +30,7 @@ export function BuDatasetLayout({ dataset }: { dataset: DatasetOut }) {
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Badge>Bottom-Up</Badge>
-            {dataset.source_software && <Badge variant="outline">{dataset.source_software}</Badge>}
+            {dataset.source_software && <Badge variant="outline">{formatSourceSoftwareName(dataset.source_software)}</Badge>}
             {dataset.status && <Badge variant="secondary">{dataset.status}</Badge>}
           </div>
         }

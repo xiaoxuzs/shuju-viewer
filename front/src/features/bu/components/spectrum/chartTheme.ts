@@ -33,7 +33,7 @@ export const BU_CHART = {
 export function formatIntensity(value: number): string {
   if (!Number.isFinite(value)) return "-";
   const abs = Math.abs(value);
-  if (abs >= 1e9) return `${(value / 1e9).toFixed(1)}G`;
+  if (abs >= 1e9) return `${(value / 1e9).toFixed(1)} 10⁹`;
   if (abs >= 1e6) return `${(value / 1e6).toFixed(value >= 100e6 ? 0 : 1)}M`;
   if (abs >= 1e3) return `${(value / 1e3).toFixed(value >= 100e3 ? 0 : 1)}K`;
   return value.toFixed(0);

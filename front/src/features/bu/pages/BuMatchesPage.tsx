@@ -9,7 +9,7 @@ import { BuDataTable, type BuColumn } from "@/features/bu/components/BuDataTable
 import { BuListFilters } from "@/features/bu/components/BuListFilters";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import type { BuMatchListItemOut } from "@/features/bu/types";
-import { formatCount, formatDecimal, isDiaclipSourceSoftware } from "@/features/bu/utils";
+import { DIACLIP_DISPLAY_NAME, formatCount, formatDecimal, isDiaclipSourceSoftware } from "@/features/bu/utils";
 import { clearListParams, numberParam, setListParam } from "@/features/bu/utils/listParams";
 import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 import { usePageTransitionReady } from "@/features/page-transition";
@@ -91,20 +91,20 @@ export function BuMatchesPage() {
     ...(isDiaclip
       ? [{
           key: "score",
-          header: "DIA-CLIP score",
+          header: `${DIACLIP_DISPLAY_NAME} score`,
           className: "text-right font-mono text-xs",
           render: (row: BuMatchListItemOut) => formatDecimal(row.score),
         }]
       : []),
     {
       key: "q",
-      header: isDiaclip ? "DIA-CLIP q-value" : "Q.Value",
+      header: isDiaclip ? `${DIACLIP_DISPLAY_NAME} q-value` : "Q.Value",
       className: "text-right font-mono text-xs",
       render: (row) => formatDecimal(row.q_value),
     },
     {
       key: "intensity",
-      header: isDiaclip ? "DIA-CLIP quantity" : "Intensity",
+      header: isDiaclip ? `${DIACLIP_DISPLAY_NAME} quantity` : "Intensity",
       className: "text-right font-mono text-xs",
       render: (row) => formatCount(row.intensity),
     },

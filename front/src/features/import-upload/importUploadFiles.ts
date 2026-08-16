@@ -1,4 +1,5 @@
 import type { ImportUploadType } from "@/api/types";
+import { DIACLIP_DISPLAY_NAME } from "@/features/bu/utils";
 
 export type UploadSelectionMode = "files" | "folder";
 
@@ -114,7 +115,7 @@ export async function preflightDiaclipSelection(
   ));
   if (fdrParquetFiles.length > 1) {
     throw new ImportFileSelectionError(
-      `DIA-CLIP FDR import requires exactly one .diaclip.fdr.parquet; found ${fdrParquetFiles.length}.`,
+      `${DIACLIP_DISPLAY_NAME} FDR import requires exactly one .diaclip.fdr.parquet; found ${fdrParquetFiles.length}.`,
     );
   }
 
@@ -127,7 +128,7 @@ export async function preflightDiaclipSelection(
   })));
   if (spectraSources.length === 0) {
     throw new ImportFileSelectionError(
-      "DIA-CLIP requires one spectrum source: a .raw file, .mzML file, or Bruker .d directory.",
+      `${DIACLIP_DISPLAY_NAME} requires one spectrum source: a .raw file, .mzML file, or Bruker .d directory.`,
     );
   }
 
@@ -135,7 +136,7 @@ export async function preflightDiaclipSelection(
     const mzmlSources = spectraSources.filter((path) => path.toLocaleLowerCase().endsWith(".mzml"));
     if (mzmlSources.length === 0) {
       throw new ImportFileSelectionError(
-        "DIA-CLIP FDR parquet import requires one matching .mzML file.",
+        `${DIACLIP_DISPLAY_NAME} FDR parquet import requires one matching .mzML file.`,
       );
     }
     return {
@@ -151,7 +152,7 @@ export async function preflightDiaclipSelection(
   ));
   if (reportFiles.length !== 1) {
     throw new ImportFileSelectionError(
-      `DIA-CLIP requires exactly one all_report.parquet; found ${reportFiles.length}.`,
+      `${DIACLIP_DISPLAY_NAME} requires exactly one all_report.parquet; found ${reportFiles.length}.`,
     );
   }
 
@@ -168,7 +169,7 @@ export async function preflightDiaclipSelection(
   }
   if (matchingResults.length !== 1) {
     throw new ImportFileSelectionError(
-      `DIA-CLIP requires exactly one TSV with the supported v1 header; found ${matchingResults.length}.`,
+      `${DIACLIP_DISPLAY_NAME} requires exactly one TSV with the supported v1 header; found ${matchingResults.length}.`,
     );
   }
 

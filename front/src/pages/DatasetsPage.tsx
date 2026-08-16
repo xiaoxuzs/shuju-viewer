@@ -27,7 +27,7 @@ import { TransitionLink, usePageTransitionReady } from "@/features/page-transiti
 import { parseApiError } from "@/lib/apiError";
 import { cn } from "@/lib/utils";
 import { isSpectraOnlyDataset } from "@/features/spectra-only/utils";
-import { getBuDatasetDisplayDescription } from "@/features/bu/utils";
+import { DIACLIP_DISPLAY_NAME, formatSourceSoftwareName, getBuDatasetDisplayDescription } from "@/features/bu/utils";
 
 function analysisModeLabel(ds: DatasetOut): string {
   if (isSpectraOnlyDataset(ds)) return "Spectra";
@@ -122,7 +122,7 @@ export function DatasetsPage() {
         <Card>
           <CardContent className="p-10 text-center text-sm text-muted-foreground">
             No datasets have been imported yet. Choose <strong>Upload local dataset</strong> to upload RAW, mzML,
-            TopPIC, PrSM, DIA-NN, or DIA-CLIP data from this computer.
+            TopPIC, PrSM, DIA-NN, or {DIACLIP_DISPLAY_NAME} data from this computer.
           </CardContent>
         </Card>
       )}
@@ -218,7 +218,7 @@ export function DatasetsPage() {
                           <Metric
                             icon={<ListTree className="h-3.5 w-3.5" />}
                             label="Software"
-                            value={ds.source_software ?? "Bottom-Up DIA"}
+                            value={formatSourceSoftwareName(ds.source_software) ?? "Bottom-Up DIA"}
                           />
                         </div>
                         <div className="flex flex-wrap gap-1.5 pt-1">

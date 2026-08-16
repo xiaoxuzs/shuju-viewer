@@ -52,13 +52,15 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-async function mockOverview(page: Page, chromatogramDetail: unknown) {
+async function mockOverview(page: Page, chromatogramDetail: unknown, chromatogramStatus = 409) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
     if (url.pathname === "/api/v1/datasets/demo/overview") return fulfillJson(route, overview);
     if (url.pathname.endsWith("/runs/39/chromatogram")) {
-      return fulfillJson(route, { detail: chromatogramDetail }, 409);
+      return chromatogramStatus === 409
+        ? fulfillJson(route, { detail: chromatogramDetail }, 409)
+        : fulfillJson(route, chromatogramDetail, chromatogramStatus);
     }
     if (url.pathname.endsWith("/overview/rt-mz")) {
       return fulfillJson(route, {
@@ -94,4 +96,19 @@ test("chromatogram stale state is distinct from missing", async ({ page }) => {
 
   await expect(page.getByText("Derived chromatogram data is stale.")).toBeVisible();
   await expect(page.getByText("Derived chromatogram data is not ready.")).toHaveCount(0);
+});
+
+test("chromatogram billion-scale ticks use 10⁹ notation", async ({ page }) => {
+  await mockOverview(page, {
+    type: "tic",
+    unit_rt: "min",
+    rt: [1, 2, 3],
+    intensity: [0, 6e9, 12e9],
+    downsampled: false,
+    point_count_original: 3,
+  }, 200);
+  await page.goto("/datasets/demo");
+
+  await expect(page.locator("svg text").filter({ hasText: "10⁹" }).first()).toBeVisible();
+  await expect(page.locator("svg text").filter({ hasText: /G$/ })).toHaveCount(0);
 });

@@ -160,13 +160,13 @@ test("DIA-CLIP metadata adds a source-specific evidence section without changing
 
   const diaclip = sections.find((section) => section.key === "diaclip");
   expect(diaclip?.rows.map((row) => row.label)).toEqual([
-    "DIA-CLIP score",
+    "πdia-clip score",
     "Feature distance",
     "Cosine similarity",
-    "DIA-CLIP quantity",
+    "πdia-clip quantity",
     "Reference q-value",
     "Reference precursor quantity",
   ]);
-  expect(diaclip?.rows.find((row) => row.label === "DIA-CLIP score")?.value).toBe("0.91");
+  expect(diaclip?.rows.find((row) => row.label === "πdia-clip score")?.value).toBe("0.91");
   expect(sections).toHaveLength(6);
 });

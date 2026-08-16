@@ -37,6 +37,7 @@ import {
   type UploadProgressSnapshot,
   type UploadSelectionMode,
 } from "@/features/import-upload/importUploadFiles";
+import { DIACLIP_DISPLAY_NAME } from "@/features/bu/utils";
 import { parseApiError } from "@/lib/apiError";
 import { clampImportProgress, formatImportStageLabel } from "@/lib/importStages";
 import { cn } from "@/lib/utils";
@@ -107,8 +108,8 @@ const IMPORT_TYPES_BY_ANALYSIS: Record<AnalysisType, ImportTypeOption[]> = {
     { value: "BU_DIA_NN", label: "DIA-NN", help: "A DIA-NN result folder" },
     {
       value: "BU_DIA_CLIP",
-      label: "DIA-CLIP",
-      help: "DIA-CLIP FDR parquet plus mzML, or legacy DIA-CLIP TSV with an all_report.parquet context report",
+      label: DIACLIP_DISPLAY_NAME,
+      help: `${DIACLIP_DISPLAY_NAME} FDR parquet plus mzML, or legacy ${DIACLIP_DISPLAY_NAME} TSV with an all_report.parquet context report`,
     },
   ],
   DDA: [
@@ -638,9 +639,9 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
               )}
             {importType === "BU_DIA_CLIP" && (
               <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
-                DIA-CLIP is a single-run Bottom-Up import. For the FDR-result workflow, select one folder containing
+                {DIACLIP_DISPLAY_NAME} is a single-run Bottom-Up import. For the FDR-result workflow, select one folder containing
                 exactly one <span className="font-mono">*.diaclip.fdr.parquet</span> and the matching{" "}
-                <span className="font-mono">.mzML</span>. The legacy workflow still accepts one supported DIA-CLIP TSV,
+                <span className="font-mono">.mzML</span>. The legacy workflow still accepts one supported {DIACLIP_DISPLAY_NAME} TSV,
                 one <span className="font-mono">all_report.parquet</span> context report, and a matching spectrum
                 source. The server validates the selected contract again before importing.
               </div>
@@ -750,7 +751,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                 )}
                 {diaclipCheck && (
                   <div className="rounded-md border border-primary/40 bg-primary/5 p-3 text-xs">
-                    <div className="font-semibold text-primary">DIA-CLIP preflight passed</div>
+                    <div className="font-semibold text-primary">{DIACLIP_DISPLAY_NAME} preflight passed</div>
                     <dl className="mt-2 grid gap-1 text-muted-foreground">
                       <div><dt className="inline font-medium">Mode: </dt><dd className="inline">{diaclipCheck.mode === "fdr_parquet" ? "FDR parquet" : "Legacy TSV + context"}</dd></div>
                       <div>

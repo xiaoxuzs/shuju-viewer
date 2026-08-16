@@ -51,9 +51,9 @@ test("analysis type reveals only its supported second-level import formats", asy
   }
   await dialog.getByRole("radio", { name: "Bottom-Up", exact: true }).click();
   await expect(dialog.getByRole("radio", { name: "DIA-NN", exact: true })).toBeVisible();
-  await dialog.getByRole("radio", { name: "DIA-CLIP", exact: true }).click();
+  await dialog.getByRole("radio", { name: "πdia-clip", exact: true }).click();
   await expect(dialog.getByRole("radio", { name: "TopPIC Native Output", exact: true })).toHaveCount(0);
-  await expect(dialog.getByText("DIA-CLIP is a single-run Bottom-Up import", { exact: false })).toBeVisible();
+  await expect(dialog.getByText("πdia-clip is a single-run Bottom-Up import", { exact: false })).toBeVisible();
   await expect(dialog.getByText("*.diaclip.fdr.parquet", { exact: false })).toBeVisible();
   await expect(dialog.getByText("legacy workflow", { exact: false })).toBeVisible();
   await expect(dialog.getByText("DIA-NN context", { exact: false })).toHaveCount(0);

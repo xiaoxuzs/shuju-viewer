@@ -18,7 +18,7 @@ export function scale(value: number, domain: [number, number], range: [number, n
 
 export function compactNumber(value: number): string {
   if (!Number.isFinite(value)) return "-";
-  if (Math.abs(value) >= 1e9) return `${(value / 1e9).toFixed(1)}G`;
+  if (Math.abs(value) >= 1e9) return `${(value / 1e9).toFixed(1)} 10⁹`;
   if (Math.abs(value) >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
   if (Math.abs(value) >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
   return value.toFixed(0);

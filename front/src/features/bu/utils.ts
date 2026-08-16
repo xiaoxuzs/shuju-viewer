@@ -5,6 +5,7 @@ import type { DatasetOut } from "@/api/types";
 // Matches the backend MS2 scan resolve window (scan_resolver max_delta_minutes).
 export const RT_LINK_TOLERANCE_MIN = 0.5;
 export const SCAN_UNAVAILABLE_REASON = "Not available from imported match metadata";
+export const DIACLIP_DISPLAY_NAME = "πdia-clip";
 
 export type InspectedRtSource = "xic" | "pfmb";
 
@@ -12,11 +13,18 @@ export function isDiaclipSourceSoftware(sourceSoftware: string | null | undefine
   return sourceSoftware === "DIA-CLIP";
 }
 
+export function formatSourceSoftwareName(sourceSoftware: string | null | undefined): string | null {
+  if (!sourceSoftware) return null;
+  return isDiaclipSourceSoftware(sourceSoftware) ? DIACLIP_DISPLAY_NAME : sourceSoftware;
+}
+
 export function getBuDatasetDisplayDescription(dataset: DatasetOut): string {
   const isDiaclip = isDiaclipSourceSoftware(dataset.source_software);
   const description = dataset.description
-    ?? `Bottom-Up DIA dataset imported from ${isDiaclip ? "DIA-CLIP" : "DIA-NN"} results.`;
-  return isDiaclip ? description.replace(/DIA-NN/gi, "reference") : description;
+    ?? `Bottom-Up DIA dataset imported from ${isDiaclip ? DIACLIP_DISPLAY_NAME : "DIA-NN"} results.`;
+  return isDiaclip
+    ? description.replace(/DIA-CLIP/gi, DIACLIP_DISPLAY_NAME).replace(/DIA-NN/gi, "reference")
+    : description;
 }
 
 export function getBuDefaultQMax(dataset: DatasetOut): number | undefined {
