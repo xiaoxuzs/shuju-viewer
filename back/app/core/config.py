@@ -126,17 +126,17 @@ class Settings(BaseSettings):
     zp_engine_path: Path = Field(default=BACKEND_ROOT / "vendor" / "zp_engine")
     #: Operator-pinned binary-layer commit or release label.
     zp_binary_layer_commit: str | None = Field(default=None)
-    #: Backend-only guard for ZP schema bootstrap and management/debug APIs.
-    zp_management_enabled: bool = Field(default=False)
-    #: Backend-only production guard. Keep disabled until ZP import E2E verification passes.
-    zp_import_conversion_enabled: bool = Field(default=False)
+    #: Enable ZP schema bootstrap and management/debug APIs. Disable only for legacy/offline fallback.
+    zp_management_enabled: bool = Field(default=True)
+    #: Make ZP artifact generation part of the normal import path. Disable only for emergency fallback.
+    zp_import_conversion_enabled: bool = Field(default=True)
     #: Optional storage root for committed .zp artifacts. Relative paths resolve under DATA_ROOT.
     zp_output_root: Path | None = Field(default=None)
     #: Optional temporary root for ZP conversion jobs. Relative paths resolve under ZP_OUTPUT_ROOT.
     zp_temp_root: Path | None = Field(default=None)
     #: Additional source roots allowed for ZP conversion, comma-separated. DATA_ROOT is always allowed.
     zp_allowed_source_roots: str = Field(default="")
-    zp_default_format_version: int = Field(default=1, ge=1, le=3)
+    zp_default_format_version: int = Field(default=3, ge=1, le=3)
     zp_conversion_timeout_seconds: int = Field(default=7200, ge=1)
     zp_conversion_worker_threads: int = Field(default=6, ge=1, le=32)
     zp_conversion_max_concurrent_jobs: int = Field(default=1, ge=1)

@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Activity,
+  Cpu,
   Database,
   FileText,
   FolderOpen,
@@ -22,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/common/page-header";
+import { AgentZpImportDialog } from "@/features/agent-zp/AgentZpImportDialog";
 import { ImportUploadDialog } from "@/features/import-upload/ImportUploadDialog";
 import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 import { parseApiError } from "@/lib/apiError";
@@ -67,6 +69,7 @@ export function DatasetsPage() {
   usePageTransitionReady(!isLoading);
 
   const [importOpen, setImportOpen] = useState(false);
+  const [agentZpOpen, setAgentZpOpen] = useState(false);
 
   // Delete dialog state
   const [deleteTarget, setDeleteTarget] = useState<DatasetOut | null>(null);
@@ -107,10 +110,16 @@ export function DatasetsPage() {
         title="Datasets"
         description="Pick a dataset to start exploring proteins, proteoforms, PrSMs and spectra."
         actions={
-          <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-            <FolderOpen className="h-4 w-4" />
-            Upload local dataset
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setAgentZpOpen(true)}>
+              <Cpu className="h-4 w-4" />
+              Agent-ZP import
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+              <FolderOpen className="h-4 w-4" />
+              Upload local dataset
+            </Button>
+          </div>
         }
       />
 
@@ -255,6 +264,7 @@ export function DatasetsPage() {
       )}
 
       <ImportUploadDialog open={importOpen} onOpenChange={setImportOpen} />
+      <AgentZpImportDialog open={agentZpOpen} onOpenChange={setAgentZpOpen} />
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/65 p-4 backdrop-blur-sm"

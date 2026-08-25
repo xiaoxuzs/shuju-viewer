@@ -210,6 +210,7 @@ def register_asset(
                 "capabilities": payload,
             },
         )
+        _mark_dataset_zp_main_path(conn, dataset_id=dataset_id, asset_capabilities=capabilities or {"spectra": True})
 
 
 def list_assets_for_dataset(dataset_id: int) -> list[ZpArtifact]:
@@ -229,6 +230,30 @@ def list_assets_for_dataset(dataset_id: int) -> list[ZpArtifact]:
             {"dataset_id": dataset_id},
         ).mappings().all()
     return [_row_to_asset(dict(row)) for row in rows]
+
+
+def _mark_dataset_zp_main_path(
+    conn: Any,
+    *,
+    dataset_id: int,
+    asset_capabilities: dict[str, object],
+) -> None:
+    row = conn.execute(
+        text("SELECT capabilities FROM datasets WHERE dataset_id = :dataset_id"),
+        {"dataset_id": dataset_id},
+    ).mappings().one_or_none()
+    if row is None:
+        return
+    capabilities = _json_object(row.get("capabilities"))
+    capabilities["spectra_source"] = "zp"
+    capabilities["binary_layer"] = asset_capabilities
+    payload = json.dumps(capabilities, ensure_ascii=False, sort_keys=True)
+    statement = (
+        "UPDATE datasets SET capabilities = :capabilities WHERE dataset_id = :dataset_id"
+        if _is_sqlite()
+        else "UPDATE datasets SET capabilities = CAST(:capabilities AS jsonb) WHERE dataset_id = :dataset_id"
+    )
+    conn.execute(text(statement), {"dataset_id": dataset_id, "capabilities": payload})
 
 
 def latest_job_for_dataset_slug(slug: str | None) -> ZpConversionJob | None:
@@ -425,16 +450,6 @@ def _row_to_job(row: dict[str, Any]) -> ZpConversionJob:
 
 
 def _row_to_asset(row: dict[str, Any]) -> ZpArtifact:
-    raw_capabilities = row.get("capabilities")
-    if isinstance(raw_capabilities, str):
-        try:
-            capabilities = json.loads(raw_capabilities)
-        except json.JSONDecodeError:
-            capabilities = {}
-    elif isinstance(raw_capabilities, dict):
-        capabilities = dict(raw_capabilities)
-    else:
-        capabilities = {}
     return ZpArtifact(
         asset_id=int(row["asset_id"]),
         dataset_id=int(row["dataset_id"]),
@@ -444,10 +459,22 @@ def _row_to_asset(row: dict[str, Any]) -> ZpArtifact:
         source_fingerprint=row.get("source_fingerprint"),
         output_sha256=str(row["output_sha256"]),
         status=str(row["status"]),
-        capabilities=capabilities,
+        capabilities=_json_object(row.get("capabilities")),
         created_at=_datetime_or_none(row.get("created_at")),
         updated_at=_datetime_or_none(row.get("updated_at")),
     )
+
+
+def _json_object(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return dict(parsed) if isinstance(parsed, dict) else {}
+    return {}
 
 
 def _path_or_none(value: Any) -> Path | None:

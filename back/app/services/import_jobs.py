@@ -1409,8 +1409,7 @@ def run_path_import_job(
             )
             _slice("zp_conversion_s")
         else:
-            # Backend-only production guard: default servers must keep legacy imports unblocked
-            # until real .zp import-to-visualization verification has passed.
+            # Emergency fallback only; normal imports should generate a ZP artifact.
             timing["zp_conversion_s"] = 0.0
             _t = time.perf_counter()
 

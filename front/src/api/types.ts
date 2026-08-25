@@ -169,6 +169,51 @@ export interface ImportUploadError {
   status: number | null;
 }
 
+export type AgentZpAnalysisCategory = "SPECTRA_ONLY" | "TOP_DOWN" | "BOTTOM_UP";
+export type AgentZpBinaryOperation = "register_existing_zp" | "convert_supported_binary_to_zp";
+
+export interface AgentZpImportCreateIn {
+  source_path: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  analysis_category: AgentZpAnalysisCategory;
+  source_profile: string;
+  binary_operation: AgentZpBinaryOperation;
+  format_version?: number | null;
+  replace_existing: boolean;
+}
+
+export interface AgentZpRunVerificationOut {
+  run_id: number;
+  run_name: string;
+  scan_count: number;
+  sample_scan_number: number;
+  sample_peak_count: number;
+}
+
+export interface AgentZpVerificationOut {
+  validation_mode: string;
+  scan_index_total: number;
+  readable_run_count: number;
+  runs: AgentZpRunVerificationOut[];
+}
+
+export interface AgentZpImportOut {
+  case_id: string;
+  status: string;
+  binary_operation: AgentZpBinaryOperation;
+  analysis_category: AgentZpAnalysisCategory;
+  source_profile: string;
+  dataset_id: number;
+  dataset_slug: string;
+  run_ids: number[];
+  zp_format_version: number;
+  zp_output_sha256: string;
+  validation_mode: string;
+  verification: AgentZpVerificationOut;
+}
+
 /** 蛋白质列表行（某 cutoff 下一条记录）。 */
 export interface ProteinListItemOut {
   id: number;

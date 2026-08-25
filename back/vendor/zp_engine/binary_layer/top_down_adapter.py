@@ -75,7 +75,7 @@ class TopDownAdapter:
         peaks: list[TopDownPeak] = []
         fragments: list[TopDownFragmentMatch] = []
         features: list[TopDownFeature] = []
-        proteoform_ids: set[str] = set()
+        proteoforms_by_id: dict[str, TopDownProteoform] = {}
 
         for prsm_id, raw, source_file in detail_records:
             summary_rows = table_rows.get(prsm_id, ())
@@ -87,18 +87,16 @@ class TopDownAdapter:
                 summary_rows,
             )
             proteoform, prsm, record_modifications, record_peaks, record_fragments, feature = normalized
-            if proteoform.proteoform_id in proteoform_ids:
-                raise TopDownConversionError(
-                    "TOP_DOWN_DUPLICATE_PROTEOFORM_ID",
-                    f"Duplicate logical Proteoform ID: {proteoform.proteoform_id}",
-                )
-            proteoform_ids.add(proteoform.proteoform_id)
-            proteoforms.append(proteoform)
             prsms.append(prsm)
             modifications.extend(record_modifications)
             peaks.extend(record_peaks)
             fragments.extend(record_fragments)
             features.append(feature)
+            previous = proteoforms_by_id.get(proteoform.proteoform_id)
+            if previous is None or _better_prsm(prsm, previous):
+                proteoforms_by_id[proteoform.proteoform_id] = proteoform
+
+        proteoforms = list(proteoforms_by_id.values())
 
         return TopDownDocument(
             schema_name="top_down_document",
@@ -863,7 +861,7 @@ class TopDownAdapter:
             )
             result.append(
                 TopDownModification(
-                    modification_id=f"modification:{proteoform_id}:{source_id}",
+                    modification_id=f"modification:{proteoform_id}:{prsm_id}:{source_id}",
                     proteoform_id=proteoform_id,
                     prsm_id=prsm_id,
                     name=_text(raw.get("anno")) or "unknown",
@@ -1225,6 +1223,18 @@ def _select_summary_row(
         if len(matching) == 1:
             return matching[0]
     return rows[0]
+
+
+def _better_prsm(candidate: TopDownPrsm, current: TopDownProteoform) -> bool:
+    current_e = _nullable_float(current.score_summary.get("e_value"))
+    candidate_e = candidate.e_value
+    if candidate_e is not None and (current_e is None or candidate_e < current_e):
+        return True
+    if candidate_e != current_e:
+        return False
+    current_p = _nullable_float(current.score_summary.get("p_value"))
+    candidate_p = candidate.p_value
+    return candidate_p is not None and (current_p is None or candidate_p < current_p)
 
 
 def _minutes_to_seconds(value: Any) -> float | None:

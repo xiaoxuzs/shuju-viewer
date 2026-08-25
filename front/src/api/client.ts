@@ -4,6 +4,8 @@
  */
 import axios from "axios";
 import type {
+  AgentZpImportCreateIn,
+  AgentZpImportOut,
   DatasetDeletedOut,
   DatasetOut,
   ImportEnqueueIn,
@@ -211,6 +213,14 @@ export async function deleteDataset(
 ): Promise<DatasetDeletedOut> {
   const { data } = await api.delete<DatasetDeletedOut>(`/datasets/${slug}`, {
     params: options?.cancelImport ? { cancel_import: true } : undefined,
+  });
+  return data;
+}
+
+export async function createAgentZpImport(body: AgentZpImportCreateIn): Promise<AgentZpImportOut> {
+  const { data } = await api.post<AgentZpImportOut>("/agent-zp/imports", body, {
+    timeout: 600_000,
+    headers: { "Content-Type": "application/json" },
   });
   return data;
 }

@@ -22,8 +22,7 @@ log = get_logger(__name__)
 def _ensure_zp_conversion_schema_if_enabled() -> None:
     if not settings.zp_management_enabled:
         return
-    # Keep ZP bootstrap behind the management flag so default server startup
-    # does not require permissions for optional ZP tables.
+    # Operators may still disable ZP management for legacy/offline fallback.
     from app.zp_conversion.repository import ensure_zp_conversion_schema
 
     ensure_zp_conversion_schema()

@@ -52,6 +52,7 @@ from .tools.real_mzml import RealMzmlParseTool
 from .tools.real_thermo_raw import RealThermoRawParseTool
 from .tools.real_top_down import RealTopDownTool
 from .tools.real_top_down_intermediate import RealTopDownIntermediateTool
+from .tools.real_topfd_js import RealTopfdJsParseTool
 from .tools.real_dia_result import RealDiaResultTool
 from .dia_result_bundle import DiaResultBundle, DiaResultBundleInspector
 from .dia_result_adapter import DiaResultAdapter
@@ -113,7 +114,7 @@ __all__ = [
     "RealThermoRawParseTool", "convert_source_to_zp", "inspect_source", "open_zp", "validate_zp",
     "RealTopDownTool", "TopDownAdapter", "TopDownBundle", "TopDownBundleManifest",
     "RealTopDownIntermediateTool", "TopDownInterpretationAdapter",
-    "RealDiaResultTool", "DiaResultBundle", "DiaResultBundleInspector",
+    "RealTopfdJsParseTool", "RealDiaResultTool", "DiaResultBundle", "DiaResultBundleInspector",
     "DiaResultAdapter", "DiaSpectrumAssociator", "BottomUpReader",
     "BottomUpExtensionValidator", "get_bottom_up_summary",
     "get_bottom_up_identification", "get_bottom_up_identifications_for_spectrum",

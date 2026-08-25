@@ -31,6 +31,7 @@ def build_default_registry() -> StepRegistry:
     from .tools.real_thermo_raw import RealThermoRawParseTool
     from .tools.real_top_down import RealTopDownTool
     from .tools.real_top_down_intermediate import RealTopDownIntermediateTool
+    from .tools.real_topfd_js import RealTopfdJsParseTool
     from .tools.real_dia_result import RealDiaResultTool
 
     registry = StepRegistry()
@@ -43,6 +44,7 @@ def build_default_registry() -> StepRegistry:
         RealThermoRawParseTool(),
         RealTopDownTool(),
         RealTopDownIntermediateTool(),
+        RealTopfdJsParseTool(),
         RealDiaResultTool(),
         StringPoolBuildTool(),
         IndexBuildTool(),

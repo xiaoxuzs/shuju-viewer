@@ -36,7 +36,7 @@ def _dataset_mode(row: Any) -> str:
     if _is_bottom_up(row.get("analysis_mode")):
         return "bottom_up"
     caps = _capabilities_out(row.get("capabilities"), source_software=row.get("source_software"))
-    if str(caps.get("analysis_shape") or "").lower() in {"mzml_only", "raw_mzml_only"}:
+    if str(caps.get("analysis_shape") or "").lower() in {"mzml_only", "raw_mzml_only", "zp_spectra_only"}:
         return "spectra_only"
     return "top_down"
 

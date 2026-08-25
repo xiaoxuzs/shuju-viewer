@@ -70,6 +70,9 @@ class SourceInspector:
                     dia_result_bundle=dia_bundle,
                     output_created_at_millis=dia_bundle.output_created_at_millis,
                 )
+            topfd_js_profile = _inspect_topfd_js_bundle(path, paths)
+            if topfd_js_profile is not None:
+                return topfd_js_profile
         if path.is_dir() or (path.is_file() and path.suffix.lower() == ".json"):
             deferred_top_down_error: TopDownConversionError | None = None
             try:
@@ -185,3 +188,38 @@ def _has_precomputed_prsm(root: Path) -> bool:
         )
     except OSError:
         return False
+
+
+def _inspect_topfd_js_bundle(path: Path, paths: tuple[Path, ...]) -> SourceProfile | None:
+    files: list[Path] = []
+    for subdir in ("ms1_json", "ms2_json"):
+        directory = path / "topfd" / subdir
+        if directory.is_dir():
+            files.extend(
+                sorted(
+                    item
+                    for item in directory.glob("spectrum*.js")
+                    if item.is_file()
+                )
+            )
+    if not files:
+        return None
+    return SourceProfile(
+        source_type="real_topfd_js_bundle",
+        input_files=paths,
+        file_count=len(files),
+        has_spectra=True,
+        has_chromatograms=True,
+        has_identification=False,
+        has_quantification=False,
+        requires_pre_conversion=False,
+        notes=(
+            "Viewer TopFD JS spectra bundle inspected from topfd/ms1_json and topfd/ms2_json.",
+        ),
+        path=path,
+        file_size=sum(item.stat().st_size for item in files),
+        run_count=1,
+        spectrum_source_type="topfd_js",
+        detected_roles=("topfd_js_spectra",),
+        identity_files=tuple(sorted(files, key=lambda item: item.as_posix().encode("utf-8"))),
+    )

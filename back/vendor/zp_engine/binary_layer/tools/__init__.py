@@ -6,6 +6,7 @@ from .real_mzml import RealMzmlParseTool
 from .real_thermo_raw import RealThermoRawParseTool
 from .real_top_down import RealTopDownTool
 from .real_top_down_intermediate import RealTopDownIntermediateTool
+from .real_topfd_js import RealTopfdJsParseTool
 from .real_dia_result import RealDiaResultTool
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "RealThermoRawParseTool",
     "RealTopDownTool",
     "RealTopDownIntermediateTool",
+    "RealTopfdJsParseTool",
     "RealDiaResultTool",
 ]

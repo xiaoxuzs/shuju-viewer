@@ -92,6 +92,7 @@ export function PrsmDetailPage() {
     return (datasetQuery.data.capabilities?.["spectra_source"] as string | undefined) ?? "topfd_js";
   }, [datasetQuery.data]);
   const spectraSourceReady = spectraSource != null;
+  const usesScanSpectrum = spectraSource === "mzml_memory" || spectraSource === "zp";
 
   const parsed = useMemo(() => {
     if (!prsm) return null;
@@ -110,7 +111,7 @@ export function PrsmDetailPage() {
     queryKey: ["ms1", spectraSource, slug, prsm?.run_id, ms1Id, ms1Scan],
     queryFn: () => {
       if (!prsm) throw new Error("missing prsm");
-      if (spectraSource === "mzml_memory") {
+      if (usesScanSpectrum) {
         if (ms1Scan == null || !Number.isFinite(ms1Scan)) throw new Error("missing ms1 scan");
         return fetchMzmlSpectrum(prsm.dataset_id, prsm.run_id, ms1Scan);
       }
@@ -119,7 +120,7 @@ export function PrsmDetailPage() {
     enabled:
       Boolean(prsm) &&
       spectraSourceReady &&
-      (spectraSource === "mzml_memory"
+      (usesScanSpectrum
         ? ms1Scan != null && Number.isFinite(ms1Scan)
         : ms1Id != null && Number.isFinite(ms1Id)),
     retry: chartQueryRetry,
@@ -128,7 +129,7 @@ export function PrsmDetailPage() {
     queryKey: ["ms2", spectraSource, slug, prsm?.run_id, ms2Id, ms2Scan],
     queryFn: () => {
       if (!prsm) throw new Error("missing prsm");
-      if (spectraSource === "mzml_memory") {
+      if (usesScanSpectrum) {
         if (ms2Scan == null || !Number.isFinite(ms2Scan)) throw new Error("missing ms2 scan");
         return fetchMzmlSpectrum(prsm.dataset_id, prsm.run_id, ms2Scan);
       }
@@ -137,7 +138,7 @@ export function PrsmDetailPage() {
     enabled:
       Boolean(prsm) &&
       spectraSourceReady &&
-      (spectraSource === "mzml_memory"
+      (usesScanSpectrum
         ? ms2Scan != null && Number.isFinite(ms2Scan)
         : ms2Id != null && Number.isFinite(ms2Id)),
     retry: chartQueryRetry,
@@ -226,11 +227,11 @@ export function PrsmDetailPage() {
   // open/close events, which only change `ms1ModalOpen`/`ms2ModalOpen`.
   useEffect(() => {
     setMs1ModalZoom(DEFAULT_ZOOM);
-  }, [spectraSource === "mzml_memory" ? ms1Scan : ms1Id]);
+  }, [usesScanSpectrum ? ms1Scan : ms1Id]);
   useEffect(() => {
     setMs2ModalZoom(DEFAULT_ZOOM);
     setPeakDetail(null);
-  }, [spectraSource === "mzml_memory" ? ms2Scan : ms2Id]);
+  }, [usesScanSpectrum ? ms2Scan : ms2Id]);
 
   useEffect(() => {
     setPeakDetail(null);

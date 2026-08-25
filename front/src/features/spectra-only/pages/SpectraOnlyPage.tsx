@@ -85,6 +85,7 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
     if (scanNumber != null && scanNumber !== selectedScan) beginManualTransition();
     setSelectedScan(scanNumber);
   };
+  const spectraMode = dataset.capabilities?.spectra_source === "zp" ? "ZP binary" : "mzML memory";
 
   return (
     <>
@@ -103,7 +104,7 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
       <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
         <SummaryCard label="Runs" value={runs.length.toLocaleString()} />
         <SummaryCard label="Format" value={selectedRun?.raw_format ?? "mzML"} />
-        <SummaryCard label="Mode" value="mzML memory" />
+        <SummaryCard label="Mode" value={spectraMode} />
       </div>
 
       <div className="mb-5 flex flex-wrap justify-end gap-2">
@@ -145,7 +146,7 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
                   scanNumber={parentMs1ScanNumber}
                   titlePrefix="Parent MS1 Spectrum"
                   highlight={{
-                    targetMz: selectedScanItem?.precursor_mz,
+                    targetMz: selectedScanItem?.precursor_mz ?? selectedScanItem?.isolation_target_mz,
                     label: "precursor",
                     toleranceDa: 0.05,
                   }}

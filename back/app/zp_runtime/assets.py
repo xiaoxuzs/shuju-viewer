@@ -30,8 +30,7 @@ def find_active_asset(
     run_id: int | None = None,
 ) -> ActiveZpAsset | None:
     if not settings.zp_management_enabled:
-        # Default server deploys do not create optional ZP tables, so ordinary
-        # dataset views must behave as if no binary artifact is present.
+        # Explicit legacy/offline fallback behaves as if no binary artifact is present.
         return None
     row = session.execute(
         text(

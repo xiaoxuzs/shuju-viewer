@@ -44,7 +44,14 @@ class SourceProfile:
             or self.top_down_bundle
             or self.top_down_intermediate_bundle
         )
-        return bundle.relative_label(path) if bundle is not None else path.name
+        if bundle is not None:
+            return bundle.relative_label(path)
+        if self.path is not None and self.path.is_dir():
+            try:
+                return path.resolve().relative_to(self.path.resolve()).as_posix()
+            except ValueError:
+                pass
+        return path.name
 
 
 @dataclass(frozen=True, slots=True)

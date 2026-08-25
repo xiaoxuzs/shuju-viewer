@@ -65,6 +65,15 @@ REAL_TOP_DOWN_INTERMEDIATE_STEPS = (
     "zp_write",
     "zp_validate",
 )
+REAL_TOPFD_JS_STEPS = (
+    "file_validate",
+    "hash_input",
+    "real_topfd_js_parse",
+    "string_pool_build",
+    "index_build",
+    "zp_write",
+    "zp_validate",
+)
 REAL_DIA_RESULT_STEPS = (
     "file_validate",
     "hash_input",
@@ -144,6 +153,7 @@ def build_default_source_adapter_registry() -> SourceAdapterRegistry:
             "real_top_down_intermediate_bundle",
             REAL_TOP_DOWN_INTERMEDIATE_STEPS,
         ),
+        SourceAdapter("real_topfd_js_bundle", REAL_TOPFD_JS_STEPS),
         SourceAdapter(
             "real_dia_result_bundle",
             REAL_DIA_RESULT_STEPS,

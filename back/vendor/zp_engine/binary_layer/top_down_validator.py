@@ -235,14 +235,14 @@ class TopDownExtensionValidator:
         for item in artifacts:
             file_name = item.get("file_name")
             match = (
-                re.fullmatch(r"prsm(\d+)\.js", Path(file_name).name, re.IGNORECASE)
+                re.fullmatch(r"prsm(\d+)\.(?:js|json|txt)", Path(file_name).name, re.IGNORECASE)
                 if isinstance(file_name, str)
                 else None
             )
             if match is None:
                 add(
                     "TOP_DOWN_INVALID_INTERPRETATION_PROVENANCE",
-                    "Generated PrSM file name must be prsm<id>.js",
+                    "Generated PrSM file name must be prsm<id>.js/json/txt",
                 )
                 continue
             artifact_ids.append(str(int(match.group(1))))

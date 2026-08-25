@@ -28,11 +28,14 @@ def build_api_router() -> APIRouter:
     router.include_router(mzml_spectra.router)
     router.include_router(bu.router)
     if settings.zp_management_enabled:
-        # ZP management/debug endpoints are optional so default server deploys
-        # do not expose inactive binary-layer controls.
+        # ZP endpoints are part of the normal binary main path; the flag is an emergency fallback.
         from app.api.v1 import zp_conversions
 
         router.include_router(zp_conversions.router)
+        if settings.zp_import_conversion_enabled:
+            from app.api.v1 import agent_zp
+
+            router.include_router(agent_zp.router)
     return router
 
 
