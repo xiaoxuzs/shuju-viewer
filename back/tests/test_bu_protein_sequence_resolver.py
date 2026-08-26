@@ -52,3 +52,24 @@ def test_unique_dataset_fasta_is_used_when_uniprot_disabled(tmp_path: Path, monk
     assert sequence == "MARTKQTARKSTGGKAPR"
     assert metadata["sequence_source"] == "user_fasta"
     assert session.statements[0]["sequence"] == "MARTKQTARKSTGGKAPR"
+
+
+def test_default_fasta_is_used_when_dataset_has_no_fasta(tmp_path: Path, monkeypatch) -> None:
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    fallback = tmp_path / "human.fasta"
+    fallback.write_text(">sp|P62805|H4_HUMAN Histone H4\nMARTKQTAR\n", encoding="utf-8")
+    monkeypatch.setattr(protein_sequence_resolver.settings, "bu_uniprot_enabled", False)
+    monkeypatch.setattr(protein_sequence_resolver.settings, "bu_default_fasta_path", fallback)
+    protein_sequence_resolver._FASTA_CACHE.clear()
+    session = _Session()
+
+    sequence, metadata = protein_sequence_resolver.resolve_base_sequence(
+        session,  # type: ignore[arg-type]
+        {"dataset_id": 1, "source_root": str(source_root)},
+        {"id": 2, "accession": "P62805", "is_decoy": False, "base_sequence": None, "extra_metadata": {}},
+    )
+
+    assert sequence == "MARTKQTAR"
+    assert metadata["sequence_source"] == "default_fasta"
+    assert session.statements[0]["sequence"] == "MARTKQTAR"

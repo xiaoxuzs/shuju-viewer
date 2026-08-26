@@ -7,6 +7,9 @@ from typing import Any
 from fastapi import HTTPException, status
 
 
+DIA_ISOLATION_WINDOW_MZ_TOLERANCE = 1e-3
+
+
 def _json_object(raw: Any) -> dict[str, Any]:
     return dict(raw) if isinstance(raw, dict) else {}
 
@@ -45,7 +48,11 @@ def isolation_window_contains(spec: dict[str, Any], precursor_mz: float) -> bool
         if selected is None:
             return False
         return abs(selected - precursor_mz) <= 2.0
-    return (target - lower) <= precursor_mz <= (target + upper)
+    return (
+        target - lower - DIA_ISOLATION_WINDOW_MZ_TOLERANCE
+        <= precursor_mz
+        <= target + upper + DIA_ISOLATION_WINDOW_MZ_TOLERANCE
+    )
 
 
 def resolve_ms2_scan_at_rt(

@@ -10,6 +10,7 @@ from app.api.deps import get_db
 from app.api.v1.universal_compat import require_cutoff, require_dataset
 from app.schemas import Page, ProteinDetailOut, ProteinListItemOut, ProteoformListItemOut
 from app.zp_runtime import (
+    ZpAssetReadError,
     ZpTopDownProtein,
     ZpTopDownProteoform,
     get_binary_top_down_protein,
@@ -184,7 +185,7 @@ def get_protein(
         {"dataset_id": dataset["dataset_id"], "protein_id": protein_id, "cutoff": cutoff},
     ).mappings().all()
     protein_payload = dict(protein)
-    binary = get_binary_top_down_protein(
+    binary = _safe_binary_top_down_protein(
         session,
         int(dataset["dataset_id"]),
         sequence_id=protein_payload.get("sequence_id"),
@@ -206,13 +207,31 @@ def _binary_protein_payload(
     dataset_id: int,
     payload: dict[str, object],
 ) -> dict[str, object]:
-    binary = get_binary_top_down_protein(
+    binary = _safe_binary_top_down_protein(
         session,
         dataset_id,
         sequence_id=payload.get("sequence_id"),
         sequence_name=str(payload.get("sequence_name") or ""),
     )
     return _apply_binary_protein_item(payload, binary) if binary is not None else payload
+
+
+def _safe_binary_top_down_protein(
+    session: Session,
+    dataset_id: int,
+    *,
+    sequence_id: object,
+    sequence_name: str,
+) -> ZpTopDownProtein | None:
+    try:
+        return get_binary_top_down_protein(
+            session,
+            dataset_id,
+            sequence_id=sequence_id,
+            sequence_name=sequence_name,
+        )
+    except ZpAssetReadError:
+        return None
 
 
 def _apply_binary_protein_item(
@@ -236,13 +255,31 @@ def _binary_proteoform_payload(
     dataset_id: int,
     payload: dict[str, object],
 ) -> dict[str, object]:
-    binary = get_binary_top_down_proteoform(
+    binary = _safe_binary_top_down_proteoform(
         session,
         dataset_id,
         payload.get("proteoform_id"),
         sequence_id=payload.get("sequence_id"),
     )
     return _apply_binary_proteoform_item(payload, binary) if binary is not None else payload
+
+
+def _safe_binary_top_down_proteoform(
+    session: Session,
+    dataset_id: int,
+    proteoform_id: object,
+    *,
+    sequence_id: object,
+) -> ZpTopDownProteoform | None:
+    try:
+        return get_binary_top_down_proteoform(
+            session,
+            dataset_id,
+            proteoform_id,
+            sequence_id=sequence_id,
+        )
+    except ZpAssetReadError:
+        return None
 
 
 def _apply_binary_proteoform_item(

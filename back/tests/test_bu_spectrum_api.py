@@ -539,8 +539,11 @@ def test_xic_uses_ms1_points_in_expanded_rt_window(monkeypatch: pytest.MonkeyPat
     )
     monkeypatch.setattr(
         xic_service,
-        "get_spectrum_by_scan",
-        lambda _session, _dataset_id, _run_id, scan: (spectra[scan], False),
+        "get_spectra_by_scans",
+        lambda _session, _dataset_id, _run_id, scans: (
+            {scan: spectra[scan] for scan in scans},
+            False,
+        ),
     )
     _install_no_full_load_guards(monkeypatch)
 
@@ -597,8 +600,11 @@ def test_product_xic_uses_matching_ms2_window_and_returns_zero_for_missing_peak(
     )
     monkeypatch.setattr(
         product_xic_service,
-        "get_spectrum_by_scan",
-        lambda _session, _dataset_id, _run_id, scan: (spectra[scan], False),
+        "get_spectra_by_scans",
+        lambda _session, _dataset_id, _run_id, scans: (
+            {scan: spectra[scan] for scan in scans},
+            False,
+        ),
     )
     _install_no_full_load_guards(monkeypatch)
 
@@ -630,8 +636,8 @@ def test_product_xic_ppm_tolerance_is_inclusive(monkeypatch: pytest.MonkeyPatch)
     )
     monkeypatch.setattr(
         product_xic_service,
-        "get_spectrum_by_scan",
-        lambda *_args: (spectra[1], False),
+        "get_spectra_by_scans",
+        lambda *_args: ({1: spectra[1]}, False),
     )
     _install_no_full_load_guards(monkeypatch)
 
@@ -666,7 +672,7 @@ def _batch_ion(ion_id: str, mz: float) -> BuProductXicBatchIonIn:
 def test_product_xic_batch_loads_spectra_once_and_keeps_no_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[int] = []
+    calls: list[list[int]] = []
     signal_mz = 175.119
     spectra = {
         1: {
@@ -692,11 +698,11 @@ def test_product_xic_batch_loads_spectra_once_and_keeps_no_signal(
         ],
     )
 
-    def get_one(_session: Any, _dataset_id: int, _run_id: int, scan: int):
-        calls.append(scan)
-        return spectra[scan], False
+    def get_many(_session: Any, _dataset_id: int, _run_id: int, scans: list[int]):
+        calls.append(scans)
+        return {scan: spectra[scan] for scan in scans}, False
 
-    monkeypatch.setattr(product_xic_service, "get_spectrum_by_scan", get_one)
+    monkeypatch.setattr(product_xic_service, "get_spectra_by_scans", get_many)
     _install_no_full_load_guards(monkeypatch)
     request = BuProductXicBatchIn(
         tolerance_ppm=20,
@@ -710,7 +716,7 @@ def test_product_xic_batch_loads_spectra_once_and_keeps_no_signal(
         None, {"dataset_id": 39}, _match(), request  # type: ignore[arg-type]
     )
 
-    assert calls == [1, 2]
+    assert calls == [[1, 2]]
     assert [trace.id for trace in out.traces] == ["y5|1|175.119", "y6|1|250"]
     assert out.traces[0].status == "ok"
     assert [point.intensity for point in out.traces[0].points] == [6100.0, 0.0]
@@ -740,8 +746,8 @@ def test_product_xic_batch_rt_window_override(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(product_xic_service, "find_product_xic_ms2_scans", find_scans)
     monkeypatch.setattr(
         product_xic_service,
-        "get_spectrum_by_scan",
-        lambda *_args: (spectra[2], False),
+        "get_spectra_by_scans",
+        lambda *_args: ({2: spectra[2]}, False),
     )
     _install_no_full_load_guards(monkeypatch)
     request = BuProductXicBatchIn(
@@ -813,8 +819,8 @@ def test_product_xic_batch_route_matches_old_get(
     )
     monkeypatch.setattr(
         product_xic_service,
-        "get_spectrum_by_scan",
-        lambda *_args: (spectra[1], False),
+        "get_spectra_by_scans",
+        lambda *_args: ({1: spectra[1]}, False),
     )
     request = BuProductXicBatchIn(
         tolerance_ppm=20,

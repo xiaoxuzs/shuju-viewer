@@ -442,17 +442,12 @@ def _bottom_up_index(path: Path) -> _BottomUpIndex:
         cached = _BOTTOM_UP_INDEX_CACHE.get(handle.identity)
         if cached is not None:
             return cached
-    _business_reader("bottom_up", path)
+    business_reader = _business_reader("bottom_up", path)
 
     def read() -> _BottomUpIndex:
         with handle.lock:
-            extensions = tuple(handle.reader.read_extensions())
             spectra = tuple(handle.reader.read_spectra())
-        payloads = {
-            item.extension_type: item.payload
-            for item in extensions
-            if str(item.extension_type).startswith("bottom_up_")
-        }
+        payloads = business_reader.get_extension_payloads()
         identifications = tuple(_records(payloads, "bottom_up_identifications"))
         peptides = _records(payloads, "bottom_up_peptides")
         proteins = _records(payloads, "bottom_up_proteins")

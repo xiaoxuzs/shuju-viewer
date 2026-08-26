@@ -22,7 +22,7 @@ from app.services.mzml_scan_index import (
     ScanIndexMissingError,
     ScanIndexStaleError,
     generate_scan_index_from_mzml,
-    load_scan_index,
+    load_persisted_scan_index,
     write_scan_index,
 )
 from app.services.mzml_scan_reader import resolve_run_mzml_path
@@ -159,7 +159,7 @@ def _scan_index_state(
     run_id: int,
 ) -> str:
     try:
-        load_scan_index(session, dataset_id, run_id)
+        load_persisted_scan_index(session, dataset_id, run_id)
     except ScanIndexMissingError:
         return "missing"
     except ScanIndexStaleError:

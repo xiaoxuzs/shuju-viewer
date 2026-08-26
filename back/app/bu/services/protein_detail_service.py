@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.bu.services.lists_service import _use_binary_entities
 from app.bu.services.peptide_mapper import coverage_percent, map_peptide, normalize_aa
 from app.bu.services.protein_sequence_resolver import resolve_base_sequence
 from app.schemas import BuCoverageSegment, BuProteinDetailOut, BuProteinListItemOut, BuProteinPeptideRef
@@ -19,7 +20,11 @@ def get_protein_detail(session: Session, dataset: dict[str, Any], protein_id: in
     if protein is None:
         return None
 
-    binary = get_binary_bottom_up_protein(session, dataset_id, str(protein.get("accession") or ""))
+    binary = (
+        get_binary_bottom_up_protein(session, dataset_id, str(protein.get("accession") or ""))
+        if _use_binary_entities(session, dataset_id)
+        else None
+    )
     peptides = _peptide_rows(session, dataset_id, protein_id, include_decoy=bool(protein.get("is_decoy")))
     peptide_refs = [BuProteinPeptideRef(**_peptide_ref_payload(row)) for row in peptides]
     base_sequence, metadata = resolve_base_sequence(session, dataset, protein)

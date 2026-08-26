@@ -25,15 +25,15 @@ export function DatasetModeGate() {
   if (!data) return <DataEmptyState />;
 
   const datasetHome = `/datasets/${slug}`;
-  if (data.analysis_mode === "BOTTOM_UP") {
-    return <BuDatasetLayout dataset={data} />;
-  }
-
   if (isSpectraOnlyDataset(data)) {
     if (location.pathname !== datasetHome) {
       return <Navigate to={datasetHome} replace />;
     }
     return <SpectraOnlyPage dataset={data} />;
+  }
+
+  if (data.analysis_mode === "BOTTOM_UP") {
+    return <BuDatasetLayout dataset={data} />;
   }
 
   if (location.pathname !== datasetHome) {

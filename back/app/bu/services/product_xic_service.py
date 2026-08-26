@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -29,8 +30,7 @@ from app.services.mzml_scan_reader import (
     RunNotFoundError,
     SpectrumNotFoundError,
     UnsupportedMzmlError,
-    get_spectrum_by_scan,
-    indexed_reader_scope,
+    get_spectra_by_scans,
 )
 from app.spectrum_memory import release_dataset
 
@@ -65,14 +65,16 @@ def _best_intensities(
     targets: list[tuple[float, float]],
 ) -> list[float]:
     best = [0.0] * len(targets)
-    for mz_raw, intensity_raw in zip(mz_values, intensity_values, strict=False):
-        mz = _as_float(mz_raw)
-        intensity = _as_float(intensity_raw)
-        if mz is None or intensity is None:
-            continue
-        for index, (product_mz, tolerance) in enumerate(targets):
-            if abs(mz - product_mz) <= tolerance:
-                best[index] = max(best[index], intensity)
+    value_count = min(len(mz_values), len(intensity_values))
+    if value_count == 0:
+        return best
+    mz_array = np.asarray(mz_values, dtype=np.float64)[:value_count]
+    intensity_array = np.asarray(intensity_values, dtype=np.float64)[:value_count]
+    finite = np.isfinite(mz_array) & np.isfinite(intensity_array)
+    for index, (product_mz, tolerance) in enumerate(targets):
+        matched = intensity_array[finite & (np.abs(mz_array - product_mz) <= tolerance)]
+        if matched.size:
+            best[index] = max(0.0, float(matched.max()))
     return best
 
 
@@ -105,18 +107,18 @@ def _scan_index_http_error(
     return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 
-def _indexed_ms2_spectrum(
+def _indexed_ms2_spectra(
     session: Session,
     dataset_id: int,
     run_id: int,
-    scan_number: int,
-) -> dict[str, Any]:
+    scan_numbers: list[int],
+) -> dict[int, dict[str, Any]]:
     try:
-        spec, path_committed = get_spectrum_by_scan(
+        spectra, path_committed = get_spectra_by_scans(
             session,
             dataset_id,
             run_id,
-            scan_number,
+            scan_numbers,
         )
     except (RunNotFoundError, MzmlFileNotFoundError, SpectrumNotFoundError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -128,9 +130,9 @@ def _indexed_ms2_spectrum(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     if path_committed:
         release_dataset(dataset_id)
-    if int(spec.get("ms_level") or 1) != 2:
+    if any(int(spec.get("ms_level") or 1) != 2 for spec in spectra.values()):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="product_xic_ms2_scan_not_found")
-    return spec
+    return spectra
 
 
 def _extract_product_xics(
@@ -169,31 +171,27 @@ def _extract_product_xics(
     ) as exc:
         raise _scan_index_http_error(exc, dataset_id=dataset_id, run_id=run_id) from exc
 
-    with indexed_reader_scope():
-        for candidate in candidates:
-            spec = _indexed_ms2_spectrum(
-                session,
-                dataset_id,
-                run_id,
-                candidate.scan_number,
-            )
-            rt_seconds = _as_float(spec.get("rt_seconds"))
-            if rt_seconds is None:
-                continue
-            rt_minutes = rt_seconds / 60.0
-            intensities = _best_intensities(
-                spec.get("mz") or [],
-                spec.get("intensity") or [],
-                targets,
-            )
-            for index, intensity in enumerate(intensities):
-                points_by_target[index].append(
-                    BuProductXicPoint(
-                        rt=rt_minutes,
-                        intensity=intensity,
-                        scan=candidate.scan_number,
-                    )
+    scan_numbers = [candidate.scan_number for candidate in candidates]
+    spectra = _indexed_ms2_spectra(session, dataset_id, run_id, scan_numbers) if scan_numbers else {}
+    for candidate in candidates:
+        spec = spectra[candidate.scan_number]
+        rt_seconds = _as_float(spec.get("rt_seconds"))
+        if rt_seconds is None:
+            continue
+        rt_minutes = rt_seconds / 60.0
+        intensities = _best_intensities(
+            spec.get("mz") or [],
+            spec.get("intensity") or [],
+            targets,
+        )
+        for index, intensity in enumerate(intensities):
+            points_by_target[index].append(
+                BuProductXicPoint(
+                    rt=rt_minutes,
+                    intensity=intensity,
+                    scan=candidate.scan_number,
                 )
+            )
 
     for points in points_by_target:
         points.sort(key=lambda point: (point.rt, point.scan))

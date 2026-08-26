@@ -44,6 +44,11 @@ def _run_row(session: Session, dataset_id: int, run_id: int) -> dict[str, Any]:
     return dict(row)
 
 
+def _has_mzml_source(run_metadata: dict[str, Any]) -> bool:
+    raw_format = str(run_metadata.get("raw_format") or "").lower()
+    return raw_format == "mzml" or bool(run_metadata.get("mzml_file_path"))
+
+
 def _downsample(rt: list[float], intensity: list[float]) -> tuple[list[float], list[float], bool]:
     if len(rt) <= MAX_POINTS:
         return rt, intensity, False
@@ -65,6 +70,46 @@ def get_chromatogram(
             detail="invalid_chromatogram_type",
         )
     dataset_id = int(dataset["dataset_id"])
+    run = _run_row(session, dataset_id, run_id)
+    run_meta = _json_object(run.get("run_metadata"))
+    raw_format = str(run_meta.get("raw_format") or "").lower()
+    if raw_format == "bruker_d":
+        try:
+            return tdf_chromatogram.get_chromatogram(dataset_id=dataset_id, run=run, chrom_type=chrom_type)
+        except TdfpyUnavailable as exc:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="tdfpy_unavailable") from exc
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc) or "tdf_not_found") from exc
+
+    summary_error: Exception | None = None
+    has_mzml_source = _has_mzml_source(run_meta)
+    if has_mzml_source:
+        try:
+            source_path = chromatogram_summary.resolve_run_source_path(run)
+            summary = chromatogram_summary.load_summary(
+                dataset_id=dataset_id,
+                run_id=run_id,
+                source_path=source_path,
+            )
+        except (
+            chromatogram_summary.ChromatogramSummaryMissingError,
+            chromatogram_summary.ChromatogramSummaryStaleError,
+            FileNotFoundError,
+        ) as exc:
+            summary_error = exc
+        else:
+            rt = summary.rt
+            intensity = summary.tic if chrom_type == "tic" else summary.bpc
+            original = summary.points_count
+            rt, intensity, downsampled = _downsample(rt, intensity)
+            return BuChromatogramOut(
+                type=chrom_type,
+                rt=rt,
+                intensity=intensity,
+                downsampled=downsampled,
+                point_count_original=original,
+            )
+
     try:
         binary_trace = get_binary_chromatogram(session, dataset_id, run_id, chrom_type)
     except ZpRunNotFoundError as exc:
@@ -85,48 +130,20 @@ def get_chromatogram(
             point_count_original=binary_trace.point_count_original,
         )
 
-    run = _run_row(session, dataset_id, run_id)
-    run_meta = _json_object(run.get("run_metadata"))
-    raw_format = str(run_meta.get("raw_format") or "").lower()
-    if raw_format == "bruker_d":
-        try:
-            return tdf_chromatogram.get_chromatogram(dataset_id=dataset_id, run=run, chrom_type=chrom_type)
-        except TdfpyUnavailable as exc:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="tdfpy_unavailable") from exc
-        except ValueError as exc:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc) or "tdf_not_found") from exc
-    if raw_format != "mzml":
+    if not has_mzml_source:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="incompatible_run_format")
-
-    try:
-        source_path = chromatogram_summary.resolve_run_source_path(run)
-        summary = chromatogram_summary.load_summary(
-            dataset_id=dataset_id,
-            run_id=run_id,
-            source_path=source_path,
-        )
-    except chromatogram_summary.ChromatogramSummaryMissingError as exc:
+    if isinstance(summary_error, chromatogram_summary.ChromatogramSummaryMissingError):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="chromatogram_summary_missing",
-        ) from exc
-    except (chromatogram_summary.ChromatogramSummaryStaleError, FileNotFoundError) as exc:
+        ) from summary_error
+    if isinstance(summary_error, (chromatogram_summary.ChromatogramSummaryStaleError, FileNotFoundError)):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="chromatogram_summary_stale",
-        ) from exc
+        ) from summary_error
 
-    rt = summary.rt
-    intensity = summary.tic if chrom_type == "tic" else summary.bpc
-    original = summary.points_count
-    rt, intensity, downsampled = _downsample(rt, intensity)
-    return BuChromatogramOut(
-        type=chrom_type,
-        rt=rt,
-        intensity=intensity,
-        downsampled=downsampled,
-        point_count_original=original,
-    )
+    raise HTTPException(status.HTTP_409_CONFLICT, detail="chromatogram_summary_missing")
 
 
 def get_dia_windows(session: Session, dataset: dict[str, Any], run_id: int) -> BuDiaWindowsOut:

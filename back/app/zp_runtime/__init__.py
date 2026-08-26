@@ -11,6 +11,7 @@ from app.zp_runtime.core import (
     clear_zp_runtime_caches as _clear_core_zp_runtime_caches,
     get_binary_chromatogram,
     get_binary_scan_index,
+    get_binary_spectra_by_scans,
     get_binary_spectrum_by_scan,
 )
 from app.zp_runtime.identifications import (
@@ -71,6 +72,7 @@ __all__ = [
     "get_binary_extension_payload",
     "get_binary_extension_summaries",
     "get_binary_scan_index",
+    "get_binary_spectra_by_scans",
     "get_binary_spectrum_by_scan",
     "get_binary_top_down_overview",
     "get_binary_top_down_prsm",

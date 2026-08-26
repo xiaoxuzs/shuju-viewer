@@ -14,19 +14,27 @@ class BottomUpReader:
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
-        validation = BottomUpExtensionValidator().validate(self.path)
+        extensions = ZpReader(self.path).read_extensions_by_types(
+            list(BOTTOM_UP_EXTENSION_TYPES)
+        )
+        validation = BottomUpExtensionValidator().validate(
+            self.path,
+            extensions=extensions,
+        )
         if validation.valid is None:
             raise BottomUpSchemaError("File does not contain Bottom-Up extensions")
         if validation.valid is False:
             codes = ", ".join(item.code for item in validation.issues)
             raise BottomUpSchemaError(f"Bottom-Up extension validation failed: {codes}")
-        extensions = ZpReader(self.path).read_extensions()
         self._payloads = {
             item.extension_type: item.payload
             for item in extensions
             if item.extension_type in BOTTOM_UP_EXTENSION_TYPES
         }
         self._indexes: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
+
+    def get_extension_payloads(self) -> dict[str, dict[str, Any]]:
+        return dict(self._payloads)
 
     def get_bottom_up_summary(self) -> dict[str, Any]:
         metadata = self.get_metadata()

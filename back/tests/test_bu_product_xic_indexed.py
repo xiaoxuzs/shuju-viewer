@@ -71,7 +71,7 @@ def test_product_xic_batch_reads_each_candidate_once_and_extracts_all_ions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     find_calls: list[tuple[Any, int, int, float, float, float]] = []
-    read_calls: list[int] = []
+    read_calls: list[list[int]] = []
     spectra = {
         1: {
             "scan": 1,
@@ -100,12 +100,12 @@ def test_product_xic_batch_reads_each_candidate_once_and_extracts_all_ions(
         find_calls.append((session, dataset_id, run_id, rt_start, rt_end, precursor_mz))
         return [_metadata(1, 9.8), _metadata(2, 10.2)]
 
-    def get_one(_session: Any, _dataset_id: int, _run_id: int, scan: int):
-        read_calls.append(scan)
-        return spectra[scan], False
+    def get_many(_session: Any, _dataset_id: int, _run_id: int, scans: list[int]):
+        read_calls.append(scans)
+        return {scan: spectra[scan] for scan in scans}, False
 
     monkeypatch.setattr(product_xic_service, "find_product_xic_ms2_scans", find_scans)
-    monkeypatch.setattr(product_xic_service, "get_spectrum_by_scan", get_one)
+    monkeypatch.setattr(product_xic_service, "get_spectra_by_scans", get_many)
     _install_no_full_load_guards(monkeypatch)
     request = BuProductXicBatchIn(
         tolerance_ppm=100.0,
@@ -121,7 +121,7 @@ def test_product_xic_batch_reads_each_candidate_once_and_extracts_all_ions(
     )
 
     assert find_calls == [(session, 39, 10, 4.5, 15.5, 500.0)]
-    assert read_calls == [1, 2]
+    assert read_calls == [[1, 2]]
     assert [point.intensity for point in out.traces[0].points] == [20.0, 50.0]
     assert [point.intensity for point in out.traces[1].points] == [40.0, 60.0]
 
@@ -130,7 +130,7 @@ def test_product_xic_empty_candidates_keeps_no_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(product_xic_service, "find_product_xic_ms2_scans", lambda *_args: [])
-    monkeypatch.setattr(product_xic_service, "get_spectrum_by_scan", _fail)
+    monkeypatch.setattr(product_xic_service, "get_spectra_by_scans", _fail)
     _install_no_full_load_guards(monkeypatch)
     request = BuProductXicBatchIn(ions=[_ion("y1", 300.0)])
 
@@ -155,14 +155,16 @@ def test_product_xic_rejects_non_ms2_without_fallback(
     )
     monkeypatch.setattr(
         product_xic_service,
-        "get_spectrum_by_scan",
+        "get_spectra_by_scans",
         lambda *_args: (
             {
-                "scan": 1,
-                "ms_level": 1,
-                "rt_seconds": 10.0 * 60.0,
-                "mz": [],
-                "intensity": [],
+                1: {
+                    "scan": 1,
+                    "ms_level": 1,
+                    "rt_seconds": 10.0 * 60.0,
+                    "mz": [],
+                    "intensity": [],
+                }
             },
             False,
         ),
@@ -197,7 +199,7 @@ def test_product_xic_maps_scan_index_state_without_fallback(
         raise error
 
     monkeypatch.setattr(product_xic_service, "find_product_xic_ms2_scans", raise_error)
-    monkeypatch.setattr(product_xic_service, "get_spectrum_by_scan", _fail)
+    monkeypatch.setattr(product_xic_service, "get_spectra_by_scans", _fail)
     _install_no_full_load_guards(monkeypatch)
 
     with pytest.raises(HTTPException) as exc:
@@ -219,7 +221,7 @@ def test_bruker_product_xic_does_not_use_mzml_index(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(product_xic_service, "find_product_xic_ms2_scans", _fail)
-    monkeypatch.setattr(product_xic_service, "get_spectrum_by_scan", _fail)
+    monkeypatch.setattr(product_xic_service, "get_spectra_by_scans", _fail)
 
     with pytest.raises(HTTPException) as exc:
         product_xic_service.get_match_product_xic(

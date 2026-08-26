@@ -10,6 +10,8 @@ from app.api.deps import get_db
 from app.api.v1.universal_compat import prsm_list_item, prsm_list_select_sql, require_cutoff, require_dataset
 from app.schemas import Page, PrsmListItemOut, ProteoformDetailOut, ProteoformListItemOut
 from app.zp_runtime import (
+    ZpAssetReadError,
+    ZpTopDownPrsm,
     ZpTopDownProteoform,
     get_binary_top_down_prsm,
     get_binary_top_down_proteoform,
@@ -173,7 +175,7 @@ def get_proteoform(
         {"dataset_id": dataset["dataset_id"], "proteoform_id": proteoform_id, "cutoff": cutoff},
     ).mappings().all()
     pf_payload = dict(pf)
-    binary = get_binary_top_down_proteoform(
+    binary = _safe_binary_top_down_proteoform(
         session,
         int(dataset["dataset_id"]),
         pf_payload.get("proteoform_id"),
@@ -195,13 +197,31 @@ def _binary_proteoform_payload(
     dataset_id: int,
     payload: dict[str, object],
 ) -> dict[str, object]:
-    binary = get_binary_top_down_proteoform(
+    binary = _safe_binary_top_down_proteoform(
         session,
         dataset_id,
         payload.get("proteoform_id"),
         sequence_id=payload.get("sequence_id"),
     )
     return _apply_binary_proteoform_item(payload, binary) if binary is not None else payload
+
+
+def _safe_binary_top_down_proteoform(
+    session: Session,
+    dataset_id: int,
+    proteoform_id: object,
+    *,
+    sequence_id: object,
+) -> ZpTopDownProteoform | None:
+    try:
+        return get_binary_top_down_proteoform(
+            session,
+            dataset_id,
+            proteoform_id,
+            sequence_id=sequence_id,
+        )
+    except ZpAssetReadError:
+        return None
 
 
 def _apply_binary_proteoform_item(
@@ -230,7 +250,7 @@ def _binary_prsm_payload(
     dataset_id: int,
     payload: dict[str, object],
 ) -> dict[str, object]:
-    binary = get_binary_top_down_prsm(session, dataset_id, int(payload["prsm_id"]))
+    binary = _safe_binary_top_down_prsm(session, dataset_id, int(payload["prsm_id"]))
     if binary is None:
         return payload
     prsm = binary.prsm
@@ -255,6 +275,17 @@ def _binary_prsm_payload(
     out["ms1_scans"] = _first_value(_joined_text(reference.get("ms1_scan_numbers")), out.get("ms1_scans"))
     out["ms2_scans"] = _first_value(_joined_text(reference.get("scan_numbers")), out.get("ms2_scans"))
     return out
+
+
+def _safe_binary_top_down_prsm(
+    session: Session,
+    dataset_id: int,
+    prsm_id: int,
+) -> ZpTopDownPrsm | None:
+    try:
+        return get_binary_top_down_prsm(session, dataset_id, prsm_id)
+    except ZpAssetReadError:
+        return None
 
 
 def _best_prsm(records: tuple[dict[str, object], ...]) -> dict[str, object] | None:

@@ -15,6 +15,7 @@ from app.bu.services import lists_service
 from app.bu.services.overview_service import get_overview
 from app.services import mzml_scan_index, mzml_scan_reader
 from app.zp_conversion import repository
+from app.zp_runtime import core as zp_core
 from app.zp_runtime import (
     ZpAssetReadError,
     clear_zp_runtime_caches,
@@ -120,6 +121,60 @@ def test_find_active_asset_skips_table_when_management_disabled(monkeypatch: pyt
     assert find_active_asset(FailingSession(), DATASET_ID) is None  # type: ignore[arg-type]
 
 
+def test_find_active_asset_without_run_id_uses_dataset_level_asset(tmp_path: Path) -> None:
+    dataset_zp = tmp_path / "dataset.zp"
+    run_zp = tmp_path / "run.zp"
+    dataset_zp.write_bytes(b"dataset")
+    run_zp.write_bytes(b"run")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO dataset_zp_assets (
+                    dataset_id, run_id, zp_path, format_version, source_fingerprint,
+                    output_sha256, status, capabilities, created_at, updated_at
+                )
+                VALUES (
+                    :dataset_id, NULL, :zp_path, 1, NULL,
+                    :output_sha256, 'active', '{"spectra": true}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {"dataset_id": DATASET_ID, "zp_path": str(dataset_zp), "output_sha256": "a" * 64},
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO dataset_zp_assets (
+                    dataset_id, run_id, zp_path, format_version, source_fingerprint,
+                    output_sha256, status, capabilities, created_at, updated_at
+                )
+                VALUES (
+                    :dataset_id, :run_id, :zp_path, 1, NULL,
+                    :output_sha256, 'active', '{"spectra": true}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {
+                "dataset_id": DATASET_ID,
+                "run_id": RUN_ID,
+                "zp_path": str(run_zp),
+                "output_sha256": "b" * 64,
+            },
+        )
+
+    with SessionLocal() as session:
+        dataset_asset = find_active_asset(session, DATASET_ID)
+        run_asset = find_active_asset(session, DATASET_ID, run_id=RUN_ID)
+
+    assert dataset_asset is not None
+    assert dataset_asset.run_id is None
+    assert dataset_asset.zp_path == dataset_zp
+    assert run_asset is not None
+    assert run_asset.run_id == RUN_ID
+    assert run_asset.zp_path == run_zp
+
+
 def test_spectrum_scan_index_and_chromatogram_are_binary_backed(tmp_path: Path) -> None:
     zp_path = _write_minimal_zp(tmp_path / "run.zp")
     _insert_dataset_with_asset(zp_path)
@@ -149,6 +204,144 @@ def test_spectrum_scan_index_and_chromatogram_are_binary_backed(tmp_path: Path) 
     assert trace.rt == [0.5, 1.0]
     assert trace.intensity == [18.0, 28.0]
     assert trace.point_count_original == 2
+
+
+def test_binary_spectrum_uses_indexed_array_ids_without_reparsing_spectra(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zp_path = _write_minimal_zp(tmp_path / "run.zp")
+    _insert_dataset_with_asset(zp_path)
+    with SessionLocal() as session:
+        asset = find_active_asset(session, DATASET_ID)
+    assert asset is not None
+    handle = zp_core._reader_handle(asset)
+
+    def fail_read_spectrum_arrays(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("single-spectrum reads must use the cached core index")
+
+    monkeypatch.setattr(type(handle.reader), "read_spectrum_arrays", fail_read_spectrum_arrays)
+
+    with SessionLocal() as session:
+        spectrum = zp_core.get_binary_spectrum_by_scan(session, DATASET_ID, RUN_ID, 11)
+
+    assert spectrum is not None
+    assert spectrum["scan"] == 11
+    assert spectrum["mz"] == [150.0, 250.0]
+
+
+def test_binary_batch_spectrum_read_preserves_scan_mapping(tmp_path: Path) -> None:
+    zp_path = _write_minimal_zp(tmp_path / "run.zp")
+    _insert_dataset_with_asset(zp_path)
+
+    with SessionLocal() as session:
+        spectra = zp_core.get_binary_spectra_by_scans(
+            session,
+            DATASET_ID,
+            RUN_ID,
+            [11, 10],
+        )
+
+    assert spectra is not None
+    assert list(spectra) == [11, 10]
+    assert spectra[11]["intensity"] == [15.0, 25.0]
+    assert spectra[10]["intensity"] == [10.0, 20.0]
+
+
+def test_binary_batch_spectrum_read_defers_extension_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zp_path = _write_metadata_chromatogram_zp(
+        tmp_path / "lazy-metadata.zp",
+        format_version=3,
+        metadata_record_count=100,
+    )
+    _insert_dataset_with_asset(zp_path)
+    with SessionLocal() as session:
+        asset = find_active_asset(session, DATASET_ID)
+    assert asset is not None
+    reader_type = type(zp_core._reader_handle(asset).reader)
+    original = reader_type.read_extensions_by_types
+    calls: list[list[str]] = []
+
+    def track_extension_read(reader: Any, extension_types: list[str]) -> Any:
+        calls.append(list(extension_types))
+        return original(reader, extension_types)
+
+    monkeypatch.setattr(reader_type, "read_extensions_by_types", track_extension_read)
+
+    with SessionLocal() as session:
+        spectra = zp_core.get_binary_spectra_by_scans(
+            session,
+            DATASET_ID,
+            RUN_ID,
+            [11, 10],
+        )
+
+    assert spectra is not None
+    assert list(spectra) == [11, 10]
+    assert calls == []
+
+
+def test_binary_chromatogram_uses_spectrum_metadata_without_peak_reads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zp_path = _write_metadata_chromatogram_zp(tmp_path / "metadata-chromatogram.zp")
+    _insert_dataset_with_asset(zp_path)
+
+    def fail_peak_read(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("TIC/BPC metadata should avoid peak-array reads")
+
+    monkeypatch.setattr(zp_core, "_read_spectrum_intensity_values", fail_peak_read)
+
+    with SessionLocal() as session:
+        tic = get_binary_chromatogram(session, DATASET_ID, RUN_ID, "tic")
+        bpc = get_binary_chromatogram(session, DATASET_ID, RUN_ID, "bpc")
+
+    assert tic is not None
+    assert tic.rt == [0.5, 1.0]
+    assert tic.intensity == [30.0, 40.0]
+    assert bpc is not None
+    assert bpc.rt == [0.5, 1.0]
+    assert bpc.intensity == [20.0, 25.0]
+
+
+def test_v3_spectrum_metadata_does_not_read_unrelated_extensions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zp_path = _write_metadata_chromatogram_zp(
+        tmp_path / "selective-extensions.zp",
+        format_version=3,
+        metadata_record_count=100,
+        unrelated_record_count=100,
+    )
+    _insert_dataset_with_asset(zp_path)
+    with SessionLocal() as session:
+        asset = find_active_asset(session, DATASET_ID)
+    assert asset is not None
+    reader_type = type(zp_core._reader_handle(asset).reader)
+    original_read_block = reader_type.read_block
+
+    def reject_full_extension_read(reader: Any, block_name: str) -> Any:
+        if block_name == "extensions":
+            raise AssertionError("spectrum metadata must not read the full extensions block")
+        return original_read_block(reader, block_name)
+
+    def fail_peak_read(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("selective metadata should avoid peak-array reads")
+
+    monkeypatch.setattr(reader_type, "read_block", reject_full_extension_read)
+    monkeypatch.setattr(zp_core, "_read_spectrum_intensity_values", fail_peak_read)
+
+    with SessionLocal() as session:
+        tic = get_binary_chromatogram(session, DATASET_ID, RUN_ID, "tic")
+
+    assert tic is not None
+    assert tic.rt == [0.5, 1.0]
+    assert tic.intensity == [30.0, 40.0]
 
 
 def test_active_binary_asset_failure_does_not_fall_back_to_mzml(tmp_path: Path) -> None:
@@ -183,6 +376,29 @@ def test_bottom_up_overview_is_binary_backed(tmp_path: Path) -> None:
     assert overview.runs[0].match_count == 1
     assert overview.q_value_cutoff == 0.01
     assert overview.capabilities["binary_layer"]["identifications"] is True
+
+
+def test_v3_bottom_up_index_reuses_selective_business_extensions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zp_path = _write_bottom_up_zp(tmp_path / "bottom-up-v3.zp", format_version=3)
+    _insert_dataset_with_asset(zp_path)
+    with SessionLocal() as session:
+        asset = find_active_asset(session, DATASET_ID)
+    assert asset is not None
+    reader_type = type(zp_core._reader_handle(asset).reader)
+
+    def reject_full_extension_read(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("Bottom-Up runtime must use selective extension reads")
+
+    monkeypatch.setattr(reader_type, "read_extensions", reject_full_extension_read)
+
+    with SessionLocal() as session:
+        overview = get_binary_bottom_up_overview(session, DATASET_ID)
+
+    assert overview is not None
+    assert overview.summary["identification"] == 1
 
 
 def test_bottom_up_match_detail_uses_binary_identification(tmp_path: Path) -> None:
@@ -450,7 +666,148 @@ def _write_minimal_zp(path: Path) -> Path:
     return ZpWriter().write(path, blocks, format_version=1)
 
 
-def _write_bottom_up_zp(path: Path) -> Path:
+def _write_metadata_chromatogram_zp(
+    path: Path,
+    *,
+    format_version: int = 1,
+    metadata_record_count: int = 2,
+    unrelated_record_count: int = 0,
+) -> Path:
+    ensure_binary_layer_importable()
+    from binary_layer import (  # type: ignore[import-not-found]
+        ArrayBlock,
+        BlockCollection,
+        ExtensionBlock,
+        GlobalMetaBlock,
+        IndexBlock,
+        RunBlock,
+        SpectrumBlock,
+        StringPoolBlock,
+        ZpWriter,
+    )
+
+    spectra = [
+        SpectrumBlock(
+            "spectrum_1",
+            "run_1",
+            1,
+            10,
+            "controllerType=0 controllerNumber=1 scan=10",
+            30.0,
+            None,
+            "spectrum_1:mz",
+            "spectrum_1:intensity",
+        ),
+        SpectrumBlock(
+            "spectrum_2",
+            "run_1",
+            1,
+            11,
+            "controllerType=0 controllerNumber=1 scan=11",
+            60.0,
+            None,
+            "spectrum_2:mz",
+            "spectrum_2:intensity",
+        ),
+    ]
+    metadata_spectra = [
+        {
+            "spectrum_id": "spectrum_1",
+            "total_ion_current": 30.0,
+            "base_peak_intensity": 20.0,
+        },
+        {
+            "spectrum_id": "spectrum_2",
+            "total_ion_current": 40.0,
+            "base_peak_intensity": 25.0,
+        },
+    ]
+    metadata_spectra.extend(
+        {
+            "spectrum_id": f"unmapped_spectrum_{position}",
+            "total_ion_current": float(position),
+            "base_peak_intensity": float(position),
+        }
+        for position in range(2, metadata_record_count)
+    )
+    extensions = [
+        ExtensionBlock(
+            "mzml_metadata",
+            "1",
+            {
+                "owner": "mzml",
+                "schema_name": "mzml_metadata",
+                "schema_version": 1,
+                "record_count": metadata_record_count,
+                "spectra": metadata_spectra,
+            },
+        )
+    ]
+    if unrelated_record_count:
+        extensions.append(
+            ExtensionBlock(
+                "bottom_up_identifications",
+                "1",
+                {
+                    "records": [
+                        {"identification_id": f"identification:{position}"}
+                        for position in range(unrelated_record_count)
+                    ]
+                },
+            )
+        )
+
+    blocks = BlockCollection(
+        global_meta=GlobalMetaBlock(
+            format_version=format_version,
+            source_type="real_mzml",
+            source_file_name="run.mzML",
+            source_file_hash="0" * 64,
+            run_count=1,
+            spectrum_count=2,
+            chromatogram_count=0,
+            array_count=4,
+            created_at=datetime.now(timezone.utc),
+            generator_name="zp-binary-layer",
+            generator_version="test",
+            notes=[],
+        ),
+        runs=[RunBlock("run_1", "run.mzML", "run_1", 2, 0, 30.0, 60.0)],
+        spectra=spectra,
+        arrays=[
+            ArrayBlock("spectrum_1:mz", "mz", "float64", [100.0, 200.0]),
+            ArrayBlock("spectrum_1:intensity", "intensity", "float64", [10.0, 20.0]),
+            ArrayBlock("spectrum_2:mz", "mz", "float64", [150.0, 250.0]),
+            ArrayBlock("spectrum_2:intensity", "intensity", "float64", [15.0, 25.0]),
+        ],
+        string_pool=StringPoolBlock(
+            [
+                "run.mzML",
+                "run_1",
+                "controllerType=0 controllerNumber=1 scan=10",
+                "controllerType=0 controllerNumber=1 scan=11",
+            ]
+        ),
+        indexes=IndexBlock(
+            scan_index=[
+                {"scan_number": 10, "spectrum_id": "spectrum_1"},
+                {"scan_number": 11, "spectrum_id": "spectrum_2"},
+            ],
+            rt_index=[
+                {"rt": 30.0, "spectrum_id": "spectrum_1"},
+                {"rt": 60.0, "spectrum_id": "spectrum_2"},
+            ],
+            spectrum_id_index=[
+                {"spectrum_id": "spectrum_1", "position": 0},
+                {"spectrum_id": "spectrum_2", "position": 1},
+            ],
+        ),
+        extensions=extensions,
+    )
+    return ZpWriter().write(path, blocks, format_version=format_version)
+
+
+def _write_bottom_up_zp(path: Path, *, format_version: int = 1) -> Path:
     ensure_binary_layer_importable()
     from binary_layer import (  # type: ignore[import-not-found]
         ArrayBlock,
@@ -598,7 +955,7 @@ def _write_bottom_up_zp(path: Path) -> Path:
     ]
     blocks = BlockCollection(
         global_meta=GlobalMetaBlock(
-            format_version=1,
+            format_version=format_version,
             source_type="real_dia_result_bundle",
             source_file_name="report.parquet",
             source_file_hash="0" * 64,
@@ -678,7 +1035,7 @@ def _write_bottom_up_zp(path: Path) -> Path:
         ),
         extensions=extensions,
     )
-    return ZpWriter().write(path, blocks, format_version=1)
+    return ZpWriter().write(path, blocks, format_version=format_version)
 
 
 def _write_top_down_zp(path: Path) -> Path:

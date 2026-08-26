@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.schemas import BuOverviewOut, BuOverviewCounts, BuQcBlock, BuRtMzHeatmapOut, BuRunSummary
@@ -41,6 +42,17 @@ def _aggregate_qc(rows: list[dict[str, Any]]) -> dict[str, Any]:
     # v1 uses the first stats row as the main run summary; this matches the
     # single-match-run DIA-NN sample and keeps multi-run semantics explicit.
     return dict(rows[0])
+
+
+def _supports_identifications(dataset: dict[str, Any]) -> bool:
+    capabilities = _json_object(dataset.get("capabilities"))
+    if capabilities.get("has_identifications") is False:
+        return False
+    return str(capabilities.get("analysis_shape") or "").lower() not in {
+        "mzml_only",
+        "raw_mzml_only",
+        "zp_spectra_only",
+    }
 
 
 def _runs(session: Session, dataset_id: int) -> list[BuRunSummary]:
@@ -117,30 +129,40 @@ def _binary_runs(
 
 def get_overview(session: Session, dataset: dict[str, Any]) -> BuOverviewOut:
     dataset_id = int(dataset["dataset_id"])
-    binary = get_binary_bottom_up_overview(session, dataset_id)
-    if binary is not None:
-        return _binary_overview(session, dataset, binary)
+    supports_identifications = _supports_identifications(dataset)
+    try:
+        counts_row = session.execute(
+            text(
+                """
+                SELECT
+                    (SELECT count(*) FROM identification_matches im
+                      WHERE im.dataset_id = :dataset_id AND im.entity_type = 'PEPTIDE') AS matches,
+                    (SELECT count(*) FROM peptides p WHERE p.dataset_id = :dataset_id) AS peptides,
+                    (SELECT count(*) FROM proteins p
+                      WHERE p.dataset_id = :dataset_id AND p.is_decoy = false) AS proteins,
+                    (SELECT count(DISTINCT jsonb_extract_path_text(p.extra_metadata, 'protein_group'))
+                       FROM proteins p
+                      WHERE p.dataset_id = :dataset_id
+                        AND jsonb_extract_path_text(p.extra_metadata, 'protein_group') IS NOT NULL) AS protein_groups,
+                    (SELECT count(*) FROM runs r WHERE r.dataset_id = :dataset_id) AS runs,
+                    (SELECT count(*) FROM identification_matches im
+                      WHERE im.dataset_id = :dataset_id AND im.is_decoy_match = true) AS decoy_matches
+                """
+            ),
+            {"dataset_id": dataset_id},
+        ).mappings().one()
+    except SQLAlchemyError:
+        if supports_identifications:
+            binary = get_binary_bottom_up_overview(session, dataset_id)
+            if binary is not None:
+                return _binary_overview(session, dataset, binary)
+        raise
+    counts = BuOverviewCounts(**{k: int(counts_row[k] or 0) for k in counts_row.keys()})
+    if counts.matches == 0 and supports_identifications:
+        binary = get_binary_bottom_up_overview(session, dataset_id)
+        if binary is not None:
+            return _binary_overview(session, dataset, binary)
 
-    counts_row = session.execute(
-        text(
-            """
-            SELECT
-                (SELECT count(*) FROM identification_matches im
-                  WHERE im.dataset_id = :dataset_id AND im.entity_type = 'PEPTIDE') AS matches,
-                (SELECT count(*) FROM peptides p WHERE p.dataset_id = :dataset_id) AS peptides,
-                (SELECT count(*) FROM proteins p
-                  WHERE p.dataset_id = :dataset_id AND p.is_decoy = false) AS proteins,
-                (SELECT count(DISTINCT jsonb_extract_path_text(p.extra_metadata, 'protein_group'))
-                   FROM proteins p
-                  WHERE p.dataset_id = :dataset_id
-                    AND jsonb_extract_path_text(p.extra_metadata, 'protein_group') IS NOT NULL) AS protein_groups,
-                (SELECT count(*) FROM runs r WHERE r.dataset_id = :dataset_id) AS runs,
-                (SELECT count(*) FROM identification_matches im
-                  WHERE im.dataset_id = :dataset_id AND im.is_decoy_match = true) AS decoy_matches
-            """
-        ),
-        {"dataset_id": dataset_id},
-    ).mappings().one()
     extra = _json_object(dataset.get("extra_metadata"))
     qc_rows = _qc_rows(extra)
     return BuOverviewOut(
@@ -151,7 +173,7 @@ def get_overview(session: Session, dataset: dict[str, Any]) -> BuOverviewOut:
         status=str(dataset["status"]),
         source_root=str(dataset["source_root"]),
         q_value_cutoff=extra.get("q_value_cutoff"),
-        counts=BuOverviewCounts(**{k: int(counts_row[k] or 0) for k in counts_row.keys()}),
+        counts=counts,
         qc=BuQcBlock(by_run=qc_rows, aggregated=_aggregate_qc(qc_rows)),
         runs=_runs(session, dataset_id),
         capabilities=_json_object(dataset.get("capabilities")),

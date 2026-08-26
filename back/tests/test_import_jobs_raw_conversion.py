@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pyarrow.parquet as pq
+import pyarrow as pa
 import pytest
 
 from app.ingest.bu import universal_diann_adapter as diann_adapter
@@ -339,7 +341,91 @@ def test_import_job_skips_zp_conversion_without_management_enabled(
     assert not any(update.get("status") == "failed" for update in state["updates"])
 
 
-def test_import_job_fails_when_zp_conversion_fails(
+def test_diaclip_zp_source_stages_accepted_identifications(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from app.ingest.bu import diaclip_fdr_result_reader, diaclip_result_reader
+
+    root = tmp_path / "diaclip"
+    root.mkdir()
+    mzml = root / "sample.mzML"
+    mzml.write_text("<mzML />", encoding="utf-8")
+    data_root = tmp_path / "viewer-data"
+    monkeypatch.setattr(import_jobs.settings, "data_root", data_root)
+    monkeypatch.setattr(
+        diaclip_fdr_result_reader,
+        "detect_diaclip_fdr_parquet",
+        lambda _root: None,
+    )
+    monkeypatch.setattr(
+        diaclip_result_reader,
+        "prepare_diaclip_source",
+        lambda _root: SimpleNamespace(
+            source=SimpleNamespace(
+                identifications=[
+                    SimpleNamespace(
+                        report_row={
+                            "Run": "sample.mzML",
+                            "Precursor.Id": "PEPTIDE2",
+                            "Modified.Sequence": "PEPTIDE",
+                            "Stripped.Sequence": "PEPTIDE",
+                            "Precursor.Charge": 2,
+                            "Decoy": 0,
+                            "Precursor.Mz": 456.7,
+                            "Protein.Names": None,
+                            "Genes": None,
+                            "RT": 1.2,
+                            "RT.Start": 1.0,
+                            "RT.Stop": 1.4,
+                        },
+                        score=0.95,
+                        q_value=0.004,
+                        intensity=1234.5,
+                        extra_metadata={
+                            "diaclip": {
+                                "feature_distance": 0.11,
+                                "cos_similarity": 0.99,
+                                "source_row": 42,
+                                "original_modified_peptide": "PEPTIDE",
+                                "fdr_method": "test_fdr",
+                            }
+                        },
+                    )
+                ]
+            )
+        ),
+    )
+    plan = ImportPlan(
+        shape=DatasetShape.DIANN_DIA,
+        spectra_source="mzml_memory",
+        need_toppic_multirun_pass=False,
+        mzml_files=(mzml,),
+    )
+
+    staged = import_jobs._stage_diaclip_zp_source_for_import(
+        job_id="job-diaclip",
+        ingest_root=root,
+        plan=plan,
+        raw_conversion_batch=None,
+        selected_import_type=import_jobs.ImportType.BU_DIA_CLIP,
+    )
+
+    assert staged == (data_root / ".viewer-derived" / "zp-diaclip-source" / "job-diaclip").resolve()
+    assert (staged / "sample.mzML").is_file()
+    rows = pq.read_table(staged / "DIANN_2.0" / "all_report.parquet").to_pylist()
+    schema = pq.ParquetFile(staged / "DIANN_2.0" / "all_report.parquet").schema_arrow
+    assert len(rows) == 1
+    assert schema.field("Protein.Names").type == pa.string()
+    assert schema.field("Genes").type == pa.string()
+    assert rows[0]["Precursor.Id"] == "PEPTIDE2"
+    assert rows[0]["Q.Value"] == pytest.approx(0.004)
+    assert rows[0]["Decoy"] == 0
+    assert rows[0]["DIAClip.Score"] == pytest.approx(0.95)
+    assert rows[0]["DIAClip.FDR.Method"] == "test_fdr"
+
+
+def test_import_job_keeps_legacy_display_ready_when_zp_conversion_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -355,10 +441,12 @@ def test_import_job_fails_when_zp_conversion_fails(
 
     _run_job(root)
 
-    failed = [update for update in state["updates"] if update.get("status") == "failed"]
-    assert failed
-    assert "ZP conversion failed: test failure" in str(failed[-1].get("error"))
-    assert state["derived_calls"] == []
+    success = [update for update in state["updates"] if update.get("status") == "success"]
+    assert success
+    assert success[-1].get("message") == "Import finished with warnings."
+    assert "ZP conversion failed: test failure" in str(success[-1].get("stage_detail"))
+    assert state["derived_calls"] == [7]
+    assert not any(update.get("status") == "failed" for update in state["updates"])
 
 
 def test_explicit_diaclip_type_routes_the_shared_diann_layout_to_diaclip_adapter(

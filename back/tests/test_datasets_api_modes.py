@@ -145,6 +145,49 @@ def test_spectra_only_dataset_json_contract_includes_generic_runs() -> None:
     assert data["runs"][0]["raw_format"] == "mzml"
 
 
+def test_raw_only_bottom_up_detail_uses_spectra_mode_and_generic_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = _row(
+        dataset_id=55,
+        slug="dda_raw",
+        dataset_name="DDA RAW",
+        analysis_mode="BOTTOM_UP",
+        source_software="DDA Thermo RAW",
+        capabilities={
+            "analysis_shape": "raw_mzml_only",
+            "has_identifications": False,
+            "spectra_source": "zp",
+        },
+    )
+    run = DatasetRunSummary(
+        run_id=55,
+        run_name="run.mzML",
+        raw_format="thermo_raw",
+        mzml_file_path=None,
+        raw_path="D:\\data\\run.raw",
+        metadata={"raw_format": "thermo_raw"},
+    )
+
+    monkeypatch.setattr(datasets_api, "require_dataset", lambda *_args: row)
+    monkeypatch.setattr(datasets_api, "_cutoffs_payload", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        datasets_api,
+        "_bu_runs_by_dataset",
+        lambda *_args: pytest.fail("raw-only datasets must not load BU run summaries"),
+    )
+    monkeypatch.setattr(datasets_api, "_runs_by_dataset", lambda *_args: {55: [run]})
+
+    out = datasets_api.get_dataset_detail("dda_raw", _NoExecuteSession())  # type: ignore[arg-type]
+    data = out.model_dump(mode="json")
+
+    assert data["analysis_mode"] == "BOTTOM_UP"
+    assert data["dataset_mode"] == "spectra_only"
+    assert data["bu_runs"] is None
+    assert data["runs"][0]["run_id"] == 55
+    assert data["runs"][0]["raw_format"] == "thermo_raw"
+
+
 def test_td_cutoffs_payload_omits_empty_cutoff() -> None:
     cutoffs = _cutoffs_payload(
         _RowsSession(

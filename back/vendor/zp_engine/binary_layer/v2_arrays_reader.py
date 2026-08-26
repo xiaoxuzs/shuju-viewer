@@ -405,34 +405,35 @@ class ZpV2ArraysReader:
 
         # Validate identity and sort order before interpreting payload layout so
         # malformed ordering cannot be masked by offsets from the moved entry.
-        preliminary_ids: set[str] = set()
-        previous_encoded_id: bytes | None = None
-        for position, raw_entry in enumerate(raw_entries):
-            location = f"arrays.directory.entries[{position}]"
-            if not isinstance(raw_entry, dict) or set(raw_entry) != _ENTRY_FIELDS:
-                _fail(
-                    "INVALID_ARRAY_DIRECTORY_SCHEMA",
-                    "array entry has an invalid field set",
-                    location,
-                )
-            array_id = raw_entry["array_id"]
-            if not isinstance(array_id, str) or not array_id or "\0" in array_id:
-                _fail("INVALID_ARRAY_ID", "array_id must be a nonempty NUL-free string", f"{location}.array_id")
-            try:
-                encoded_id = array_id.encode("utf-8")
-            except UnicodeEncodeError as exc:
-                raise ZpV2ArrayReadError(
-                    "INVALID_ARRAY_ID",
-                    "array_id is not valid UTF-8",
-                    f"{location}.array_id",
-                    array_id=array_id,
-                ) from exc
-            if array_id in preliminary_ids:
-                _fail("DUPLICATE_ARRAY_ID", "array_id values must be unique", f"{location}.array_id", array_id=array_id)
-            if previous_encoded_id is not None and encoded_id <= previous_encoded_id:
-                _fail("UNSORTED_ARRAY_DIRECTORY", "entries must be sorted by UTF-8 array_id", location, array_id=array_id)
-            preliminary_ids.add(array_id)
-            previous_encoded_id = encoded_id
+        if require_canonical:
+            preliminary_ids: set[str] = set()
+            previous_encoded_id: bytes | None = None
+            for position, raw_entry in enumerate(raw_entries):
+                location = f"arrays.directory.entries[{position}]"
+                if not isinstance(raw_entry, dict) or set(raw_entry) != _ENTRY_FIELDS:
+                    _fail(
+                        "INVALID_ARRAY_DIRECTORY_SCHEMA",
+                        "array entry has an invalid field set",
+                        location,
+                    )
+                array_id = raw_entry["array_id"]
+                if not isinstance(array_id, str) or not array_id or "\0" in array_id:
+                    _fail("INVALID_ARRAY_ID", "array_id must be a nonempty NUL-free string", f"{location}.array_id")
+                try:
+                    encoded_id = array_id.encode("utf-8")
+                except UnicodeEncodeError as exc:
+                    raise ZpV2ArrayReadError(
+                        "INVALID_ARRAY_ID",
+                        "array_id is not valid UTF-8",
+                        f"{location}.array_id",
+                        array_id=array_id,
+                    ) from exc
+                if array_id in preliminary_ids:
+                    _fail("DUPLICATE_ARRAY_ID", "array_id values must be unique", f"{location}.array_id", array_id=array_id)
+                if previous_encoded_id is not None and encoded_id <= previous_encoded_id:
+                    _fail("UNSORTED_ARRAY_DIRECTORY", "entries must be sorted by UTF-8 array_id", location, array_id=array_id)
+                preliminary_ids.add(array_id)
+                previous_encoded_id = encoded_id
 
         entries: list[V2ArrayDirectoryEntry] = []
         entries_by_id: dict[str, V2ArrayDirectoryEntry] = {}

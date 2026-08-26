@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.services.mzml_scan_reader import (
+    MzmlFileNotFoundError,
+    MzmlMappingError,
     RunNotFoundError,
     parse_native_scan_number,
     resolve_run_mzml_path,
@@ -37,6 +39,7 @@ INDEX_FIELDS = (
     "isolation_lower_mz",
     "isolation_upper_mz",
 )
+DIA_ISOLATION_WINDOW_MZ_TOLERANCE = 1e-3
 
 
 class ScanIndexError(RuntimeError):
@@ -244,10 +247,25 @@ def _resolve_source_path(session: Session, dataset_id: int, run_id: int) -> Path
     metadata = row.get("run_metadata")
     run_metadata = dict(metadata) if isinstance(metadata, dict) else {}
     raw_format = str(run_metadata.get("raw_format") or "").lower()
-    if raw_format and raw_format != "mzml":
+    if raw_format and raw_format != "mzml" and not run_metadata.get("mzml_file_path"):
         raise ScanIndexUnsupportedError("run is not mzML")
     source_path, _path_committed = resolve_run_mzml_path(session, dataset_id, run_id)
     return source_path
+
+
+def load_persisted_scan_index(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    *,
+    derived_root: Path | None = None,
+) -> MzmlScanIndex:
+    return _load_persisted_scan_index(
+        session,
+        dataset_id,
+        run_id,
+        derived_root=derived_root,
+    )
 
 
 def load_scan_index(
@@ -257,6 +275,22 @@ def load_scan_index(
     *,
     derived_root: Path | None = None,
 ) -> MzmlScanIndex:
+    persisted_error: BaseException | None = None
+    try:
+        return load_persisted_scan_index(
+            session,
+            dataset_id,
+            run_id,
+            derived_root=derived_root,
+        )
+    except (
+        ScanIndexError,
+        RunNotFoundError,
+        MzmlFileNotFoundError,
+        MzmlMappingError,
+    ) as exc:
+        persisted_error = exc
+
     if session is not None:
         from app.zp_runtime import (
             ZpAssetReadError,
@@ -276,6 +310,18 @@ def load_scan_index(
         if binary_index is not None:
             return binary_index
 
+    if persisted_error is not None:
+        raise persisted_error
+    raise ScanIndexMissingError("scan_index_missing")
+
+
+def _load_persisted_scan_index(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    *,
+    derived_root: Path | None = None,
+) -> MzmlScanIndex:
     source_path = _resolve_source_path(session, dataset_id, run_id)
     npz_path, metadata_path = scan_index_paths(dataset_id, run_id, derived_root=derived_root)
     if not npz_path.is_file() or not metadata_path.is_file():
@@ -479,8 +525,8 @@ def find_product_xic_ms2_scans(
     )
     isolation_match = (
         target_present
-        & (float(precursor_mz) >= lower_bound)
-        & (float(precursor_mz) <= upper_bound)
+        & (float(precursor_mz) >= lower_bound - DIA_ISOLATION_WINDOW_MZ_TOLERANCE)
+        & (float(precursor_mz) <= upper_bound + DIA_ISOLATION_WINDOW_MZ_TOLERANCE)
     )
     selected_match = (
         ~target_present
@@ -523,7 +569,11 @@ def find_nearest_ms2_scan(
         index.isolation_upper_mz,
         index.isolation_target_mz,
     )
-    isolation_match = target_present & (precursor_mz >= lower_bound) & (precursor_mz <= upper_bound)
+    isolation_match = (
+        target_present
+        & (precursor_mz >= lower_bound - DIA_ISOLATION_WINDOW_MZ_TOLERANCE)
+        & (precursor_mz <= upper_bound + DIA_ISOLATION_WINDOW_MZ_TOLERANCE)
+    )
     selected_match = (
         ~target_present
         & np.isfinite(index.precursor_mz)

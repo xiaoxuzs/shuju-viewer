@@ -61,6 +61,7 @@ class ZpChromatogramTrace:
 class _CoreIndex:
     runs: tuple[Any, ...]
     spectra: tuple[Any, ...]
+    spectra_by_id: dict[str, Any]
     precursors_by_id: dict[str, Any]
     chromatograms: tuple[Any, ...]
     metadata_by_spectrum_id: dict[str, dict[str, Any]]
@@ -75,12 +76,19 @@ _SCAN_RE = re.compile(r"(?:^|[\s;])(?:scan|index)=(\d+)(?=$|[\s;])")
 _CACHE_LOCK = threading.RLock()
 _CORE_INDEX_CACHE: dict[ZpFileIdentity, _CoreIndex] = {}
 _SCAN_INDEX_CACHE: dict[tuple[ZpFileIdentity, str], MzmlScanIndex] = {}
+_SPECTRUM_METADATA_CACHE: dict[ZpFileIdentity, dict[str, dict[str, Any]]] = {}
+_SPECTRUM_METADATA_EXTENSION_TYPES = {
+    "mzml_metadata",
+    "dia_mzml_metadata",
+    "topfd_js_metadata",
+}
 
 
 def clear_zp_runtime_caches() -> None:
     with _CACHE_LOCK:
         _CORE_INDEX_CACHE.clear()
         _SCAN_INDEX_CACHE.clear()
+        _SPECTRUM_METADATA_CACHE.clear()
     clear_reader_cache()
 
 
@@ -102,13 +110,55 @@ def get_binary_spectrum_by_scan(
     spectrum_id = index.spectra_by_run_scan.get(scan_key)
     if spectrum_id is None:
         raise ZpSpectrumNotFoundError("scan_not_found_in_binary")
-
-    def read() -> tuple[Any, Any, Any]:
-        with handle.lock:
-            return handle.reader.read_spectrum_arrays(spectrum_id)
-
-    spectrum, mz_array, intensity_array = _read_or_raise(read)
+    spectrum = index.spectra_by_id[spectrum_id]
+    mz_array, intensity_array = _read_spectrum_arrays(handle, spectrum)
     return _spectrum_payload(spectrum, mz_array, intensity_array, index)
+
+
+def get_binary_spectra_by_scans(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    scan_numbers: list[int],
+) -> dict[int, dict[str, Any]] | None:
+    asset = find_active_asset(session, dataset_id, run_id=run_id)
+    if asset is None:
+        return None
+    handle = _reader_handle(asset)
+    index = _core_index(handle)
+    zp_run_id = _resolve_zp_run_id(session, dataset_id, run_id, asset, index)
+    requested_scans = list(dict.fromkeys(int(scan_number) for scan_number in scan_numbers))
+    spectra: list[Any] = []
+    for scan_number in requested_scans:
+        scan_key = (zp_run_id, scan_number)
+        if scan_key in index.duplicate_scan_keys:
+            raise ZpRunMappingError("binary_scan_mapping_ambiguous")
+        spectrum_id = index.spectra_by_run_scan.get(scan_key)
+        if spectrum_id is None:
+            raise ZpSpectrumNotFoundError("scan_not_found_in_binary")
+        spectra.append(index.spectra_by_id[spectrum_id])
+
+    array_ids = [
+        array_id
+        for spectrum in spectra
+        for array_id in (spectrum.mz_array_id, spectrum.intensity_array_id)
+    ]
+
+    def read() -> list[Any]:
+        with handle.lock:
+            return list(handle.reader.read_arrays_by_ids(array_ids))
+
+    arrays = _read_or_raise(read)
+    arrays_by_id = {str(array.array_id): array for array in arrays}
+    return {
+        scan_number: _spectrum_payload(
+            spectrum,
+            arrays_by_id[str(spectrum.mz_array_id)],
+            arrays_by_id[str(spectrum.intensity_array_id)],
+            index,
+        )
+        for scan_number, spectrum in zip(requested_scans, spectra, strict=True)
+    }
 
 
 def get_binary_scan_index(
@@ -127,7 +177,12 @@ def get_binary_scan_index(
         cached = _SCAN_INDEX_CACHE.get(cache_key)
         if cached is not None:
             return cached
-    built = _build_scan_index(handle, core_index, zp_run_id)
+    built = _build_scan_index(
+        handle,
+        core_index,
+        zp_run_id,
+        _spectrum_metadata_index(handle),
+    )
     with _CACHE_LOCK:
         _SCAN_INDEX_CACHE[cache_key] = built
     return built
@@ -150,7 +205,13 @@ def get_binary_chromatogram(
     chromatogram_id = index.chromatogram_by_run_type.get((zp_run_id, chrom_type))
     if chromatogram_id is not None:
         return _read_chromatogram_trace(handle, chromatogram_id)
-    return _derive_chromatogram_from_ms1(handle, index, zp_run_id, chrom_type)
+    return _derive_chromatogram_from_ms1(
+        handle,
+        index,
+        zp_run_id,
+        chrom_type,
+        _spectrum_metadata_index(handle),
+    )
 
 
 def _reader_handle(asset: ActiveZpAsset) -> ZpReaderHandle:
@@ -173,7 +234,6 @@ def _core_index(handle: ZpReaderHandle) -> _CoreIndex:
                 spectra=tuple(handle.reader.read_spectra()),
                 precursors=tuple(handle.reader.read_precursors()),
                 chromatograms=tuple(handle.reader.read_chromatograms()),
-                extensions=tuple(handle.reader.read_extensions()),
             )
 
     built = _read_or_raise(read)
@@ -188,7 +248,7 @@ def _build_core_index(
     spectra: tuple[Any, ...],
     precursors: tuple[Any, ...],
     chromatograms: tuple[Any, ...],
-    extensions: tuple[Any, ...],
+    extensions: tuple[Any, ...] = (),
 ) -> _CoreIndex:
     spectra_by_run_lists: dict[str, list[Any]] = {}
     spectra_by_run_scan: dict[tuple[str, int], str] = {}
@@ -210,9 +270,10 @@ def _build_core_index(
     return _CoreIndex(
         runs=runs,
         spectra=spectra,
+        spectra_by_id={str(item.spectrum_id): item for item in spectra},
         precursors_by_id={str(item.precursor_id): item for item in precursors},
         chromatograms=chromatograms,
-        metadata_by_spectrum_id=_metadata_by_spectrum_id(extensions),
+        metadata_by_spectrum_id=_spectrum_metadata_by_id(extensions),
         spectra_by_run_id={
             run_id: tuple(items) for run_id, items in spectra_by_run_lists.items()
         },
@@ -222,22 +283,63 @@ def _build_core_index(
     )
 
 
-def _metadata_by_spectrum_id(extensions: tuple[Any, ...]) -> dict[str, dict[str, Any]]:
+def _read_extensions(reader: Any) -> tuple[Any, ...]:
+    try:
+        read_selected = getattr(reader, "read_extensions_by_types", None)
+        if callable(read_selected):
+            return tuple(read_selected(sorted(_SPECTRUM_METADATA_EXTENSION_TYPES)))
+        raw = reader.read_block("extensions")
+    except Exception:  # noqa: BLE001 - metadata extensions are an optional runtime optimization
+        return ()
+    if not isinstance(raw, list):
+        return ()
+    return tuple(raw)
+
+
+def _spectrum_metadata_index(handle: ZpReaderHandle) -> dict[str, dict[str, Any]]:
+    with _CACHE_LOCK:
+        cached = _SPECTRUM_METADATA_CACHE.get(handle.identity)
+        if cached is not None:
+            return cached
+
+    def read() -> dict[str, dict[str, Any]]:
+        with handle.lock:
+            return _spectrum_metadata_by_id(_read_extensions(handle.reader))
+
+    built = _read_or_raise(read)
+    with _CACHE_LOCK:
+        _SPECTRUM_METADATA_CACHE[handle.identity] = built
+    return built
+
+
+def _spectrum_metadata_by_id(extensions: tuple[Any, ...]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for extension in extensions:
-        payload = getattr(extension, "payload", None)
-        if not isinstance(payload, dict):
+        extension_type = _extension_type(extension)
+        if extension_type not in _SPECTRUM_METADATA_EXTENSION_TYPES:
             continue
-        records = payload.get("spectra")
-        if not isinstance(records, list):
+        payload = _extension_payload(extension)
+        spectra = payload.get("spectra")
+        if not isinstance(spectra, list):
             continue
-        for record in records:
-            if not isinstance(record, dict):
+        for item in spectra:
+            if not isinstance(item, dict):
                 continue
-            spectrum_id = record.get("spectrum_id")
+            spectrum_id = item.get("spectrum_id")
             if isinstance(spectrum_id, str) and spectrum_id:
-                out[spectrum_id] = dict(record)
+                out.setdefault(spectrum_id, dict(item))
     return out
+
+
+def _extension_type(extension: Any) -> str:
+    if isinstance(extension, dict):
+        return str(extension.get("extension_type") or "")
+    return str(getattr(extension, "extension_type", "") or "")
+
+
+def _extension_payload(extension: Any) -> dict[str, Any]:
+    raw = extension.get("payload") if isinstance(extension, dict) else getattr(extension, "payload", None)
+    return dict(raw) if isinstance(raw, dict) else {}
 
 
 def _resolve_zp_run_id(
@@ -382,10 +484,12 @@ def _precursor_payload(spectrum: Any, index: _CoreIndex) -> dict[str, Any] | Non
     )
     lower_mz = _first_finite(
         getattr(precursor, "isolation_lower_mz", None),
+        metadata.get("isolation_window_lower_mz"),
         _offset_to_lower(target_mz, metadata.get("isolation_window_lower_offset")),
     )
     upper_mz = _first_finite(
         getattr(precursor, "isolation_upper_mz", None),
+        metadata.get("isolation_window_upper_mz"),
         _offset_to_upper(target_mz, metadata.get("isolation_window_upper_offset")),
     )
     if selected_mz is None and charge is None and target_mz is None and lower_mz is None and upper_mz is None:
@@ -407,6 +511,7 @@ def _build_scan_index(
     handle: ZpReaderHandle,
     index: _CoreIndex,
     zp_run_id: str,
+    metadata_by_spectrum_id: dict[str, dict[str, Any]],
 ) -> MzmlScanIndex:
     columns: dict[str, list[Any]] = {
         "scan_number": [],
@@ -421,11 +526,11 @@ def _build_scan_index(
         "isolation_upper_mz": [],
     }
     for spectrum in index.spectra_by_run_id.get(zp_run_id, ()):
-        metadata = index.metadata_by_spectrum_id.get(str(spectrum.spectrum_id), {})
+        metadata = metadata_by_spectrum_id.get(str(spectrum.spectrum_id), {})
         tic = _finite_float(metadata.get("total_ion_current"))
         bpc = _finite_float(metadata.get("base_peak_intensity"))
         if tic is None or bpc is None:
-            values = _read_spectrum_intensity_values(handle, str(spectrum.spectrum_id))
+            values = _read_spectrum_intensity_values(handle, spectrum)
             tic = float(sum(values)) if values else 0.0
             bpc = float(max(values)) if values else 0.0
         precursor = _precursor_payload(spectrum, index)
@@ -454,13 +559,20 @@ def _build_scan_index(
     )
 
 
-def _read_spectrum_intensity_values(handle: ZpReaderHandle, spectrum_id: str) -> list[float]:
-    def read() -> list[float]:
-        with handle.lock:
-            _spectrum, _mz_array, intensity_array = handle.reader.read_spectrum_arrays(spectrum_id)
-            return _float_values(intensity_array.values)
+def _read_spectrum_intensity_values(handle: ZpReaderHandle, spectrum: Any) -> list[float]:
+    _mz_array, intensity_array = _read_spectrum_arrays(handle, spectrum)
+    return _float_values(intensity_array.values)
 
-    return _read_or_raise(read)
+
+def _read_spectrum_arrays(handle: ZpReaderHandle, spectrum: Any) -> tuple[Any, Any]:
+    array_ids = [str(spectrum.mz_array_id), str(spectrum.intensity_array_id)]
+
+    def read() -> list[Any]:
+        with handle.lock:
+            return list(handle.reader.read_arrays_by_ids(array_ids))
+
+    arrays = _read_or_raise(read)
+    return arrays[0], arrays[1]
 
 
 def _read_chromatogram_trace(handle: ZpReaderHandle, chromatogram_id: str) -> ZpChromatogramTrace:
@@ -479,13 +591,18 @@ def _derive_chromatogram_from_ms1(
     index: _CoreIndex,
     zp_run_id: str,
     chrom_type: str,
+    metadata_by_spectrum_id: dict[str, dict[str, Any]],
 ) -> ZpChromatogramTrace:
     points: list[tuple[float, float]] = []
     for spectrum in index.spectra_by_run_id.get(zp_run_id, ()):
         if int(spectrum.ms_level) != 1:
             continue
-        values = _read_spectrum_intensity_values(handle, str(spectrum.spectrum_id))
-        intensity = float(sum(values)) if chrom_type == "tic" else (float(max(values)) if values else 0.0)
+        metadata = metadata_by_spectrum_id.get(str(spectrum.spectrum_id), {})
+        metadata_key = "total_ion_current" if chrom_type == "tic" else "base_peak_intensity"
+        intensity = _finite_float(metadata.get(metadata_key))
+        if intensity is None:
+            values = _read_spectrum_intensity_values(handle, spectrum)
+            intensity = float(sum(values)) if chrom_type == "tic" else (float(max(values)) if values else 0.0)
         points.append((float(spectrum.rt) / 60.0, intensity))
     if not points:
         raise ZpChromatogramNotFoundError("chromatogram_not_found_in_binary")

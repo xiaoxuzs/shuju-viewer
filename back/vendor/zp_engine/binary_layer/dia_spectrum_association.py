@@ -12,7 +12,8 @@ ASSOCIATION_KIND = "derived_nearest_dia_window"
 ASSOCIATION_VERSION = 1
 ASSOCIATION_RT_UNIT = "minute"
 ASSOCIATION_MAX_DELTA_MINUTES = 0.5
-ASSOCIATION_WINDOW_RULE = "closed_absolute_bounds_no_mz_tolerance"
+ASSOCIATION_MZ_TOLERANCE = 1e-3
+ASSOCIATION_WINDOW_RULE = "closed_absolute_bounds_with_0.001_th_tolerance"
 ASSOCIATION_TIE_BREAK_RULE = "minimum_absolute_rt_delta_then_scan_number"
 
 
@@ -95,7 +96,11 @@ class DiaSpectrumAssociator:
         target_rt = float(rt_minutes) * 60.0
         candidates: list[tuple[float, int, str, float]] = []
         for group in self._groups:
-            if not group.lower_mz <= precursor_mz <= group.upper_mz:
+            if not (
+                group.lower_mz - ASSOCIATION_MZ_TOLERANCE
+                <= precursor_mz
+                <= group.upper_mz + ASSOCIATION_MZ_TOLERANCE
+            ):
                 continue
             position = bisect.bisect_left(group.rt_seconds, target_rt)
             for candidate_position in (position - 1, position):
@@ -132,6 +137,7 @@ class DiaSpectrumAssociator:
             "association_kind": ASSOCIATION_KIND,
             "rt_unit": ASSOCIATION_RT_UNIT,
             "max_delta_minutes": ASSOCIATION_MAX_DELTA_MINUTES,
+            "mz_tolerance_th": ASSOCIATION_MZ_TOLERANCE,
             "window_rule": ASSOCIATION_WINDOW_RULE,
             "tie_break_rule": ASSOCIATION_TIE_BREAK_RULE,
         }

@@ -33,11 +33,11 @@ def _is_bottom_up(value: Any) -> bool:
 
 
 def _dataset_mode(row: Any) -> str:
-    if _is_bottom_up(row.get("analysis_mode")):
-        return "bottom_up"
     caps = _capabilities_out(row.get("capabilities"), source_software=row.get("source_software"))
     if str(caps.get("analysis_shape") or "").lower() in {"mzml_only", "raw_mzml_only", "zp_spectra_only"}:
         return "spectra_only"
+    if _is_bottom_up(row.get("analysis_mode")):
+        return "bottom_up"
     return "top_down"
 
 
@@ -204,16 +204,25 @@ def list_datasets(session: Session = Depends(get_db)) -> list[DatasetOut]:
             """
         )
     ).mappings().all()
-    bu_dataset_ids = [int(d["dataset_id"]) for d in datasets if _is_bottom_up(d.get("analysis_mode"))]
+    dataset_modes = {int(d["dataset_id"]): _dataset_mode(d) for d in datasets}
+    bu_dataset_ids = [dataset_id for dataset_id, mode in dataset_modes.items() if mode == "bottom_up"]
     bu_runs_by_dataset = _bu_runs_by_dataset(session, bu_dataset_ids)
-    spectra_dataset_ids = [int(d["dataset_id"]) for d in datasets if _dataset_mode(d) == "spectra_only"]
+    spectra_dataset_ids = [dataset_id for dataset_id, mode in dataset_modes.items() if mode == "spectra_only"]
     runs_by_dataset = _runs_by_dataset(session, spectra_dataset_ids)
     return [
         _dataset_out(
             row=d,
             cutoffs=_cutoffs_payload(session, d["dataset_id"], analysis_mode=d.get("analysis_mode")),
-            bu_runs=bu_runs_by_dataset.get(int(d["dataset_id"])) if _is_bottom_up(d.get("analysis_mode")) else None,
-            runs=runs_by_dataset.get(int(d["dataset_id"])) if _dataset_mode(d) == "spectra_only" else None,
+            bu_runs=(
+                bu_runs_by_dataset.get(int(d["dataset_id"]))
+                if dataset_modes[int(d["dataset_id"])] == "bottom_up"
+                else None
+            ),
+            runs=(
+                runs_by_dataset.get(int(d["dataset_id"]))
+                if dataset_modes[int(d["dataset_id"])] == "spectra_only"
+                else None
+            ),
         )
         for d in datasets
     ]
@@ -227,21 +236,22 @@ def get_dataset_detail(
     """按 slug 取单个数据集；slug 不存在时由依赖注入层返回 404。"""
     dataset = require_dataset(session, slug)
     dataset_id = int(dataset["dataset_id"])
+    dataset_mode = _dataset_mode(dataset)
     bu_runs_by_dataset = (
         _bu_runs_by_dataset(session, [dataset_id])
-        if _is_bottom_up(dataset.get("analysis_mode"))
+        if dataset_mode == "bottom_up"
         else {}
     )
     runs_by_dataset = (
         _runs_by_dataset(session, [dataset_id])
-        if _dataset_mode(dataset) == "spectra_only"
+        if dataset_mode == "spectra_only"
         else {}
     )
     return _dataset_out(
         row=dataset,
         cutoffs=_cutoffs_payload(session, dataset_id, analysis_mode=dataset.get("analysis_mode")),
-        bu_runs=bu_runs_by_dataset.get(dataset_id) if _is_bottom_up(dataset.get("analysis_mode")) else None,
-        runs=runs_by_dataset.get(dataset_id) if _dataset_mode(dataset) == "spectra_only" else None,
+        bu_runs=bu_runs_by_dataset.get(dataset_id) if dataset_mode == "bottom_up" else None,
+        runs=runs_by_dataset.get(dataset_id) if dataset_mode == "spectra_only" else None,
     )
 
 

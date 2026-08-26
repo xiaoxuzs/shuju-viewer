@@ -365,6 +365,8 @@ def build_mzml_candidate(
                         "source_rt_value": item.source_rt_value,
                         "source_rt_unit_accession": item.source_rt_unit_accession,
                         "source_rt_unit_name": item.source_rt_unit_name,
+                        "total_ion_current": item.total_ion_current,
+                        "base_peak_intensity": item.base_peak_intensity,
                         "isolation_window_target_mz": (
                             item.precursors[0].isolation_target_mz
                             if len(item.precursors) == 1 else None

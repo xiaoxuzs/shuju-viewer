@@ -14,7 +14,14 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.bu.services.fasta_index import discover_unique_fasta, load_fasta_index, normalize_aa
+from app.bu.services.fasta_index import (
+    FastaRecord,
+    discover_default_fasta,
+    discover_unique_fasta,
+    load_fasta_record_index,
+    lookup_fasta_record,
+    normalize_aa,
+)
 from app.core.config import settings
 
 
@@ -22,7 +29,7 @@ _UNIPROT_CACHE_SIZE = 256
 _FASTA_CACHE_SIZE = 8
 _UNIPROT_MIN_INTERVAL_SECONDS = 1.0 / 3.0
 _UNIPROT_CACHE: OrderedDict[str, tuple[str | None, dict[str, Any]]] = OrderedDict()
-_FASTA_CACHE: OrderedDict[str, dict[str, str] | None] = OrderedDict()
+_FASTA_CACHE: OrderedDict[str, dict[str, FastaRecord] | None] = OrderedDict()
 _last_uniprot_request_at = 0.0
 
 
@@ -48,12 +55,40 @@ def resolve_base_sequence(
         metadata["sequence_fetch_error"] = "missing_accession"
         return None, metadata
 
-    fasta_sequence = _lookup_dataset_fasta(str(dataset.get("source_root") or ""), accession)
-    if fasta_sequence:
-        sequence = normalize_aa(fasta_sequence)
+    fasta_record = _lookup_dataset_fasta(str(dataset.get("source_root") or ""), accession)
+    if fasta_record:
+        sequence = normalize_aa(fasta_record.sequence)
         if sequence:
-            update_sequence(session, int(dataset["dataset_id"]), int(protein["id"]), sequence, "user_fasta")
+            update_sequence(
+                session,
+                int(dataset["dataset_id"]),
+                int(protein["id"]),
+                sequence,
+                "user_fasta",
+                _fasta_metadata(fasta_record, "user_fasta"),
+                gene_name=fasta_record.gene_name,
+                description=fasta_record.description,
+            )
+            metadata.update(_fasta_metadata(fasta_record, "user_fasta"))
             metadata.update({"sequence_source": "user_fasta", "sequence_length": len(sequence)})
+            return sequence, metadata
+
+    fasta_record = _lookup_default_fasta(accession)
+    if fasta_record:
+        sequence = normalize_aa(fasta_record.sequence)
+        if sequence:
+            update_sequence(
+                session,
+                int(dataset["dataset_id"]),
+                int(protein["id"]),
+                sequence,
+                "default_fasta",
+                _fasta_metadata(fasta_record, "default_fasta"),
+                gene_name=fasta_record.gene_name,
+                description=fasta_record.description,
+            )
+            metadata.update(_fasta_metadata(fasta_record, "default_fasta"))
+            metadata.update({"sequence_source": "default_fasta", "sequence_length": len(sequence)})
             return sequence, metadata
 
     if not settings.bu_uniprot_enabled:
@@ -79,6 +114,9 @@ def update_sequence(
     sequence: str,
     source: str,
     metadata: dict[str, Any] | None = None,
+    *,
+    gene_name: str | None = None,
+    description: str | None = None,
 ) -> None:
     patch = dict(metadata or {})
     patch.update({"sequence_source": source, "sequence_length": len(sequence)})
@@ -87,7 +125,9 @@ def update_sequence(
             """
             UPDATE proteins
             SET base_sequence = :sequence,
-                extra_metadata = extra_metadata || CAST(:metadata AS jsonb)
+                gene_name = COALESCE(NULLIF(gene_name, ''), :gene_name),
+                description = COALESCE(NULLIF(description, ''), :description),
+                extra_metadata = COALESCE(extra_metadata, '{}'::jsonb) || CAST(:metadata AS jsonb)
             WHERE dataset_id = :dataset_id AND protein_id = :protein_id
             """
         ),
@@ -95,6 +135,8 @@ def update_sequence(
             "dataset_id": dataset_id,
             "protein_id": protein_id,
             "sequence": sequence,
+            "gene_name": _clean_text(gene_name),
+            "description": _clean_text(description),
             "metadata": json.dumps(patch),
         },
     )
@@ -119,29 +161,53 @@ def update_sequence_error(session: Session, dataset_id: int, protein_id: int, er
     session.commit()
 
 
-def _lookup_dataset_fasta(source_root: str, accession: str) -> str | None:
+def _lookup_dataset_fasta(source_root: str, accession: str) -> FastaRecord | None:
     if not source_root:
         return None
     index = _load_dataset_fasta(source_root)
     if not index:
         return None
-    return index.get(accession.upper())
+    return lookup_fasta_record(index, accession)
 
 
-def _load_dataset_fasta(source_root: str) -> dict[str, str] | None:
+def _load_dataset_fasta(source_root: str) -> dict[str, FastaRecord] | None:
     cached = _FASTA_CACHE.get(source_root)
     if source_root in _FASTA_CACHE:
         _FASTA_CACHE.move_to_end(source_root)
         return cached
 
     root = Path(source_root)
-    index: dict[str, str] | None = None
+    index: dict[str, FastaRecord] | None = None
     fasta_path = discover_unique_fasta(root)
     if fasta_path is not None:
-        index = load_fasta_index(fasta_path)
+        index = load_fasta_record_index(fasta_path)
 
     _FASTA_CACHE[source_root] = index
     _FASTA_CACHE.move_to_end(source_root)
+    while len(_FASTA_CACHE) > _FASTA_CACHE_SIZE:
+        _FASTA_CACHE.popitem(last=False)
+    return index
+
+
+def _lookup_default_fasta(accession: str) -> FastaRecord | None:
+    fasta_path = discover_default_fasta()
+    if fasta_path is None:
+        return None
+    index = _load_fasta_file(fasta_path)
+    if not index:
+        return None
+    return lookup_fasta_record(index, accession)
+
+
+def _load_fasta_file(fasta_path: Path) -> dict[str, FastaRecord] | None:
+    cache_key = str(fasta_path.resolve())
+    cached = _FASTA_CACHE.get(cache_key)
+    if cache_key in _FASTA_CACHE:
+        _FASTA_CACHE.move_to_end(cache_key)
+        return cached
+    index = load_fasta_record_index(fasta_path)
+    _FASTA_CACHE[cache_key] = index
+    _FASTA_CACHE.move_to_end(cache_key)
     while len(_FASTA_CACHE) > _FASTA_CACHE_SIZE:
         _FASTA_CACHE.popitem(last=False)
     return index
@@ -224,6 +290,20 @@ def _protein_name_from_uniprot_header(header: str) -> str | None:
         if stop_marker in title:
             title = title.split(stop_marker, 1)[0].strip()
     return title or None
+
+
+def _fasta_metadata(record: FastaRecord, source: str) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"protein_metadata_source": source}
+    if record.description:
+        metadata["protein_names"] = record.description
+    if record.gene_name:
+        metadata["gene_name"] = record.gene_name
+    return metadata
+
+
+def _clean_text(value: Any) -> str | None:
+    text_value = str(value or "").strip()
+    return text_value or None
 
 
 def _json_object(raw: Any) -> dict[str, Any]:

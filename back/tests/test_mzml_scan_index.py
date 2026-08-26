@@ -320,6 +320,25 @@ def test_resolve_source_path_rejects_non_mzml_run() -> None:
         )
 
 
+def test_resolve_source_path_allows_raw_run_with_mzml_sidecar(tmp_path: Path) -> None:
+    source_path = tmp_path / "run.mzML"
+    source_path.write_bytes(b"source")
+    session = _Session(
+        {
+            "run_metadata": {
+                "raw_format": "thermo_raw",
+                "mzml_file_path": str(source_path),
+            }
+        }
+    )
+
+    assert mzml_scan_index._resolve_source_path(  # noqa: SLF001
+        session,  # type: ignore[arg-type]
+        DATASET_ID,
+        RUN_ID,
+    ) == source_path.resolve()
+
+
 def test_find_scan_by_number_uses_only_derived_index(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -616,6 +635,48 @@ def test_find_product_xic_ms2_scans_filters_rt_isolation_and_selected_mz(
     assert all(result.ms_level == 2 for result in results)
 
 
+def test_find_product_xic_ms2_scans_allows_tiny_isolation_boundary_rounding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "run.mzML"
+    source_path.write_bytes(b"source")
+    index = mzml_scan_index.build_scan_index_from_spectra(
+        [
+            _spectrum(
+                1,
+                ms_level=2,
+                rt_minutes=1.0,
+                intensity=[1.0],
+                target_mz=500.0,
+                lower_offset=10.0,
+                upper_offset=10.0,
+            ),
+        ]
+    )
+    derived_root = tmp_path / "derived"
+    mzml_scan_index.write_scan_index(
+        dataset_id=DATASET_ID,
+        run_id=RUN_ID,
+        source_path=source_path,
+        index=index,
+        derived_root=derived_root,
+    )
+    _use_source_path(monkeypatch, source_path)
+
+    results = mzml_scan_index.find_product_xic_ms2_scans(
+        None,  # type: ignore[arg-type]
+        DATASET_ID,
+        RUN_ID,
+        0.9,
+        1.1,
+        510.0005,
+        derived_root=derived_root,
+    )
+
+    assert [result.scan_number for result in results] == [1]
+
+
 def test_find_product_xic_ms2_scans_returns_empty_list(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -694,6 +755,48 @@ def test_find_nearest_ms2_scan_orders_by_rt_distance_then_scan(
     )
 
     assert result.scan_number == 10
+
+
+def test_find_nearest_ms2_scan_allows_tiny_isolation_boundary_rounding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "run.mzML"
+    source_path.write_bytes(b"source")
+    index = mzml_scan_index.build_scan_index_from_spectra(
+        [
+            _spectrum(
+                1,
+                ms_level=2,
+                rt_minutes=1.0,
+                intensity=[1.0],
+                target_mz=500.0,
+                lower_offset=10.0,
+                upper_offset=10.0,
+            ),
+        ]
+    )
+    derived_root = tmp_path / "derived"
+    mzml_scan_index.write_scan_index(
+        dataset_id=DATASET_ID,
+        run_id=RUN_ID,
+        source_path=source_path,
+        index=index,
+        derived_root=derived_root,
+    )
+    _use_source_path(monkeypatch, source_path)
+
+    result = mzml_scan_index.find_nearest_ms2_scan(
+        None,  # type: ignore[arg-type]
+        DATASET_ID,
+        RUN_ID,
+        1.0,
+        510.0005,
+        max_delta_minutes=0.5,
+        derived_root=derived_root,
+    )
+
+    assert result.scan_number == 1
 
 
 def test_find_nearest_ms2_scan_supports_selected_mz_fallback(

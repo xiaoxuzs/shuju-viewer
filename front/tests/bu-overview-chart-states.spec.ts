@@ -98,7 +98,7 @@ test("chromatogram stale state is distinct from missing", async ({ page }) => {
   await expect(page.getByText("Derived chromatogram data is not ready.")).toHaveCount(0);
 });
 
-test("chromatogram billion-scale ticks use 10⁹ notation", async ({ page }) => {
+test("chromatogram billion-scale ticks use a single y-axis scale label", async ({ page }) => {
   await mockOverview(page, {
     type: "tic",
     unit_rt: "min",
@@ -109,6 +109,8 @@ test("chromatogram billion-scale ticks use 10⁹ notation", async ({ page }) => 
   }, 200);
   await page.goto("/datasets/demo");
 
-  await expect(page.locator("svg text").filter({ hasText: "10⁹" }).first()).toBeVisible();
+  await expect(page.locator("svg text[data-testid='y-axis-scale-label']")).toHaveText("×10⁹");
+  await expect(page.locator("svg text").filter({ hasText: /^12\.0$/ })).toBeVisible();
+  await expect(page.locator("svg text").filter({ hasText: /10⁹/ })).toHaveCount(1);
   await expect(page.locator("svg text").filter({ hasText: /G$/ })).toHaveCount(0);
 });

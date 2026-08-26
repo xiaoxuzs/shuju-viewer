@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -24,8 +25,7 @@ from app.services.mzml_scan_reader import (
     RunNotFoundError,
     SpectrumNotFoundError,
     UnsupportedMzmlError,
-    get_spectrum_by_scan,
-    indexed_reader_scope,
+    get_spectra_by_scans,
 )
 from app.spectrum_memory import release_dataset
 
@@ -69,13 +69,17 @@ def _best_intensities(
     ppm: float,
 ) -> dict[str, float]:
     best = {target.label: 0.0 for target in targets}
+    value_count = min(len(mz_values), len(intensity_values))
+    if value_count == 0:
+        return best
+    mz_array = np.asarray(mz_values, dtype=np.float64)[:value_count]
+    intensity_array = np.asarray(intensity_values, dtype=np.float64)[:value_count]
+    finite = np.isfinite(mz_array) & np.isfinite(intensity_array)
     windows = [(target.label, target.target_mz, target.target_mz * ppm * 1e-6) for target in targets]
-    for mz_raw, intensity_raw in zip(mz_values, intensity_values, strict=False):
-        mz = float(mz_raw)
-        intensity = float(intensity_raw)
-        for label, target_mz, mz_tol in windows:
-            if abs(mz - target_mz) <= mz_tol:
-                best[label] = max(best[label], intensity)
+    for label, target_mz, mz_tol in windows:
+        matched = intensity_array[finite & (np.abs(mz_array - target_mz) <= mz_tol)]
+        if matched.size:
+            best[label] = max(0.0, float(matched.max()))
     return best
 
 
@@ -108,18 +112,18 @@ def _scan_index_http_error(
     return HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 
-def _indexed_ms1_spectrum(
+def _indexed_ms1_spectra(
     session: Session,
     dataset_id: int,
     run_id: int,
-    scan_number: int,
-) -> dict[str, Any]:
+    scan_numbers: list[int],
+) -> dict[int, dict[str, Any]]:
     try:
-        spec, path_committed = get_spectrum_by_scan(
+        spectra, path_committed = get_spectra_by_scans(
             session,
             dataset_id,
             run_id,
-            scan_number,
+            scan_numbers,
         )
     except (RunNotFoundError, MzmlFileNotFoundError, SpectrumNotFoundError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -131,9 +135,9 @@ def _indexed_ms1_spectrum(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     if path_committed:
         release_dataset(dataset_id)
-    if int(spec.get("ms_level") or 1) != 1:
+    if any(int(spec.get("ms_level") or 1) != 1 for spec in spectra.values()):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="xic_ms1_scan_not_found")
-    return spec
+    return spectra
 
 
 def get_match_xic(
@@ -170,21 +174,17 @@ def get_match_xic(
     ) as exc:
         raise _scan_index_http_error(exc, dataset_id=dataset_id, run_id=run_id) from exc
     rt: list[float] = []
-    with indexed_reader_scope():
-        for candidate in candidates:
-            spec = _indexed_ms1_spectrum(
-                session,
-                dataset_id,
-                run_id,
-                candidate.scan_number,
-            )
-            spec_rt = (_as_float(spec.get("rt_seconds")) or 0.0) / 60.0
-            mz_values = spec.get("mz") or []
-            intensity_values = spec.get("intensity") or []
-            best = _best_intensities(mz_values, intensity_values, targets, ppm)
-            rt.append(spec_rt)
-            for target in targets:
-                series[target.label].append(best[target.label])
+    scan_numbers = [candidate.scan_number for candidate in candidates]
+    spectra = _indexed_ms1_spectra(session, dataset_id, run_id, scan_numbers) if scan_numbers else {}
+    for candidate in candidates:
+        spec = spectra[candidate.scan_number]
+        spec_rt = (_as_float(spec.get("rt_seconds")) or 0.0) / 60.0
+        mz_values = spec.get("mz") or []
+        intensity_values = spec.get("intensity") or []
+        best = _best_intensities(mz_values, intensity_values, targets, ppm)
+        rt.append(spec_rt)
+        for target in targets:
+            series[target.label].append(best[target.label])
 
     traces = [
         BuXicTrace(

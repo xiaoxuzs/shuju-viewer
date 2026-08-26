@@ -32,6 +32,25 @@ def find_active_asset(
     if not settings.zp_management_enabled:
         # Explicit legacy/offline fallback behaves as if no binary artifact is present.
         return None
+    if run_id is None:
+        row = session.execute(
+            text(
+                """
+                SELECT asset_id, dataset_id, run_id, zp_path, format_version, capabilities
+                FROM dataset_zp_assets
+                WHERE dataset_id = :dataset_id
+                  AND status = 'active'
+                  AND run_id IS NULL
+                ORDER BY asset_id DESC
+                LIMIT 1
+                """
+            ),
+            {"dataset_id": dataset_id},
+        ).mappings().one_or_none()
+        if row is None:
+            return None
+        return _asset_from_row(row)
+
     row = session.execute(
         text(
             """
@@ -39,7 +58,7 @@ def find_active_asset(
             FROM dataset_zp_assets
             WHERE dataset_id = :dataset_id
               AND status = 'active'
-              AND (:run_id IS NULL OR run_id IS NULL OR run_id = :run_id)
+              AND (run_id IS NULL OR run_id = :run_id)
             ORDER BY CASE WHEN run_id = :run_id THEN 0 ELSE 1 END, asset_id DESC
             LIMIT 1
             """
@@ -48,6 +67,10 @@ def find_active_asset(
     ).mappings().one_or_none()
     if row is None:
         return None
+    return _asset_from_row(row)
+
+
+def _asset_from_row(row: Any) -> ActiveZpAsset:
     return ActiveZpAsset(
         asset_id=int(row["asset_id"]),
         dataset_id=int(row["dataset_id"]),

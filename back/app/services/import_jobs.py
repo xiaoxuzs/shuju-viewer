@@ -762,6 +762,125 @@ def _dataset_raw_conversion_summary(batch: RawConversionBatch | None) -> dict[st
     return {"raw_conversion_summary": batch.summary()}
 
 
+def _is_diaclip_import_type(selected_import_type: ImportType | None) -> bool:
+    return selected_import_type in {ImportType.BU_DIA_CLIP, ImportType.DIA_CLIP}
+
+
+def _single_dia_mzml_for_zp(
+    *,
+    plan: ImportPlan,
+    raw_conversion_batch: RawConversionBatch | None,
+) -> Path:
+    converted_mzml = tuple(
+        result.mzml_path
+        for result in (raw_conversion_batch.results if raw_conversion_batch else ())
+        if result.mzml_path is not None
+    )
+    candidates = converted_mzml or plan.mzml_files
+    if len(candidates) != 1:
+        raise RuntimeError(
+            f"DIA-CLIP ZP conversion requires exactly one mzML source; found {len(candidates)}."
+        )
+    return candidates[0].resolve()
+
+
+def _diaclip_zp_row(identification: Any) -> dict[str, Any]:
+    row = dict(identification.report_row)
+    row["Q.Value"] = float(identification.q_value if identification.q_value is not None else 0.0)
+    row["Decoy"] = 0
+    row["DIAClip.Score"] = identification.score
+    row["DIAClip.Q.Value"] = identification.q_value
+    row["DIAClip.Quantity"] = identification.intensity
+    metadata = identification.extra_metadata if isinstance(identification.extra_metadata, dict) else {}
+    diaclip = metadata.get("diaclip") if isinstance(metadata.get("diaclip"), dict) else {}
+    row["DIAClip.Feature.Distance"] = diaclip.get("feature_distance")
+    row["DIAClip.Cosine.Similarity"] = diaclip.get("cos_similarity")
+    row["DIAClip.Source.Row"] = diaclip.get("source_row")
+    row["DIAClip.Original.Modified.Peptide"] = diaclip.get("original_modified_peptide")
+    row["DIAClip.FDR.Method"] = diaclip.get("fdr_method")
+    row["DIAClip.Passed"] = diaclip.get("passed", True)
+    return row
+
+
+def _write_diaclip_zp_report(path: Path, identifications: list[Any]) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from app.zp_runtime.package import ensure_binary_layer_importable
+
+    ensure_binary_layer_importable()
+    from binary_layer.bottom_up_schema import DIANN_COLUMN_SPECS  # type: ignore[import-not-found]
+
+    arrow_types = {
+        item.source_name: (
+            pa.int64()
+            if item.value_kind == "integer"
+            else pa.float64()
+            if item.value_kind == "float"
+            else pa.string()
+        )
+        for item in DIANN_COLUMN_SPECS
+    }
+
+    rows = [_diaclip_zp_row(identification) for identification in identifications]
+    names: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        for name in row:
+            if name not in seen:
+                names.append(name)
+                seen.add(name)
+    arrays = [
+        pa.array([row.get(name) for row in rows], type=arrow_types.get(name))
+        for name in names
+    ]
+    table = pa.Table.from_arrays(arrays, names=names)
+    pq.write_table(table, path)
+
+
+def _stage_diaclip_zp_source_for_import(
+    *,
+    job_id: str,
+    ingest_root: Path,
+    plan: ImportPlan,
+    raw_conversion_batch: RawConversionBatch | None,
+    selected_import_type: ImportType | None,
+) -> Path | None:
+    if plan.shape != DatasetShape.DIANN_DIA or not _is_diaclip_import_type(selected_import_type):
+        return None
+
+    from app.ingest.bu.diaclip_fdr_result_reader import (
+        detect_diaclip_fdr_parquet,
+        prepare_diaclip_fdr_source,
+    )
+    from app.ingest.bu.diaclip_result_reader import prepare_diaclip_source
+
+    resolved = ingest_root.resolve()
+    prepared = (
+        prepare_diaclip_fdr_source(resolved)
+        if detect_diaclip_fdr_parquet(resolved) is not None
+        else prepare_diaclip_source(resolved)
+    )
+    mzml_source = _single_dia_mzml_for_zp(
+        plan=plan,
+        raw_conversion_batch=raw_conversion_batch,
+    )
+    staging_root = (
+        settings.resolved_data_root
+        / ".viewer-derived"
+        / "zp-diaclip-source"
+        / job_id
+    ).resolve()
+    report_dir = staging_root / "DIANN_2.0"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    _write_diaclip_zp_report(report_dir / "all_report.parquet", prepared.source.identifications)
+
+    staged_mzml = staging_root / mzml_source.name
+    if staged_mzml.exists():
+        staged_mzml.unlink()
+    staged_mzml.hardlink_to(mzml_source)
+    return staging_root
+
+
 def _run_zp_conversion_for_import(
     *,
     job_id: str,
@@ -770,6 +889,7 @@ def _run_zp_conversion_for_import(
     plan: ImportPlan,
     raw_conversion_batch: RawConversionBatch | None,
     prepared_toppic_native: PreparedTopPicNativeOutput | None,
+    selected_import_type: ImportType | None,
 ) -> None:
     source = _zp_source_for_import(
         ingest_root=ingest_root,
@@ -777,6 +897,13 @@ def _run_zp_conversion_for_import(
         raw_conversion_batch=raw_conversion_batch,
         prepared_toppic_native=prepared_toppic_native,
     )
+    source = _stage_diaclip_zp_source_for_import(
+        job_id=job_id,
+        ingest_root=ingest_root,
+        plan=plan,
+        raw_conversion_batch=raw_conversion_batch,
+        selected_import_type=selected_import_type,
+    ) or source
     _update_job(
         job_id,
         stage="finalize",
@@ -803,6 +930,18 @@ def _run_zp_conversion_for_import(
     if finished.status != "success":
         message = finished.public_error_message or finished.error_message or finished.error_code or "ZP conversion failed."
         raise RuntimeError(f"ZP conversion failed: {message}")
+
+
+def _run_zp_conversion_for_import_or_warning(**kwargs: Any) -> str | None:
+    try:
+        _run_zp_conversion_for_import(**kwargs)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("recoverable ZP conversion failure during import: %s", exc)
+        return (
+            f"ZP conversion failed: {exc}. "
+            "Legacy mzML/analysis display remains available; rerun ZP conversion after fixing the binary mapping."
+        )
+    return None
 
 
 def _zp_source_for_import(
@@ -1398,14 +1537,22 @@ def run_path_import_job(
             ) from exc
         _slice("db_finalize_paths_and_metadata_s")
 
+        derived_data_warning = _run_post_import_derived_data(
+            job_id,
+            stats.dataset_id,
+        )
+        _slice("derived_data_backfill_s")
+
+        zp_conversion_warning: str | None = None
         if settings.zp_management_enabled and settings.zp_import_conversion_enabled:
-            _run_zp_conversion_for_import(
+            zp_conversion_warning = _run_zp_conversion_for_import_or_warning(
                 job_id=job_id,
                 ingest_root=ingest_root,
                 slug=slug,
                 plan=plan,
                 raw_conversion_batch=raw_conversion_batch,
                 prepared_toppic_native=prepared_toppic_native,
+                selected_import_type=selected_import_type,
             )
             _slice("zp_conversion_s")
         else:
@@ -1413,18 +1560,13 @@ def run_path_import_job(
             timing["zp_conversion_s"] = 0.0
             _t = time.perf_counter()
 
-        derived_data_warning = _run_post_import_derived_data(
-            job_id,
-            stats.dataset_id,
-        )
-        _slice("derived_data_backfill_s")
-
         final_detail = (
             f"proteins={stats.proteins}, proteoforms={stats.proteoforms}, "
             f"matches={stats.matches}"
         )
-        if derived_data_warning is not None:
-            final_detail = f"{final_detail}. Warning: {derived_data_warning}"
+        warnings = [item for item in (derived_data_warning, zp_conversion_warning) if item is not None]
+        if warnings:
+            final_detail = f"{final_detail}. Warning: {' '.join(warnings)}"
         if pfmb_prepare_message is not None:
             final_detail = f"{final_detail}. Fragment Match: {pfmb_prepare_message}"
 
@@ -1432,8 +1574,8 @@ def run_path_import_job(
             job_id,
             status="success",
             message=(
-                "Import finished with derived data warnings."
-                if derived_data_warning is not None
+                "Import finished with warnings."
+                if warnings
                 else "Import finished."
             ),
             error=None,

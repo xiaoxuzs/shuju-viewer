@@ -94,6 +94,8 @@ class Settings(BaseSettings):
     import_upload_max_total_bytes: int = Field(default=0, ge=0)
     import_upload_max_files: int = Field(default=5000, ge=1)
     import_upload_chunk_bytes: int = Field(default=8_388_608, ge=1)
+    #: Optional project-level FASTA used when a Bottom-Up import does not include a dataset FASTA.
+    bu_default_fasta_path: Path | None = Field(default=None)
     #: Allow lazy UniProt FASTA fetches for Bottom-Up protein coverage. Keep disabled for offline deployments.
     bu_uniprot_enabled: bool = Field(default=False)
     #: Project-local root for generated Bottom-Up Fragment Match sidecars.

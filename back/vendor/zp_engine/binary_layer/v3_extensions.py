@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import struct
 from dataclasses import dataclass, is_dataclass
-from typing import Any
+from typing import Any, BinaryIO, Iterable
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -195,6 +195,156 @@ def decode_v3_extensions(
     ):
         raise ZpReadError("ZP v3 extensions skeleton did not restore a list")
     return restored
+
+
+def read_v3_extensions_by_types(
+    stream: BinaryIO,
+    *,
+    block_offset: int,
+    block_length: int,
+    extension_types: Iterable[str],
+    materialize_column_tables: bool = True,
+) -> list[dict[str, object]]:
+    requested_types = {str(item) for item in extension_types}
+    stream.seek(block_offset)
+    header_raw = stream.read(_HEADER.size)
+    if len(header_raw) != _HEADER.size:
+        raise ZpReadError("ZP v3 extensions block is shorter than its fixed header")
+    (
+        magic,
+        version,
+        endianness,
+        flags,
+        table_count,
+        manifest_length,
+        payload_offset,
+        table_payload_length,
+        reserved,
+    ) = _HEADER.unpack(header_raw)
+    if magic != _MAGIC:
+        raise ZpReadError("Invalid ZP v3 extensions magic")
+    if version != _VERSION or endianness != _ENDIANNESS_LITTLE or flags != 0:
+        raise ZpReadError("Unsupported ZP v3 extensions header")
+    if reserved != b"\0" * 24:
+        raise ZpReadError("ZP v3 extensions reserved bytes must be zero")
+    manifest_end = _HEADER.size + manifest_length
+    if payload_offset != _align8(manifest_end):
+        raise ZpReadError("Invalid ZP v3 extensions payload offset")
+    if payload_offset + table_payload_length != block_length:
+        raise ZpReadError("Invalid ZP v3 extensions payload length")
+
+    manifest_raw = stream.read(manifest_length)
+    if len(manifest_raw) != manifest_length:
+        raise ZpReadError("ZP v3 extensions manifest is truncated")
+    padding = stream.read(payload_offset - manifest_end)
+    if len(padding) != payload_offset - manifest_end:
+        raise ZpReadError("ZP v3 extensions padding is truncated")
+    if any(padding):
+        raise ZpReadError("ZP v3 extensions padding must be zero")
+    try:
+        manifest = parse_json_bytes(manifest_raw)
+    except (UnicodeError, ValueError) as exc:
+        raise ZpReadError(f"Invalid ZP v3 extensions manifest: {exc}") from exc
+    if canonical_json_bytes(manifest) != manifest_raw:
+        raise ZpReadError("ZP v3 extensions manifest is not canonical JSON")
+    if (
+        not isinstance(manifest, dict)
+        or set(manifest) != {"schema_version", "skeleton", "tables"}
+        or manifest.get("schema_version") != _VERSION
+        or not isinstance(manifest.get("tables"), list)
+    ):
+        raise ZpReadError("Invalid ZP v3 extensions manifest schema")
+
+    raw_entries = manifest["tables"]
+    if len(raw_entries) != table_count:
+        raise ZpReadError("ZP v3 extensions table count does not match the manifest")
+    expected_offset = 0
+    for table_id, entry in enumerate(raw_entries):
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"table_id", "offset", "length", "row_count", "checksum"}
+            or entry.get("table_id") != table_id
+        ):
+            raise ZpReadError("Invalid ZP v3 extensions table entry")
+        offset = entry.get("offset")
+        length = entry.get("length")
+        row_count = entry.get("row_count")
+        checksum = entry.get("checksum")
+        if (
+            not _nonnegative_int(offset)
+            or not _nonnegative_int(length)
+            or not _nonnegative_int(row_count)
+            or not isinstance(checksum, str)
+            or len(checksum) != 64
+            or offset != expected_offset
+            or offset + length > table_payload_length
+        ):
+            raise ZpReadError("Invalid ZP v3 extensions table bounds")
+        expected_offset += length
+    if expected_offset != table_payload_length:
+        raise ZpReadError("ZP v3 extensions tables do not cover the payload")
+
+    skeleton = manifest["skeleton"]
+    if not isinstance(skeleton, list) or not all(isinstance(item, dict) for item in skeleton):
+        raise ZpReadError("ZP v3 extensions skeleton did not restore a list")
+    selected_skeleton = [
+        item
+        for item in skeleton
+        if str(item.get("extension_type") or "") in requested_types
+    ]
+    selected_table_ids: set[int] = set()
+    for item in selected_skeleton:
+        _collect_table_ids(item, table_count, selected_table_ids)
+
+    decoded_tables: list[tuple[str, object]] = [("records", None)] * table_count
+    for table_id in sorted(selected_table_ids):
+        entry = raw_entries[table_id]
+        offset = int(entry["offset"])
+        length = int(entry["length"])
+        stream.seek(block_offset + payload_offset + offset)
+        table_payload = stream.read(length)
+        if len(table_payload) != length:
+            raise ZpReadError("ZP v3 extensions table is truncated")
+        if hashlib.sha256(table_payload).hexdigest() != entry["checksum"]:
+            raise ZpReadError("ZP v3 extensions table checksum mismatch")
+        try:
+            table = pa.ipc.open_stream(pa.BufferReader(table_payload)).read_all()
+        except (pa.ArrowException, OSError, ValueError) as exc:
+            raise ZpReadError(f"Invalid ZP v3 Arrow table: {exc}") from exc
+        if table.num_rows != entry["row_count"]:
+            raise ZpReadError("ZP v3 extensions Arrow row count mismatch")
+        if _table_has_nonfinite(table):
+            raise ZpReadError("ZP v3 extensions Arrow table contains a non-finite value")
+        decoded_tables[table_id] = ("records", table)
+
+    restored = _restore_tables(
+        selected_skeleton,
+        decoded_tables,
+        materialize_column_tables=materialize_column_tables,
+    )
+    if not isinstance(restored, list) or not all(isinstance(item, dict) for item in restored):
+        raise ZpReadError("ZP v3 extensions skeleton did not restore a list")
+    return restored
+
+
+def _collect_table_ids(value: object, table_count: int, out: set[int]) -> None:
+    if isinstance(value, dict):
+        if set(value) == {_RESERVED_KEY, _KIND_KEY}:
+            table_id = value.get(_RESERVED_KEY)
+            kind = value.get(_KIND_KEY)
+            if (
+                not _nonnegative_int(table_id)
+                or table_id >= table_count
+                or kind not in {"records", "columns"}
+            ):
+                raise ZpReadError("Invalid ZP v3 extension table reference")
+            out.add(table_id)
+            return
+        for item in value.values():
+            _collect_table_ids(item, table_count, out)
+    elif isinstance(value, list):
+        for item in value:
+            _collect_table_ids(item, table_count, out)
 
 
 def _extract_tables(

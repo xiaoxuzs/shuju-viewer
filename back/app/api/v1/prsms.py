@@ -10,7 +10,7 @@ from app.api.deps import get_db
 from app.api.v1.universal_compat import load_prsm_detail, prsm_list_item, prsm_list_select_sql, require_cutoff, require_dataset
 from app.ingest.utils import to_float, to_int
 from app.schemas import Page, PrsmDetailOut, PrsmListItemOut
-from app.zp_runtime import ZpTopDownPrsm, get_binary_top_down_prsm
+from app.zp_runtime import ZpAssetReadError, ZpTopDownPrsm, get_binary_top_down_prsm
 
 router = APIRouter(tags=["prsms"])
 
@@ -150,7 +150,7 @@ def get_prsm(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "prsm not found")
     item = prsm_list_item(dict(row))
-    binary = get_binary_top_down_prsm(session, int(dataset["dataset_id"]), prsm_id)
+    binary = _safe_binary_top_down_prsm(session, int(dataset["dataset_id"]), prsm_id)
     if binary is not None:
         item = _apply_binary_prsm_item(item, binary)
         annotated, ms_header, ms_peaks = _binary_prsm_detail_parts(binary)
@@ -195,8 +195,19 @@ def _binary_prsm_list_payload(
     dataset_id: int,
     payload: dict[str, object],
 ) -> dict[str, object]:
-    binary = get_binary_top_down_prsm(session, dataset_id, int(payload["prsm_id"]))
+    binary = _safe_binary_top_down_prsm(session, dataset_id, int(payload["prsm_id"]))
     return _apply_binary_prsm_item(payload, binary) if binary is not None else payload
+
+
+def _safe_binary_top_down_prsm(
+    session: Session,
+    dataset_id: int,
+    prsm_id: int,
+) -> ZpTopDownPrsm | None:
+    try:
+        return get_binary_top_down_prsm(session, dataset_id, prsm_id)
+    except ZpAssetReadError:
+        return None
 
 
 def _apply_binary_prsm_item(

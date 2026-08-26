@@ -41,6 +41,11 @@ export interface BuPlotPointClick {
   seriesLabel: string;
 }
 
+export interface BuPlotAxisScale {
+  divisor: number;
+  label: string;
+}
+
 function sortedPoints(points: BuPlotPoint[]): BuPlotPoint[] {
   return [...points].filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y)).sort((a, b) => a.x - b.x);
 }
@@ -52,6 +57,14 @@ function nearestPoint(points: BuPlotPoint[], value: number): BuPlotPoint | null 
   const a = points[Math.max(0, idx - 1)];
   const b = points[Math.min(points.length - 1, idx)];
   return !a ? b : !b ? a : Math.abs(a.x - value) < Math.abs(b.x - value) ? a : b;
+}
+
+function formatYAxisTick(value: number, axisScale?: BuPlotAxisScale): string {
+  if (!axisScale) return formatIntensity(value);
+  const scaled = value / axisScale.divisor;
+  if (!Number.isFinite(scaled)) return "-";
+  if (Math.abs(scaled) < 1e-9) return "0";
+  return scaled.toFixed(1);
 }
 
 export function BuInteractivePlot({
@@ -69,6 +82,7 @@ export function BuInteractivePlot({
   emptyHint = "No points",
   yDomain,
   yTicks,
+  yAxisScale,
   referenceYMax,
   zoom: zoomProp,
   onZoomChange,
@@ -91,6 +105,7 @@ export function BuInteractivePlot({
   emptyHint?: string;
   yDomain?: [number, number] | ((visibleMax: number) => [number, number]);
   yTicks?: number[];
+  yAxisScale?: BuPlotAxisScale;
   referenceYMax?: BuPlotReferenceYMax;
   zoom?: Zoom;
   onZoomChange?: (zoom: Zoom) => void;
@@ -211,6 +226,16 @@ export function BuInteractivePlot({
       .attr("fill", BU_CHART.text)
       .attr("font-size", 12)
       .text(yLabel);
+    if (yAxisScale) {
+      g.append("text")
+        .attr("data-testid", "y-axis-scale-label")
+        .attr("x", -12)
+        .attr("y", -8)
+        .attr("text-anchor", "end")
+        .attr("fill", BU_CHART.text)
+        .attr("font-size", 11)
+        .text(yAxisScale.label);
+    }
 
     let xScale = d3.scaleLinear().domain(fullX).range([0, innerW]);
     let yScale = d3.scaleLinear().domain([0, 1]).range([innerH, 0]);
@@ -244,7 +269,7 @@ export function BuInteractivePlot({
         });
       const [y0, y1] = yScale.domain() as [number, number];
       const visibleYTicks = yTicks?.filter((tick) => tick >= y0 && tick <= y1);
-      const yAxis = d3.axisLeft(yScale).tickFormat((d) => formatIntensity(Number(d)));
+      const yAxis = d3.axisLeft(yScale).tickFormat((d) => formatYAxisTick(Number(d), yAxisScale));
       if (visibleYTicks) yAxis.tickValues(visibleYTicks);
       else yAxis.ticks(5);
       yAxisG
@@ -426,7 +451,7 @@ export function BuInteractivePlot({
       if (clickTimer) clearTimeout(clickTimer);
       applyZoomRef.current = null;
     };
-  }, [bands, fullX, guides, height, normalizedSeries, referenceYMax, width, xLabel, yDomain, yLabel, yTicks]);
+  }, [bands, fullX, guides, height, normalizedSeries, referenceYMax, width, xLabel, yAxisScale, yDomain, yLabel, yTicks]);
 
   useEffect(() => {
     applyZoomRef.current?.(zoom);

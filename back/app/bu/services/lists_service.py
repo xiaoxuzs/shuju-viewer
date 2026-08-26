@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.schemas import (
@@ -54,6 +55,29 @@ def _q_value_cutoff(dataset: dict[str, Any], q_max: float | None) -> float | Non
 
 def _pagination(page: int, page_size: int) -> tuple[int, int]:
     return (page - 1) * page_size, page_size
+
+
+def _use_binary_entities(session: Session, dataset_id: int) -> bool:
+    try:
+        has_db_rows = bool(
+            session.scalar(
+                text(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM identification_matches
+                        WHERE dataset_id = :dataset_id
+                          AND entity_type = 'PEPTIDE'
+                        LIMIT 1
+                    )
+                    """
+                ),
+                {"dataset_id": dataset_id},
+            )
+        )
+    except (AttributeError, SQLAlchemyError):
+        return True
+    return not has_db_rows
 
 
 def list_matches(
@@ -246,9 +270,14 @@ def list_proteins(
         params,
     ).mappings().all()
     items = []
+    use_binary = _use_binary_entities(session, int(dataset["dataset_id"]))
     for row in rows:
         payload = dict(row)
-        binary = get_binary_bottom_up_protein(session, int(dataset["dataset_id"]), str(payload.get("accession") or ""))
+        binary = (
+            get_binary_bottom_up_protein(session, int(dataset["dataset_id"]), str(payload.get("accession") or ""))
+            if use_binary
+            else None
+        )
         if binary is not None:
             payload = _binary_protein_list_payload(payload, binary)
         items.append(BuProteinListItemOut(**payload))
@@ -324,9 +353,14 @@ def list_peptides(
         params,
     ).mappings().all()
     items = []
+    use_binary = _use_binary_entities(session, int(dataset["dataset_id"]))
     for row in rows:
         payload = dict(row)
-        binary = get_binary_bottom_up_peptide(session, int(dataset["dataset_id"]), str(payload.get("sequence") or ""))
+        binary = (
+            get_binary_bottom_up_peptide(session, int(dataset["dataset_id"]), str(payload.get("sequence") or ""))
+            if use_binary
+            else None
+        )
         if binary is not None:
             payload = _binary_peptide_list_payload(payload, binary)
         items.append(BuPeptideListItemOut(**payload))
@@ -343,7 +377,11 @@ def get_match_detail(
     dataset: dict[str, Any],
     match: dict[str, Any],
 ) -> BuMatchDetailOut:
-    binary = get_binary_bottom_up_match(session, int(dataset["dataset_id"]), match)
+    binary = (
+        get_binary_bottom_up_match(session, int(dataset["dataset_id"]), match)
+        if _use_binary_entities(session, int(dataset["dataset_id"]))
+        else None
+    )
     meta = _json_object(match.get("extra_metadata"))
     run_meta = _json_object(match.get("run_metadata"))
     if binary is not None:
@@ -720,7 +758,11 @@ def get_peptide_detail(session: Session, dataset: dict[str, Any], peptide_id: in
         )
         or 0
     )
-    binary = get_binary_bottom_up_peptide(session, int(dataset["dataset_id"]), str(item_rows.get("sequence") or ""))
+    binary = (
+        get_binary_bottom_up_peptide(session, int(dataset["dataset_id"]), str(item_rows.get("sequence") or ""))
+        if _use_binary_entities(session, int(dataset["dataset_id"]))
+        else None
+    )
     base_payload = base.model_dump()
     extra_metadata = _json_object(item_rows.get("extra_metadata"))
     if binary is not None:

@@ -35,7 +35,11 @@ from .exceptions import UnsupportedVersionError, ZpReadError, ZpV2ArrayReadError
 from .models import BlockDirectoryEntry, ZpHeader
 from .serialization import canonical_json_bytes, parse_json_bytes, parse_utc_datetime
 from .v2_arrays_reader import V2ArraysDirectory, ZpV2ArrayReadLimits, ZpV2ArraysReader
-from .v3_extensions import V3_EXTENSIONS_ENCODING, decode_v3_extensions
+from .v3_extensions import (
+    V3_EXTENSIONS_ENCODING,
+    decode_v3_extensions,
+    read_v3_extensions_by_types,
+)
 from .v3_arrays import (
     V3_ARRAYS_ENCODING,
     V3ArraysDirectory,
@@ -605,11 +609,72 @@ class ZpReader:
 
         return self._with_file(operation)
 
+    def read_arrays_by_ids(self, array_ids: list[str]) -> list[ArrayBlock]:
+        requested_ids = list(array_ids)
+
+        def operation(
+            stream: BinaryIO,
+            header: ZpHeader,
+            fingerprint: _FileFingerprint,
+        ) -> list[ArrayBlock]:
+            if header.version in {ZP_VERSION_V2, ZP_VERSION_V3}:
+                return self._read_v2_arrays_by_ids(
+                    stream,
+                    header,
+                    fingerprint,
+                    requested_ids,
+                )
+            arrays = {
+                item.array_id: item
+                for item in (
+                    ArrayBlock(**raw)
+                    for raw in self._read_json_block(stream, header, fingerprint, "arrays")
+                )
+            }
+            try:
+                return [arrays[array_id] for array_id in requested_ids]
+            except KeyError as exc:
+                raise ZpReadError(f"Unknown array_id: {exc.args[0]}") from exc
+
+        return self._with_file(operation)
+
     def read_indexes(self) -> IndexBlock:
         return IndexBlock(**self.read_block("indexes"))
 
     def read_extensions(self) -> list[ExtensionBlock]:
         return [ExtensionBlock(**item) for item in self.read_block("extensions")]
+
+    def read_extensions_by_types(self, extension_types: list[str]) -> list[ExtensionBlock]:
+        requested_types = {str(item) for item in extension_types}
+
+        def operation(
+            stream: BinaryIO,
+            header: ZpHeader,
+            fingerprint: _FileFingerprint,
+        ) -> list[ExtensionBlock]:
+            if header.version == ZP_VERSION_V3:
+                entries = self._directory_for(stream, header, fingerprint)
+                entry = self._entry(entries, "extensions")
+                raw = read_v3_extensions_by_types(
+                    stream,
+                    block_offset=entry.offset,
+                    block_length=entry.length,
+                    extension_types=requested_types,
+                )
+            else:
+                raw = self._read_json_block(
+                    stream,
+                    header,
+                    fingerprint,
+                    "extensions",
+                )
+            return [
+                ExtensionBlock(**item)
+                for item in raw
+                if str(item.get("extension_type") or "") in requested_types
+            ]
+
+        return self._with_file(operation)
 
     def read_spectrum(self, spectrum_id: str) -> SpectrumBlock:
         spectrum = next((item for item in self.read_spectra() if item.spectrum_id == spectrum_id), None)

@@ -314,6 +314,57 @@ test("waits for scan metadata, spectrum D3 paint, and the new Run chromatogram",
   await expect(mask).toHaveAttribute("data-state", "idle");
 });
 
+test("routes raw-only datasets to spectra even when legacy mode says bottom-up", async ({ page }) => {
+  let overviewRequests = 0;
+  const rawOnlyDataset = {
+    ...spectraDataset,
+    id: 55,
+    slug: "dda_raw",
+    name: "DDA RAW",
+    analysis_mode: "BOTTOM_UP",
+    dataset_mode: "bottom_up",
+    source_software: "DDA Thermo RAW",
+    capabilities: {
+      analysis_shape: "raw_mzml_only",
+      has_identifications: false,
+      spectra_source: "zp",
+    },
+    runs: [
+      { run_id: 55, run_name: "run.mzML", raw_format: "thermo_raw", mzml_file_path: null, raw_path: null, metadata: {} },
+    ],
+    bu_runs: [
+      { run_id: 55, file_name: "run.mzML", raw_format: "thermo_raw", diann_run_name: null },
+    ],
+  };
+  const items = [scan(1, 1)];
+
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/datasets/dda_raw") return fulfillJson(route, rawOnlyDataset);
+    if (url.pathname === "/api/v1/datasets/dda_raw/overview") {
+      overviewRequests += 1;
+      return fulfillJson(route, { detail: "BU extensions are unavailable" }, 500);
+    }
+    if (url.pathname === "/api/v1/datasets/55/runs/55/scan-index") {
+      return fulfillJson(route, { ...scanIndex(55, items), dataset_id: 55 });
+    }
+    if (url.pathname === "/api/v1/datasets/55/runs/55/chromatogram") {
+      return fulfillJson(route, chromatogram(55));
+    }
+    if (url.pathname === "/api/v1/datasets/55/runs/55/spectra/1") {
+      return fulfillJson(route, { ...spectrum(55, 1, 1), dataset_id: 55 });
+    }
+    return fulfillJson(route, {}, 404);
+  });
+
+  await page.goto("/datasets/dda_raw");
+
+  await expect(page.getByText("Run Chromatogram")).toBeVisible();
+  await expect(page.getByText(/Selected scan 1/)).toBeVisible();
+  await expect(page.getByText("Failed to load data.")).toHaveCount(0);
+  expect(overviewRequests).toBe(0);
+});
+
 test("keeps system-dark direct visits and refreshes covered through the Three.js first frame", async ({ page }) => {
   let ms1Gate = deferred();
   await page.emulateMedia({ colorScheme: "dark" });

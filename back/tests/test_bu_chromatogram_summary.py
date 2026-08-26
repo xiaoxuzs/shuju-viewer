@@ -18,12 +18,12 @@ def _fail(*_args: Any, **_kwargs: Any) -> None:
     raise AssertionError("whole-dataset mzML loading must not be called")
 
 
-def _run(source_path: Path) -> dict[str, Any]:
+def _run(source_path: Path, *, raw_format: str = "mzml") -> dict[str, Any]:
     return {
         "run_id": 10,
         "file_path": str(source_path),
         "run_metadata": {
-            "raw_format": "mzml",
+            "raw_format": raw_format,
             "mzml_file_path": str(source_path),
         },
     }
@@ -154,6 +154,34 @@ def test_mzml_chromatogram_reads_valid_summary_without_full_load(
     assert out.intensity == expected
     assert out.downsampled is False
     assert out.point_count_original == 2
+
+
+def test_raw_with_mzml_sidecar_chromatogram_reads_valid_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_path, _summary = _write_valid_summary(tmp_path)
+    monkeypatch.setattr(
+        chromatogram_summary,
+        "_derived_root",
+        lambda _derived_root: (tmp_path / "derived").resolve(),
+    )
+    monkeypatch.setattr(
+        chromatogram_service,
+        "_run_row",
+        lambda *_args: _run(source_path, raw_format="thermo_raw"),
+    )
+    _install_no_full_load_guards(monkeypatch)
+
+    out = chromatogram_service.get_chromatogram(
+        None,  # type: ignore[arg-type]
+        {"dataset_id": 39},
+        10,
+        chrom_type="tic",
+    )
+
+    assert out.rt == [1.0, 2.0]
+    assert out.intensity == [6.0, 6.0]
 
 
 def test_mzml_chromatogram_missing_summary_does_not_backfill(

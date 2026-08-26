@@ -103,7 +103,14 @@ def resolve_run_mzml_path(
     if row is None:
         raise RunNotFoundError("run not found")
 
-    run_metadata = row.get("run_metadata") or {}
+    raw_metadata = row.get("run_metadata") or {}
+    if isinstance(raw_metadata, str):
+        try:
+            run_metadata = json.loads(raw_metadata)
+        except json.JSONDecodeError:
+            run_metadata = {}
+    else:
+        run_metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
     mzml_path = run_metadata.get("mzml_file_path")
     path_committed = False
     if not mzml_path:
@@ -343,3 +350,48 @@ def get_spectrum_by_scan(
 
     path, path_committed = resolve_run_mzml_path(session, dataset_id, run_id)
     return read_indexed_spectrum(path, scan_number), path_committed
+
+
+def get_spectra_by_scans(
+    session: Session,
+    dataset_id: int,
+    run_id: int,
+    scan_numbers: list[int],
+) -> tuple[dict[int, dict[str, Any]], bool]:
+    requested_scans = list(dict.fromkeys(int(scan_number) for scan_number in scan_numbers))
+    if not requested_scans:
+        return {}, False
+    if session is not None:
+        from app.zp_runtime import (
+            ZpAssetReadError,
+            ZpRunMappingError,
+            ZpRunNotFoundError,
+            ZpSpectrumNotFoundError,
+            get_binary_spectra_by_scans,
+        )
+
+        try:
+            binary_spectra = get_binary_spectra_by_scans(
+                session,
+                dataset_id,
+                run_id,
+                requested_scans,
+            )
+        except ZpRunNotFoundError as exc:
+            raise RunNotFoundError("run not found") from exc
+        except ZpSpectrumNotFoundError as exc:
+            raise SpectrumNotFoundError("scan not found in binary") from exc
+        except ZpRunMappingError as exc:
+            raise MzmlMappingError(str(exc)) from exc
+        except ZpAssetReadError as exc:
+            raise MzmlIndexError(str(exc)) from exc
+        if binary_spectra is not None:
+            return binary_spectra, False
+
+    path, path_committed = resolve_run_mzml_path(session, dataset_id, run_id)
+    with indexed_reader_scope():
+        spectra = {
+            scan_number: read_indexed_spectrum(path, scan_number)
+            for scan_number in requested_scans
+        }
+    return spectra, path_committed

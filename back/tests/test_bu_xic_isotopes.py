@@ -92,7 +92,7 @@ def test_xic_returns_m_m1_m2_traces_in_one_rt_grid(monkeypatch: pytest.MonkeyPat
         },
     }
     find_calls: list[tuple[Any, int, int, float, float]] = []
-    read_calls: list[int] = []
+    read_calls: list[list[int]] = []
 
     def find_scans(
         session: Any,
@@ -104,12 +104,12 @@ def test_xic_returns_m_m1_m2_traces_in_one_rt_grid(monkeypatch: pytest.MonkeyPat
         find_calls.append((session, dataset_id, run_id, rt_start, rt_end))
         return [_metadata(1, 92.2), _metadata(2, 92.8)]
 
-    def get_one(_session: Any, _dataset_id: int, _run_id: int, scan: int):
-        read_calls.append(scan)
-        return spectra[scan], False
+    def get_many(_session: Any, _dataset_id: int, _run_id: int, scans: list[int]):
+        read_calls.append(scans)
+        return {scan: spectra[scan] for scan in scans}, False
 
     monkeypatch.setattr(xic_service, "find_ms1_scans_in_rt_range", find_scans)
-    monkeypatch.setattr(xic_service, "get_spectrum_by_scan", get_one)
+    monkeypatch.setattr(xic_service, "get_spectra_by_scans", get_many)
     _install_no_full_load_guards(monkeypatch)
     session = object()
 
@@ -121,7 +121,7 @@ def test_xic_returns_m_m1_m2_traces_in_one_rt_grid(monkeypatch: pytest.MonkeyPat
     )
 
     assert find_calls == [(session, 39, 10, 87.15, 98.08)]
-    assert read_calls == [1, 2]
+    assert read_calls == [[1, 2]]
     assert out.precursor_charge == 2
     assert out.rt == [92.2, 92.8]
     assert [trace.label for trace in out.traces] == ["M", "M+1", "M+2"]
@@ -149,8 +149,8 @@ def test_xic_invalid_charge_keeps_legacy_m_trace(monkeypatch: pytest.MonkeyPatch
     )
     monkeypatch.setattr(
         xic_service,
-        "get_spectrum_by_scan",
-        lambda *_args: (spectra[1], False),
+        "get_spectra_by_scans",
+        lambda *_args: ({1: spectra[1]}, False),
     )
     _install_no_full_load_guards(monkeypatch)
 
@@ -173,14 +173,16 @@ def test_xic_uses_max_intensity_within_ppm_window(
     )
     monkeypatch.setattr(
         xic_service,
-        "get_spectrum_by_scan",
+        "get_spectra_by_scans",
         lambda *_args: (
             {
-                "scan": 1,
-                "ms_level": 1,
-                "rt_seconds": 92.2 * 60.0,
-                "mz": [499.99, 500.01, 501.0],
-                "intensity": [10.0, 20.0, 999.0],
+                1: {
+                    "scan": 1,
+                    "ms_level": 1,
+                    "rt_seconds": 92.2 * 60.0,
+                    "mz": [499.99, 500.01, 501.0],
+                    "intensity": [10.0, 20.0, 999.0],
+                }
             },
             False,
         ),
@@ -201,7 +203,7 @@ def test_xic_empty_ms1_candidates_returns_empty_traces_without_reads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(xic_service, "find_ms1_scans_in_rt_range", lambda *_args: [])
-    monkeypatch.setattr(xic_service, "get_spectrum_by_scan", _fail)
+    monkeypatch.setattr(xic_service, "get_spectra_by_scans", _fail)
     _install_no_full_load_guards(monkeypatch)
 
     out = xic_service.get_match_xic(
@@ -226,14 +228,16 @@ def test_xic_rejects_non_ms1_spectrum_without_fallback(
     )
     monkeypatch.setattr(
         xic_service,
-        "get_spectrum_by_scan",
+        "get_spectra_by_scans",
         lambda *_args: (
             {
-                "scan": 1,
-                "ms_level": 2,
-                "rt_seconds": 92.2 * 60.0,
-                "mz": [],
-                "intensity": [],
+                1: {
+                    "scan": 1,
+                    "ms_level": 2,
+                    "rt_seconds": 92.2 * 60.0,
+                    "mz": [],
+                    "intensity": [],
+                }
             },
             False,
         ),
@@ -267,7 +271,7 @@ def test_xic_maps_scan_index_state_without_fallback(
         raise error
 
     monkeypatch.setattr(xic_service, "find_ms1_scans_in_rt_range", raise_error)
-    monkeypatch.setattr(xic_service, "get_spectrum_by_scan", _fail)
+    monkeypatch.setattr(xic_service, "get_spectra_by_scans", _fail)
     _install_no_full_load_guards(monkeypatch)
 
     with pytest.raises(HTTPException) as exc:
