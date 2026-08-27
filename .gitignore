@@ -17,6 +17,7 @@ back/.venv/
 back/**/__pycache__/
 back/**/*.pyc
 back/.pytest_cache/
+back/.pytest-tmp/
 back/.mypy_cache/
 back/.ruff_cache/
 back/**/*.egg-info/
