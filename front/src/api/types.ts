@@ -126,6 +126,19 @@ export interface ImportPickFolderOut {
   cancelled: boolean;
 }
 
+/** New-format request consumed by the Agent import workflow. */
+export interface UnknownFormatImportCreateIn {
+  source_path: string;
+  data_type: string;
+  format_name: string;
+  format_details?: string | null;
+}
+
+export interface UnknownFormatImportOut {
+  case_id: string;
+  status: string;
+}
+
 export type ImportUploadState = "CREATED" | "UPLOADING" | "READY" | "STARTED" | "FAILED";
 
 export interface ImportUploadCreated {

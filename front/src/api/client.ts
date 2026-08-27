@@ -26,6 +26,8 @@ import type {
   ProteinListItemOut,
   ProteoformDetailOut,
   ProteoformListItemOut,
+  UnknownFormatImportCreateIn,
+  UnknownFormatImportOut,
 } from "./types";
 
 /** 已配置 baseURL 与超时的 axios 实例（开发环境由 vite 将 `/api` 转发到后端）。 */
@@ -67,6 +69,17 @@ export async function pickImportFolder(): Promise<ImportPickFolderOut> {
     {},
     { timeout: 0, headers: { "Content-Type": "application/json" } },
   );
+  return data;
+}
+
+/** Starts Agent analysis for a format that Viewer does not support yet. */
+export async function createUnknownFormatImport(
+  body: UnknownFormatImportCreateIn,
+): Promise<UnknownFormatImportOut> {
+  const { data } = await api.post<UnknownFormatImportOut>("/agent-import-cases/from-path", body, {
+    timeout: 600_000,
+    headers: { "Content-Type": "application/json" },
+  });
   return data;
 }
 

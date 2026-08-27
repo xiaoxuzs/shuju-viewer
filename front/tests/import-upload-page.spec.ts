@@ -17,12 +17,24 @@ test("analysis type reveals only its supported second-level import formats", asy
   });
 
   await page.goto("/datasets");
+  await expect(page.getByRole("button", { name: "Agent-ZP import" })).toHaveCount(0);
   await page.getByRole("button", { name: "Upload local dataset" }).click();
   const dialog = page.getByRole("dialog", { name: "Upload local dataset" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText("Server folder", { exact: false })).toHaveCount(0);
   await expect(dialog.getByText("source path", { exact: false })).toHaveCount(0);
   await expect(dialog.getByText("import source", { exact: false })).toHaveCount(0);
+  await expect(dialog.getByRole("radio", { name: "Supported format import", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.getByRole("radio", { name: "Unknown format import", exact: true })).toBeVisible();
+
+  await dialog.getByRole("radio", { name: "Unknown format import", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "1. Analysis type" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "2. Import format" })).toBeVisible();
+  await expect(dialog.locator("#unknown-format-details")).toHaveCount(0);
+  await expect(dialog.getByText("Binary operation", { exact: false })).toHaveCount(0);
+  await expect(dialog.getByText("Source profile", { exact: false })).toHaveCount(0);
+
+  await dialog.getByRole("radio", { name: "Supported format import", exact: true }).click();
 
   for (const label of ["Top-Down", "Bottom-Up", "DDA"]) {
     await expect(dialog.getByRole("radio", { name: label, exact: true })).toBeVisible();
@@ -62,6 +74,41 @@ test("analysis type reveals only its supported second-level import formats", asy
   await expect(dialog.getByRole("radio", { name: "Thermo RAW", exact: true })).toBeVisible();
   await expect(dialog.getByRole("radio", { name: "DIA-NN", exact: true })).toHaveCount(0);
   expect(oldPathRequests).toEqual([]);
+});
+
+test("unknown format import submits required identity and optional prompt context", async ({ page }) => {
+  let requestBody: unknown = null;
+  await page.route("**/api/v1/imports/pick-folder", async (route) => {
+    await json(route, { path: "E:\\data\\new-format", cancelled: false });
+  });
+  await page.route("**/api/v1/agent-import-cases/from-path", async (route) => {
+    requestBody = route.request().postDataJSON();
+    await json(route, { case_id: "case-new-format", status: "CREATED" }, 201);
+  });
+
+  await page.goto("/datasets");
+  await page.getByRole("button", { name: "Upload local dataset" }).click();
+  const dialog = page.getByRole("dialog", { name: "Upload local dataset" });
+  await dialog.getByRole("radio", { name: "Unknown format import", exact: true }).click();
+
+  const start = dialog.getByRole("button", { name: "Start format analysis" });
+  await expect(start).toBeDisabled();
+  await dialog.locator("#unknown-data-type").fill("Bottom-Up");
+  await dialog.locator("#unknown-format-name").fill("DIA-CLIP");
+  await dialog.getByRole("button", { name: "Add format details" }).click();
+  await dialog.locator("#unknown-format-details").fill("One result TSV and one matching mzML file.");
+  await dialog.getByRole("button", { name: "Select source folder" }).click();
+  await expect(dialog.getByText("E:\\data\\new-format", { exact: true })).toBeVisible();
+  await expect(start).toBeEnabled();
+  await start.click();
+
+  await expect(dialog.getByText("Format analysis started", { exact: true })).toBeVisible();
+  expect(requestBody).toEqual({
+    source_path: "E:\\data\\new-format",
+    data_type: "Bottom-Up",
+    format_name: "DIA-CLIP",
+    format_details: "One result TSV and one matching mzML file.",
+  });
 });
 
 test("local files upload sequentially, auto-start ImportJob, and clear restored state on success", async ({ page }) => {

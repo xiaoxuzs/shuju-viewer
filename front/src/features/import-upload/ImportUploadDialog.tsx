@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { FileUp, FolderOpen, Loader2, RotateCcw, X } from "lucide-react";
+import { CheckCircle2, FileQuestion, FileUp, FolderOpen, Loader2, Plus, RotateCcw, X } from "lucide-react";
 
 import {
   ImportUploadRequestError,
+  createUnknownFormatImport,
   createImportUpload,
   deleteImportUpload,
   fetchImportJob,
   getImportUpload,
+  pickImportFolder,
   startImportUpload,
   uploadImportFile,
 } from "@/api/client";
-import type { ImportJobOut, ImportUploadType } from "@/api/types";
+import type { ImportJobOut, ImportUploadType, UnknownFormatImportOut } from "@/api/types";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +54,8 @@ type UploadUiState =
   | "success"
   | "failed"
   | "cancelled";
+
+type ImportWorkflow = "supported-format" | "unknown-format";
 
 interface UploadUiError {
   title: string;
@@ -147,6 +151,15 @@ function stageTitle(state: UploadUiState, job: ImportJobOut | null): string {
 
 export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogProps) {
   const queryClient = useQueryClient();
+  const [importWorkflow, setImportWorkflow] = useState<ImportWorkflow>("supported-format");
+  const [dataType, setDataType] = useState("");
+  const [formatName, setFormatName] = useState("");
+  const [formatDetails, setFormatDetails] = useState("");
+  const [formatDetailsOpen, setFormatDetailsOpen] = useState(false);
+  const [serverPath, setServerPath] = useState("");
+  const [folderPickerBusy, setFolderPickerBusy] = useState(false);
+  const [unknownFormatBusy, setUnknownFormatBusy] = useState(false);
+  const [unknownFormatResult, setUnknownFormatResult] = useState<UnknownFormatImportOut | null>(null);
   const [analysisType, setAnalysisType] = useState<AnalysisType | null>(null);
   const [importType, setImportType] = useState<ImportUploadType | null>(null);
   const [slug, setSlug] = useState("");
@@ -181,6 +194,15 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     abortUploadRef.current = null;
     cancelRequestedRef.current = false;
     speedSamplesRef.current = [];
+    setImportWorkflow("supported-format");
+    setDataType("");
+    setFormatName("");
+    setFormatDetails("");
+    setFormatDetailsOpen(false);
+    setServerPath("");
+    setFolderPickerBusy(false);
+    setUnknownFormatBusy(false);
+    setUnknownFormatResult(null);
     setSlug("");
     setDatasetName("");
     setDescription("");
@@ -251,6 +273,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
       const interrupted = window.sessionStorage.getItem(INTERRUPTED_UPLOAD_KEY) === "true";
       window.sessionStorage.removeItem(INTERRUPTED_UPLOAD_KEY);
       if (interrupted) {
+        setImportWorkflow("supported-format");
         setUiState("failed");
         setUiError({
           title: "Previous local upload was interrupted",
@@ -263,6 +286,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
       return;
     }
     window.sessionStorage.removeItem(INTERRUPTED_UPLOAD_KEY);
+    setImportWorkflow("supported-format");
     setImportType(active.import_type);
     setUploadId(active.upload_id);
     uploadIdRef.current = active.upload_id;
@@ -307,6 +331,9 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     || uploadId !== null
     || jobId !== null
     || cancelBusy;
+  const unknownWorkflowBusy = importWorkflow === "unknown-format" && (folderPickerBusy || unknownFormatBusy);
+  const workflowDisabled = controlsDisabled || unknownWorkflowBusy;
+  const closeDisabled = BLOCKING_LEAVE_STATES.has(uiState) || cancelBusy || unknownWorkflowBusy;
   const canCancelUpload = jobId === null && (
     BLOCKING_LEAVE_STATES.has(uiState)
     || (uploadId !== null && uiState === "failed")
@@ -404,6 +431,59 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
       });
     }
   }, [finishCancellation, jobId, pollImportJob]);
+
+  const pickUnknownFormatFolder = useCallback(async () => {
+    setFolderPickerBusy(true);
+    setUiError(null);
+    try {
+      const picked = await pickImportFolder();
+      if (!picked.cancelled && picked.path) setServerPath(picked.path);
+    } catch (error) {
+      const parsed = parseApiError(error);
+      setUiError({
+        title: "Could not select source folder",
+        message: parsed.message ?? "The native folder picker failed.",
+        code: parsed.code,
+        fileName: null,
+      });
+    } finally {
+      setFolderPickerBusy(false);
+    }
+  }, []);
+
+  const runUnknownFormatAnalysis = useCallback(async () => {
+    if (!dataType.trim() || !formatName.trim() || !serverPath.trim()) {
+      setUiError({
+        title: "Required information is missing",
+        message: "Enter a data type and format name, then select the source folder.",
+        code: null,
+        fileName: null,
+      });
+      return;
+    }
+    setUnknownFormatBusy(true);
+    setUnknownFormatResult(null);
+    setUiError(null);
+    try {
+      const created = await createUnknownFormatImport({
+        source_path: serverPath.trim(),
+        data_type: dataType.trim(),
+        format_name: formatName.trim(),
+        format_details: formatDetails.trim() || null,
+      });
+      setUnknownFormatResult(created);
+    } catch (error) {
+      const parsed = parseApiError(error);
+      setUiError({
+        title: "Could not start format analysis",
+        message: parsed.message ?? "The Agent format request failed.",
+        code: parsed.code,
+        fileName: null,
+      });
+    } finally {
+      setUnknownFormatBusy(false);
+    }
+  }, [dataType, formatDetails, formatName, serverPath]);
 
   const runUpload = useCallback(async () => {
     const selectedImportType = importType;
@@ -544,7 +624,9 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
             <div>
               <CardTitle id="import-upload-dialog-title">Upload local dataset</CardTitle>
               <CardDescription className="mt-1.5">
-                Select local files or a folder. Files upload in order, then the existing import task starts automatically.
+                {importWorkflow === "supported-format"
+                  ? "Select local files or a folder. Files upload in order, then the existing import task starts automatically."
+                  : "Describe an unsupported data format and select its source folder for analysis."}
               </CardDescription>
             </div>
             <Button
@@ -552,7 +634,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
               variant="ghost"
               size="icon"
               aria-label="Close upload dialog"
-              disabled={BLOCKING_LEAVE_STATES.has(uiState) || cancelBusy}
+              disabled={closeDisabled}
               onClick={() => onOpenChange(false)}
             >
               <X className="h-4 w-4" />
@@ -560,6 +642,165 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
+          <section className="space-y-2" aria-labelledby="import-workflow-title">
+            <h3 id="import-workflow-title" className="text-sm font-semibold">Import workflow</h3>
+            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Import workflow">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={importWorkflow === "supported-format"}
+                disabled={workflowDisabled}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  importWorkflow === "supported-format"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-background hover:bg-muted",
+                  "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
+                )}
+                onClick={() => {
+                  setImportWorkflow("supported-format");
+                  setUiError(null);
+                }}
+              >
+                <FolderOpen className="h-4 w-4" />
+                Supported format import
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={importWorkflow === "unknown-format"}
+                disabled={workflowDisabled}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  importWorkflow === "unknown-format"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-background hover:bg-muted",
+                  "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
+                )}
+                onClick={() => {
+                  setImportWorkflow("unknown-format");
+                  setUiError(null);
+                }}
+              >
+                <FileQuestion className="h-4 w-4" />
+                Unknown format import
+              </button>
+            </div>
+          </section>
+
+          {importWorkflow === "unknown-format" ? (
+            <>
+              <section className="space-y-1.5" aria-labelledby="unknown-data-type-title">
+                <h3 id="unknown-data-type-title" className="text-sm font-semibold">1. Analysis type</h3>
+                <Input
+                  id="unknown-data-type"
+                  value={dataType}
+                  disabled={unknownWorkflowBusy || unknownFormatResult !== null}
+                  placeholder="e.g. Bottom-Up"
+                  aria-required="true"
+                  onChange={(event) => setDataType(event.target.value)}
+                />
+              </section>
+
+              <section className="space-y-1.5" aria-labelledby="unknown-format-name-title">
+                <h3 id="unknown-format-name-title" className="text-sm font-semibold">2. Import format</h3>
+                <Input
+                  id="unknown-format-name"
+                  value={formatName}
+                  disabled={unknownWorkflowBusy || unknownFormatResult !== null}
+                  placeholder="e.g. DIA-CLIP"
+                  aria-required="true"
+                  onChange={(event) => setFormatName(event.target.value)}
+                />
+              </section>
+
+              <section className="space-y-2" aria-labelledby="unknown-format-details-title">
+                <h3 id="unknown-format-details-title" className="text-sm font-semibold">3. Format details (optional)</h3>
+                {formatDetailsOpen ? (
+                  <textarea
+                    id="unknown-format-details"
+                    rows={4}
+                    value={formatDetails}
+                    disabled={unknownWorkflowBusy || unknownFormatResult !== null}
+                    placeholder="Describe the files, fields, and relationships that may help identify this format."
+                    onChange={(event) => setFormatDetails(event.target.value)}
+                    className={cn(
+                      "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
+                    )}
+                  />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={unknownWorkflowBusy || unknownFormatResult !== null}
+                    onClick={() => setFormatDetailsOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add format details
+                  </Button>
+                )}
+              </section>
+
+              <section className="space-y-3" aria-labelledby="unknown-source-folder-title">
+                <h3 id="unknown-source-folder-title" className="text-sm font-semibold">4. Source folder</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={unknownWorkflowBusy || unknownFormatResult !== null}
+                  onClick={() => void pickUnknownFormatFolder()}
+                >
+                  {folderPickerBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4" />}
+                  Select source folder
+                </Button>
+                {serverPath && (
+                  <div className="rounded-md border border-border/60 bg-muted/30 p-3 font-mono text-xs break-all">
+                    {serverPath}
+                  </div>
+                )}
+              </section>
+
+              {unknownFormatResult && (
+                <div className="flex items-start gap-2 rounded-md border border-primary/40 bg-primary/5 p-3 text-sm" role="status">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div>
+                    <div className="font-semibold">Format analysis started</div>
+                    <div className="mt-1 font-mono text-xs text-muted-foreground">{unknownFormatResult.case_id}</div>
+                  </div>
+                </div>
+              )}
+
+              {uiError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm" role="alert">
+                  <div className="font-semibold text-destructive">{uiError.title}</div>
+                  <div className="mt-1 text-muted-foreground">{uiError.message}</div>
+                  {uiError.code && <div className="mt-1 font-mono text-xs text-destructive">{uiError.code}</div>}
+                </div>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    unknownWorkflowBusy
+                    || unknownFormatResult !== null
+                    || !dataType.trim()
+                    || !formatName.trim()
+                    || !serverPath.trim()
+                  }
+                  onClick={() => void runUnknownFormatAnalysis()}
+                >
+                  {unknownFormatBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Start format analysis
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
           <section className="space-y-2" aria-labelledby="import-type-title">
             <h3 id="import-type-title" className="text-sm font-semibold">1. Analysis type</h3>
             <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Analysis type">
@@ -855,6 +1096,8 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
               </Button>
             )}
           </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
