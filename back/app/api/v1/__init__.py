@@ -27,6 +27,10 @@ def build_api_router() -> APIRouter:
     router.include_router(spectra.router)
     router.include_router(mzml_spectra.router)
     router.include_router(bu.router)
+    if settings.agent_import_enabled:
+        from app.agent_import.api import router as agent_import_router
+
+        router.include_router(agent_import_router)
     if settings.zp_management_enabled:
         # ZP endpoints are part of the normal binary main path; the flag is an emergency fallback.
         from app.api.v1 import zp_conversions

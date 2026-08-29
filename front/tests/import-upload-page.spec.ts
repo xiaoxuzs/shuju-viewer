@@ -83,7 +83,7 @@ test("unknown format import submits required identity and optional prompt contex
   });
   await page.route("**/api/v1/agent-import-cases/from-path", async (route) => {
     requestBody = route.request().postDataJSON();
-    await json(route, { case_id: "case-new-format", status: "CREATED" }, 201);
+    await json(route, { case_id: "case-new-format", status: "CREATED", version: 1 }, 201);
   });
 
   await page.goto("/datasets");
@@ -103,12 +103,82 @@ test("unknown format import submits required identity and optional prompt contex
   await start.click();
 
   await expect(dialog.getByText("Format analysis started", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "Open Agent case" }))
+    .toHaveAttribute("href", "/agent-import-cases/case-new-format");
   expect(requestBody).toEqual({
     source_path: "E:\\data\\new-format",
     data_type: "Bottom-Up",
     format_name: "DIA-CLIP",
     format_details: "One result TSV and one matching mzML file.",
   });
+});
+
+test("Agent case exposes the validated .zp candidate and requires explicit approval", async ({ page }) => {
+  let status = "READY_FOR_REVIEW";
+  let approveHeaders: Record<string, string> | null = null;
+  await page.route("**/api/v1/agent-import-cases/case-review**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith("/messages")) {
+      await json(route, [{
+        message_id: "message-one",
+        case_id: "case-review",
+        sequence_no: 1,
+        context_revision: 0,
+        sender_type: "AGENT_2",
+        message_kind: "STATUS",
+        content: "A .zp candidate passed deep validation.",
+        structured_payload: null,
+        created_at: NOW,
+      }]);
+      return;
+    }
+    if (path.endsWith("/attempts")) {
+      await json(route, [{
+        attempt_id: "attempt-one",
+        case_id: "case-review",
+        attempt_no: 1,
+        context_revision: 0,
+        result: "SUCCESS",
+        failure_code: null,
+        started_at: NOW,
+        finished_at: NOW,
+      }]);
+      return;
+    }
+    if (path.endsWith("/artifacts")) {
+      await json(route, [{
+        artifact_id: "artifact-one",
+        case_id: "case-review",
+        attempt_id: "attempt-one",
+        artifact_type: "ZP_BINARY",
+        storage_ref: "agent-artifact:artifact-one",
+        sha256: "b".repeat(64),
+        size_bytes: 4096,
+        media_type: "application/octet-stream",
+        created_at: NOW,
+      }]);
+      return;
+    }
+    if (path.endsWith("/review/approve")) {
+      approveHeaders = request.headers();
+      status = "SUCCESS";
+      await json(route, agentCase(status));
+      return;
+    }
+    await json(route, agentCase(status));
+  });
+
+  await page.goto("/agent-import-cases/case-review");
+  await expect(page.getByText("A .zp candidate passed deep validation.")).toBeVisible();
+  await expect(page.getByText("ZP_BINARY", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve and import" })).toBeVisible();
+  await page.getByRole("button", { name: "Approve and import" }).click();
+
+  await expect(page.getByText("Dataset import complete", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open dataset" }))
+    .toHaveAttribute("href", "/datasets/agent-output");
+  expect(approveHeaders?.["if-match"]).toBe('"4"');
 });
 
 test("local files upload sequentially, auto-start ImportJob, and clear restored state on success", async ({ page }) => {
@@ -406,6 +476,32 @@ function importJob(status: "queued" | "running" | "success" | "failed", datasetS
     stage: status,
     stage_label: status === "running" ? "Importing" : status,
     stage_detail: status === "running" ? "Reading local upload" : null,
+    created_at: NOW,
+    updated_at: NOW,
+  };
+}
+
+function agentCase(status: string) {
+  return {
+    case_id: "case-review",
+    workspace_id: "default",
+    status,
+    source_mode: "server_path",
+    source_ref: "agent-case:case-review",
+    dataset_fingerprint: "a".repeat(32),
+    analysis_category: "BOTTOM_UP",
+    source_profile: "New binary format",
+    format_details: null,
+    interaction_mode: "autonomous",
+    autonomous_attempt_used: 1,
+    guided_attempt_no: 0,
+    context_revision: 0,
+    version: status === "SUCCESS" ? 5 : 4,
+    stop_requested_at: null,
+    candidate_zp_sha256: "b".repeat(64),
+    verification: { validation_mode: "deep", readable_run_count: 1 },
+    dataset_id: status === "SUCCESS" ? 12 : null,
+    dataset_slug: status === "SUCCESS" ? "agent-output" : null,
     created_at: NOW,
     updated_at: NOW,
   };

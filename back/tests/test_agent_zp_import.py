@@ -58,6 +58,7 @@ def test_import_existing_zp_creates_verified_spectra_dataset() -> None:
                 binary_operation="register_existing_zp",
                 replace_existing=False,
             ),
+            source_fingerprint="f" * 32,
         )
 
     assert result.status == "success"
@@ -69,7 +70,12 @@ def test_import_existing_zp_creates_verified_spectra_dataset() -> None:
 
     with SessionLocal() as session:
         dataset = session.execute(
-            text("SELECT dataset_id, status, capabilities, extra_metadata FROM datasets WHERE slug = :slug"),
+            text(
+                """
+                SELECT dataset_id, status, capabilities, extra_metadata, source_dataset_fingerprint
+                FROM datasets WHERE slug = :slug
+                """
+            ),
             {"slug": "agent-zp-sample"},
         ).mappings().one()
         runs = session.execute(
@@ -77,7 +83,12 @@ def test_import_existing_zp_creates_verified_spectra_dataset() -> None:
             {"dataset_id": dataset["dataset_id"]},
         ).mappings().all()
         asset = session.execute(
-            text("SELECT zp_path, output_sha256, status FROM dataset_zp_assets WHERE dataset_id = :dataset_id"),
+            text(
+                """
+                SELECT zp_path, output_sha256, source_fingerprint, status
+                FROM dataset_zp_assets WHERE dataset_id = :dataset_id
+                """
+            ),
             {"dataset_id": dataset["dataset_id"]},
         ).mappings().one()
         index = load_scan_index(session, result.dataset_id, result.run_ids[0])
@@ -88,6 +99,7 @@ def test_import_existing_zp_creates_verified_spectra_dataset() -> None:
     run_meta = _json_object(runs[0]["run_metadata"])
 
     assert dataset["status"] == "READY"
+    assert dataset["source_dataset_fingerprint"] == "f" * 32
     assert caps["spectra_source"] == "zp"
     assert caps["analysis_shape"] == "zp_spectra_only"
     assert extra["agent_zp"]["source_profile"] == "minimal_fixture"
@@ -96,6 +108,7 @@ def test_import_existing_zp_creates_verified_spectra_dataset() -> None:
     assert run_meta["zp_run_id"] == "run_1"
     assert asset["status"] == "active"
     assert asset["output_sha256"] == expected_sha256
+    assert asset["source_fingerprint"] == "f" * 32
     assert Path(str(asset["zp_path"])) == zp_path
     assert index.scan_number.tolist() == [10, 11]
     assert committed is False
@@ -122,6 +135,33 @@ def test_import_existing_zp_requires_enabled_guard(monkeypatch: pytest.MonkeyPat
         )
 
     assert exc_info.value.code == "AGENT_ZP_DISABLED"
+
+
+def test_import_rejects_a_candidate_changed_after_review() -> None:
+    source_root = settings.resolved_data_root / "incoming"
+    source_root.mkdir()
+    zp_path = _write_minimal_zp(source_root / "candidate.zp")
+
+    with SessionLocal() as session, pytest.raises(AgentZpError) as exc_info:
+        import_agent_zp_candidate(
+            session,
+            AgentZpImportCreateIn(
+                source_path=str(zp_path),
+                slug="changed-candidate",
+                name="Changed candidate",
+                analysis_category="SPECTRA_ONLY",
+                source_profile="minimal_fixture",
+                binary_operation="register_existing_zp",
+                replace_existing=False,
+            ),
+            expected_sha256="0" * 64,
+        )
+
+    assert exc_info.value.code == "AGENT_ZP_CANDIDATE_CHANGED"
+    with SessionLocal() as session:
+        assert session.execute(
+            text("SELECT COUNT(*) FROM datasets WHERE slug = 'changed-candidate'")
+        ).scalar_one() == 0
 
 
 def test_agent_zp_route_is_registered_only_when_import_guard_is_enabled(monkeypatch: pytest.MonkeyPatch) -> None:

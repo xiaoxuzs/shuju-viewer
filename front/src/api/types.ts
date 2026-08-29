@@ -137,6 +137,66 @@ export interface UnknownFormatImportCreateIn {
 export interface UnknownFormatImportOut {
   case_id: string;
   status: string;
+  version: number;
+}
+
+export interface AgentImportCaseOut {
+  case_id: string;
+  workspace_id: string;
+  status: string;
+  source_mode: string;
+  source_ref: string;
+  dataset_fingerprint: string;
+  analysis_category: string;
+  source_profile: string;
+  format_details: string | null;
+  interaction_mode: string;
+  autonomous_attempt_used: number;
+  guided_attempt_no: number;
+  context_revision: number;
+  version: number;
+  stop_requested_at: string | null;
+  candidate_zp_sha256: string | null;
+  verification: Record<string, unknown> | null;
+  dataset_id: number | null;
+  dataset_slug: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentImportMessageOut {
+  message_id: string;
+  case_id: string;
+  sequence_no: number;
+  context_revision: number;
+  sender_type: string;
+  message_kind: string;
+  content: string;
+  structured_payload: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface AgentImportAttemptOut {
+  attempt_id: string;
+  case_id: string;
+  attempt_no: number;
+  context_revision: number;
+  result: string;
+  failure_code: string | null;
+  started_at: string;
+  finished_at: string;
+}
+
+export interface AgentImportArtifactOut {
+  artifact_id: string;
+  case_id: string;
+  attempt_id: string | null;
+  artifact_type: string;
+  storage_ref: string;
+  sha256: string;
+  size_bytes: number;
+  media_type: string | null;
+  created_at: string;
 }
 
 export type ImportUploadState = "CREATED" | "UPLOADING" | "READY" | "STARTED" | "FAILED";

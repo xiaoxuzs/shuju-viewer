@@ -94,6 +94,18 @@ class Settings(BaseSettings):
     import_upload_max_total_bytes: int = Field(default=0, ge=0)
     import_upload_max_files: int = Field(default=5000, ge=1)
     import_upload_chunk_bytes: int = Field(default=8_388_608, ge=1)
+    #: Enable the controlled unknown-format Agent Case workflow.
+    agent_import_enabled: bool = Field(default=True)
+    moonshot_api_key: str | None = Field(default=None)
+    moonshot_base_url: str = Field(default="https://api.moonshot.cn/v1")
+    moonshot_request_timeout_seconds: int = Field(default=60, ge=1)
+    agent_read_model: str = Field(default="kimi-k3")
+    agent_read_max_output_tokens: int = Field(default=4096, ge=256)
+    deepseek_api_key: str | None = Field(default=None)
+    deepseek_base_url: str = Field(default="https://api.deepseek.com")
+    deepseek_request_timeout_seconds: int = Field(default=120, ge=1)
+    agent_implementation_model: str = Field(default="deepseek-v4-pro")
+    agent_implementation_max_output_tokens: int = Field(default=8192, ge=256)
     #: Optional project-level FASTA used when a Bottom-Up import does not include a dataset FASTA.
     bu_default_fasta_path: Path | None = Field(default=None)
     #: Allow lazy UniProt FASTA fetches for Bottom-Up protein coverage. Keep disabled for offline deployments.

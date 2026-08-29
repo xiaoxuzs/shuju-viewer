@@ -12,6 +12,7 @@ import {
   Layers,
   ListTree,
   Trash2,
+  Bot,
 } from "lucide-react";
 
 import { deleteDataset, fetchDatasets } from "@/api/client";
@@ -108,6 +109,12 @@ export function DatasetsPage() {
         description="Pick a dataset to start exploring proteins, proteoforms, PrSMs and spectra."
         actions={
           <div className="flex flex-wrap justify-end gap-2">
+            <Button asChild variant="outline" size="sm">
+              <TransitionLink to="/agent-import-cases">
+                <Bot className="h-4 w-4" />
+                Agent cases
+              </TransitionLink>
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <FolderOpen className="h-4 w-4" />
               Upload local dataset

@@ -12,6 +12,8 @@ import { ProteoformsPage } from "@/pages/ProteoformsPage";
 import { ProteoformDetailPage } from "@/pages/ProteoformDetailPage";
 import { PrsmsPage } from "@/pages/PrsmsPage";
 import { PrsmDetailPage } from "@/pages/PrsmDetailPage";
+import { AgentImportCasesPage } from "@/pages/AgentImportCasesPage";
+import { AgentImportCasePage } from "@/pages/AgentImportCasePage";
 import { DatasetModeGate } from "@/features/bu/routes/DatasetModeGate";
 import { TdCutoffModeGate } from "@/features/bu/routes/TdCutoffModeGate";
 import { BuModeOnly } from "@/features/bu/routes/BuModeOnly";
@@ -29,6 +31,8 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<Navigate to="/datasets" replace />} />
         <Route path="/datasets" element={<DatasetsPage />} />
+        <Route path="/agent-import-cases" element={<AgentImportCasesPage />} />
+        <Route path="/agent-import-cases/:caseId" element={<AgentImportCasePage />} />
         <Route path="/datasets/:slug" element={<DatasetModeGate />}>
           <Route index element={<BuModeOnly><BuOverviewPage /></BuModeOnly>} />
           <Route path="proteins" element={<BuModeOnly><BuProteinsPage /></BuModeOnly>} />

@@ -39,7 +39,9 @@ PUBLIC_ERROR_MESSAGES: dict[str, str] = {
     "AGENT_ZP_NO_RUNS": "The .zp file contains no runs.",
     "AGENT_ZP_NO_READABLE_SCAN": "No registered ZP run returned a readable spectrum.",
     "AGENT_ZP_DATASET_SLUG_EXISTS": "A dataset with this slug already exists.",
+    "AGENT_ZP_DATASET_FINGERPRINT_EXISTS": "This source fingerprint was already imported through Agent ZP.",
     "AGENT_ZP_WORKER_FAILED": "The ZP conversion worker did not produce a valid .zp artifact.",
+    "AGENT_ZP_CANDIDATE_CHANGED": "The approved .zp candidate changed after review.",
     "AGENT_ZP_BINARY_LAYER_UNAVAILABLE": "The configured ZP binary layer is unavailable.",
     "AGENT_ZP_INTERNAL_ERROR": "Agent ZP import failed.",
 }
@@ -69,21 +71,49 @@ class _ZpRun:
     run_name: str
 
 
-def import_agent_zp_candidate(session: Session, body: AgentZpImportCreateIn) -> AgentZpImportOut:
+def import_agent_zp_candidate(
+    session: Session,
+    body: AgentZpImportCreateIn,
+    *,
+    case_id: str | None = None,
+    expected_sha256: str | None = None,
+    source_fingerprint: str | None = None,
+) -> AgentZpImportOut:
     _require_enabled()
-    case_id = str(uuid.uuid4())
+    case_id = case_id or str(uuid.uuid4())
     try:
-        source = resolve_source_path(body.source_path)
-        prepared = (
-            _validate_existing_zp(source, case_id=case_id)
-            if body.binary_operation == "register_existing_zp"
-            else _convert_source_to_zp(source, format_version=body.format_version)
+        _reject_duplicate_fingerprint(session, source_fingerprint)
+        prepared = prepare_agent_zp_artifact(
+            source_path=body.source_path,
+            binary_operation=body.binary_operation,
+            case_id=case_id,
+            format_version=body.format_version,
         )
+        if expected_sha256 is not None and prepared.output_sha256.casefold() != expected_sha256.casefold():
+            raise AgentZpError("AGENT_ZP_CANDIDATE_CHANGED", status_code=409)
         runs = _read_zp_runs(prepared.path)
-        dataset_id, run_ids = _insert_dataset_and_runs(session, body, prepared, runs, case_id=case_id)
-        verification = _verify_dataset(session, dataset_id=dataset_id, run_ids=run_ids, validation_mode=prepared.validation_mode)
-        session.execute(text("UPDATE datasets SET status = 'READY' WHERE dataset_id = :dataset_id"), {"dataset_id": dataset_id})
-        session.execute(text("UPDATE runs SET status = 'READY' WHERE dataset_id = :dataset_id"), {"dataset_id": dataset_id})
+        dataset_id, run_ids = _insert_dataset_and_runs(
+            session,
+            body,
+            prepared,
+            runs,
+            case_id=case_id,
+            source_fingerprint=source_fingerprint,
+        )
+        verification = _verify_dataset(
+            session,
+            dataset_id=dataset_id,
+            run_ids=run_ids,
+            validation_mode=prepared.validation_mode,
+        )
+        session.execute(
+            text("UPDATE datasets SET status = 'READY' WHERE dataset_id = :dataset_id"),
+            {"dataset_id": dataset_id},
+        )
+        session.execute(
+            text("UPDATE runs SET status = 'READY' WHERE dataset_id = :dataset_id"),
+            {"dataset_id": dataset_id},
+        )
         session.commit()
     except AgentZpError:
         session.rollback()
@@ -115,6 +145,23 @@ def import_agent_zp_candidate(session: Session, body: AgentZpImportCreateIn) -> 
         validation_mode=prepared.validation_mode,
         verification=verification,
     )
+
+
+def prepare_agent_zp_artifact(
+    *,
+    source_path: str | Path,
+    binary_operation: str,
+    case_id: str,
+    format_version: int | None,
+) -> _PreparedZp:
+    """Run only Viewer's approved register/convert path and return a deep-validated artifact."""
+    _require_enabled()
+    source = resolve_source_path(source_path)
+    if binary_operation == "register_existing_zp":
+        return _validate_existing_zp(source, case_id=case_id)
+    if binary_operation == "convert_supported_binary_to_zp":
+        return _convert_source_to_zp(source, format_version=format_version)
+    raise AgentZpError("AGENT_ZP_INTERNAL_ERROR", "Unsupported Agent ZP binary operation.", status_code=422)
 
 
 def _require_enabled() -> None:
@@ -194,6 +241,7 @@ def _insert_dataset_and_runs(
     runs: list[_ZpRun],
     *,
     case_id: str,
+    source_fingerprint: str | None,
 ) -> tuple[int, list[int]]:
     if body.replace_existing:
         session.execute(text("DELETE FROM datasets WHERE slug = :slug"), {"slug": body.slug})
@@ -205,13 +253,13 @@ def _insert_dataset_and_runs(
             INSERT INTO datasets (
                 dataset_name, slug, analysis_mode, source_software,
                 source_root, status, description, capabilities, extra_metadata,
-                source_import_kind
+                source_dataset_fingerprint, source_import_kind
             )
             VALUES (
                 :name, :slug, :analysis_mode, 'Agent-ZP',
                 :source_root, 'IMPORTED', :description,
                 {dataset_json["capabilities"]}, {dataset_json["extra_metadata"]},
-                'AGENT_ZP'
+                :source_fingerprint, 'AGENT_ZP'
             )
             RETURNING dataset_id
             """
@@ -222,6 +270,7 @@ def _insert_dataset_and_runs(
             "analysis_mode": _analysis_mode(body.analysis_category),
             "source_root": str(prepared.path.parent),
             "description": body.description or "Agent-ZP spectra dataset",
+            "source_fingerprint": source_fingerprint,
             "capabilities": _json(
                 {
                     "spectra_source": "zp",
@@ -245,7 +294,9 @@ def _insert_dataset_and_runs(
                         "zp_format_version": prepared.format_version,
                         "zp_output_sha256": prepared.output_sha256,
                         "validation_mode": prepared.validation_mode,
-                        "validation_certificate_name": prepared.certificate_path.name if prepared.certificate_path else None,
+                        "validation_certificate_name": (
+                            prepared.certificate_path.name if prepared.certificate_path else None
+                        ),
                     }
                 }
             ),
@@ -253,7 +304,12 @@ def _insert_dataset_and_runs(
     ).one()
     dataset_id = int(dataset_row.dataset_id)
     run_ids = _insert_runs(session, dataset_id=dataset_id, body=body, runs=runs, prepared=prepared)
-    _insert_dataset_asset(session, dataset_id=dataset_id, prepared=prepared)
+    _insert_dataset_asset(
+        session,
+        dataset_id=dataset_id,
+        prepared=prepared,
+        source_fingerprint=source_fingerprint,
+    )
     return dataset_id, run_ids
 
 
@@ -305,7 +361,13 @@ def _insert_runs(
     return run_ids
 
 
-def _insert_dataset_asset(session: Session, *, dataset_id: int, prepared: _PreparedZp) -> None:
+def _insert_dataset_asset(
+    session: Session,
+    *,
+    dataset_id: int,
+    prepared: _PreparedZp,
+    source_fingerprint: str | None,
+) -> None:
     json_fields = _asset_json_fields(session)
     session.execute(
         text(
@@ -315,7 +377,7 @@ def _insert_dataset_asset(session: Session, *, dataset_id: int, prepared: _Prepa
                 output_sha256, status, capabilities, created_at, updated_at
             )
             VALUES (
-                :dataset_id, NULL, :zp_path, :format_version, NULL,
+                :dataset_id, NULL, :zp_path, :format_version, :source_fingerprint,
                 :output_sha256, 'active', {json_fields["capabilities"]},
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
@@ -325,10 +387,29 @@ def _insert_dataset_asset(session: Session, *, dataset_id: int, prepared: _Prepa
             "dataset_id": dataset_id,
             "zp_path": str(prepared.path),
             "format_version": prepared.format_version,
+            "source_fingerprint": source_fingerprint,
             "output_sha256": prepared.output_sha256,
             "capabilities": _json({"spectra": True}),
         },
     )
+
+
+def _reject_duplicate_fingerprint(session: Session, source_fingerprint: str | None) -> None:
+    if source_fingerprint is None:
+        return
+    existing = session.execute(
+        text(
+            """
+            SELECT 1 FROM datasets
+            WHERE source_dataset_fingerprint = :fingerprint
+              AND source_import_kind = 'AGENT_ZP'
+            LIMIT 1
+            """
+        ),
+        {"fingerprint": source_fingerprint.casefold()},
+    ).first()
+    if existing is not None:
+        raise AgentZpError("AGENT_ZP_DATASET_FINGERPRINT_EXISTS", status_code=409)
 
 
 def _verify_dataset(

@@ -15,6 +15,8 @@ from app.services.import_jobs import (
     ensure_jobs_table,
     ensure_runs_metadata_schema,
 )
+from app.agent_import.migrations import ensure_agent_import_schema
+from app.agent_import.worker import start_agent_worker, stop_agent_worker
 
 log = get_logger(__name__)
 
@@ -36,7 +38,13 @@ async def lifespan(app: FastAPI):
     ensure_dataset_fingerprint_schema()
     ensure_runs_metadata_schema()
     _ensure_zp_conversion_schema_if_enabled()
-    yield
+    if settings.agent_import_enabled:
+        ensure_agent_import_schema()
+    start_agent_worker()
+    try:
+        yield
+    finally:
+        stop_agent_worker()
 
 
 app = FastAPI(

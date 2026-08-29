@@ -766,9 +766,12 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
               {unknownFormatResult && (
                 <div className="flex items-start gap-2 rounded-md border border-primary/40 bg-primary/5 p-3 text-sm" role="status">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <div className="font-semibold">Format analysis started</div>
                     <div className="mt-1 font-mono text-xs text-muted-foreground">{unknownFormatResult.case_id}</div>
+                    <Button asChild size="sm" className="mt-3">
+                      <TransitionLink to={`/agent-import-cases/${unknownFormatResult.case_id}`}>Open Agent case</TransitionLink>
+                    </Button>
                   </div>
                 </div>
               )}
