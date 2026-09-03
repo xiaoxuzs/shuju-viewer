@@ -83,6 +83,15 @@ REAL_DIA_RESULT_STEPS = (
     "zp_write",
     "zp_validate",
 )
+REAL_COMPOSITE_BOTTOM_UP_STEPS = (
+    "file_validate",
+    "hash_input",
+    "real_composite_bottom_up",
+    "string_pool_build",
+    "index_build",
+    "zp_write",
+    "zp_validate",
+)
 
 
 ContextConfigurer = Callable[[PipelineContext], None]
@@ -158,6 +167,10 @@ def build_default_source_adapter_registry() -> SourceAdapterRegistry:
             "real_dia_result_bundle",
             REAL_DIA_RESULT_STEPS,
             context_configurer=_configure_dia_result_context,
+        ),
+        SourceAdapter(
+            "real_blueprint_bottom_up_bundle",
+            REAL_COMPOSITE_BOTTOM_UP_STEPS,
         ),
         SourceAdapter("mock_mzml", MOCK_MZML_STEPS),
         SourceAdapter("mock_raw", RAW_STEPS),

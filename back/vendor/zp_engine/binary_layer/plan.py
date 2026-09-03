@@ -1,6 +1,7 @@
 from .source_adapters import (
     MOCK_MZML_STEPS,
     RAW_STEPS,
+    REAL_COMPOSITE_BOTTOM_UP_STEPS,
     REAL_DIA_RESULT_STEPS,
     REAL_MZML_STEPS,
     REAL_THERMO_RAW_STEPS,

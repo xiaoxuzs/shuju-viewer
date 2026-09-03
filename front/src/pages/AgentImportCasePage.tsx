@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, CheckCircle2, Loader2, MessageSquare, OctagonX, RefreshCw } from "lucide-react";
 import { useParams } from "react-router-dom";
 
-import type { AgentImportCaseOut } from "@/api/types";
+import type { AgentImportCaseOut, AgentImportMessageOut } from "@/api/types";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLoading } from "@/components/common/page-loading";
 import { Badge } from "@/components/ui/badge";
@@ -102,6 +102,12 @@ export function AgentImportCasePage() {
   const canStop = !TERMINAL_STATUSES.has(item.status) && item.status !== "STOPPING";
   const canAnswer = item.status === "NEEDS_USER";
   const canReview = item.status === "READY_FOR_REVIEW";
+  const datasetBlueprint = latestStructuredValue(messagesQuery.data, "strategy", ["blueprint"]);
+  const mappingPlan = latestStructuredValue(messagesQuery.data, "candidate", ["zp_conversion_plan", "mapping_plan"]);
+  const agentReview = latestStructuredValue(messagesQuery.data, "review", []);
+  const sourceFileCount = Array.isArray(mappingPlan?.source_files) ? mappingPlan.source_files.length : 0;
+  const fieldMappingCount = Array.isArray(mappingPlan?.field_mappings) ? mappingPlan.field_mappings.length : 0;
+  const unmappedFieldCount = mappingPlan ? countArrayValues(mappingPlan.unmapped_fields) : 0;
 
   return (
     <>
@@ -152,6 +158,69 @@ export function AgentImportCasePage() {
               {messagesQuery.data?.length === 0 && <p className="text-sm text-muted-foreground">No activity recorded yet.</p>}
             </CardContent>
           </Card>
+
+          {datasetBlueprint && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Agent 1 Dataset Blueprint</CardTitle>
+                <CardDescription>
+                  Agent 1&apos;s tool-backed proposal for scientific entities, binary content, views, and default import.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Detail label="Dataset family" value={String(datasetBlueprint.dataset_family ?? "unknown")} />
+                  <Detail label="Source assets" value={String(arrayLength(datasetBlueprint.source_assets))} />
+                  <Detail label="Scientific entities" value={String(arrayLength(datasetBlueprint.scientific_entities))} />
+                  <Detail label="Proposed views" value={String(arrayLength(datasetBlueprint.visualizations))} />
+                </div>
+                {typeof datasetBlueprint.executive_summary === "string" && (
+                  <p className="rounded-md border border-border/60 bg-muted/20 p-3 whitespace-pre-wrap">
+                    {datasetBlueprint.executive_summary}
+                  </p>
+                )}
+                <details>
+                  <summary className="cursor-pointer text-sm font-medium">Inspect complete DatasetBlueprint JSON</summary>
+                  <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 p-3 text-xs">
+                    {JSON.stringify(datasetBlueprint, null, 2)}
+                  </pre>
+                </details>
+              </CardContent>
+            </Card>
+          )}
+
+          {mappingPlan && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">ZP mapping plan</CardTitle>
+                <CardDescription>
+                  Declarative source-to-ZP mapping reviewed before the deterministic writer runs.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Detail label="Adapter" value={String(mappingPlan.adapter_id ?? "unknown")} mono />
+                  <Detail label="Source files" value={String(sourceFileCount)} />
+                  <Detail label="Mapped fields" value={String(fieldMappingCount)} />
+                  <Detail label="Declared unmapped" value={String(unmappedFieldCount)} />
+                </div>
+                {agentReview && (
+                  <div className="flex items-center gap-2 rounded-md border border-border/60 p-2">
+                    <span className="text-muted-foreground">Agent 1 review</span>
+                    <Badge variant={agentReview.status === "APPROVED" ? "success" : "outline"}>
+                      {String(agentReview.status ?? "UNKNOWN")}
+                    </Badge>
+                  </div>
+                )}
+                <details>
+                  <summary className="cursor-pointer text-sm font-medium">Inspect complete mapping JSON</summary>
+                  <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 p-3 text-xs">
+                    {JSON.stringify(mappingPlan, null, 2)}
+                  </pre>
+                </details>
+              </CardContent>
+            </Card>
+          )}
 
           {(canAnswer || canReview) && (
             <Card>
@@ -252,4 +321,35 @@ export function AgentImportCasePage() {
 
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return <div><dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt><dd className={cn("mt-0.5 break-all", mono && "font-mono text-xs")}>{value}</dd></div>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function latestStructuredValue(
+  messages: AgentImportMessageOut[] | undefined,
+  rootKey: string,
+  path: string[],
+): Record<string, unknown> | null {
+  for (const message of [...(messages ?? [])].reverse()) {
+    let current: unknown = asRecord(message.structured_payload)?.[rootKey];
+    for (const key of path) current = asRecord(current)?.[key];
+    const record = asRecord(current);
+    if (record) return record;
+  }
+  return null;
+}
+
+function countArrayValues(value: unknown): number {
+  const record = asRecord(value);
+  return record
+    ? Object.values(record).reduce<number>((total, item) => total + (Array.isArray(item) ? item.length : 0), 0)
+    : 0;
+}
+
+function arrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
 }

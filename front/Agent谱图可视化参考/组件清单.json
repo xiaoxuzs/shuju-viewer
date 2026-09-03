@@ -1,0 +1,901 @@
+{
+  "schemaVersion": 1,
+  "snapshotDate": "2026-08-31",
+  "purpose": "Agent-only spectrum visualization reference; production source remains front/src",
+  "pathsAreRepositoryRelative": true,
+  "runtimePolicy": {
+    "importedByProduction": false,
+    "mayContainCompiledComponents": false,
+    "sourceOfTruth": "front/src"
+  },
+  "inventory": {
+    "reachableSourceFilesFromMain": 132,
+    "visualizationAreaFiles": 91,
+    "reachableVisualizationAreaFiles": 88,
+    "unreachableVisualizationAreaFiles": 3,
+    "activeDirectRenderers": 11,
+    "inactiveDirectRenderers": 1,
+    "currentBuFiles": 67,
+    "legacyBuViewerFiles": 67,
+    "legacyBuViewerExternalReferences": 0,
+    "historicalRootImages": 20,
+    "scannedAreas": [
+      "front/src/features/bu",
+      "front/src/features/prsm",
+      "front/src/features/lcms3d",
+      "front/src/features/spectra-only",
+      "front/src/features/theme",
+      "front/src/components/common",
+      "front/src/pages/PrsmDetailPage.tsx",
+      "front/tests",
+      "back/app/api/v1",
+      "back/app/schemas"
+    ]
+  },
+  "statusDefinitions": {
+    "active": "Reachable from front/src/main.tsx and used by a current route or descendant",
+    "support": "Required data, annotation, interaction, theme, state or layout module",
+    "inactive": "Located in the current source area but has no reachable consumer",
+    "legacy": "Superseded historical copy and not a production source"
+  },
+  "components": [
+    {
+      "id": "td-prsm-detail-page",
+      "name": "PrsmDetailPage",
+      "category": "entry",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React composition",
+      "source": "front/src/pages/PrsmDetailPage.tsx",
+      "inputs": ["route params", "PrsmDetailOut", "raw MS1/MS2/mzML spectra"],
+      "consumers": ["/datasets/:slug/:cutoff/prsms/:prsmId"],
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "bu-overview-page",
+      "name": "BuOverviewPage",
+      "category": "entry",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React composition",
+      "source": "front/src/features/bu/pages/BuOverviewPage.tsx",
+      "inputs": ["BuDatasetContext", "BuOverviewOut", "BuRtMzHeatmapOut", "BuChromatogramOut", "BuDiaWindowsOut"],
+      "consumers": ["/datasets/:slug"],
+      "tests": ["front/tests/bu-overview-chart-states.spec.ts", "front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "bu-match-detail-page",
+      "name": "BuMatchDetailPage",
+      "category": "entry",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React composition",
+      "source": "front/src/features/bu/pages/BuMatchDetailPage.tsx",
+      "inputs": ["BuMatchDetailOut", "BuSpectrumV1", "BuXicOut", "PFMB evidence", "BuMobilitySliceOut"],
+      "consumers": ["/datasets/:slug/matches/:matchId"],
+      "tests": ["front/tests/bu-match-detail.spec.ts", "front/tests/bu-rt-linkage.spec.ts", "front/tests/bu-pfmb-visuals.spec.ts"]
+    },
+    {
+      "id": "bu-protein-detail-page",
+      "name": "BuProteinDetailPage",
+      "category": "entry",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React composition",
+      "source": "front/src/features/bu/pages/BuProteinDetailPage.tsx",
+      "inputs": ["BuProteinDetailOut"],
+      "consumers": ["/datasets/:slug/proteins/:proteinId"],
+      "tests": ["front/tests/bu-protein-sequence-coverage.spec.ts"]
+    },
+    {
+      "id": "spectra-only-page",
+      "name": "SpectraOnlyPage",
+      "category": "entry",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React composition",
+      "source": "front/src/features/spectra-only/pages/SpectraOnlyPage.tsx",
+      "inputs": ["DatasetOut", "SpectraScanIndexOut"],
+      "consumers": ["DatasetModeGate for spectra-only datasets"],
+      "tests": ["front/tests/page-transition.spec.ts", "front/tests/spectra-only-scan-relations.spec.ts"]
+    },
+    {
+      "id": "dataset-mode-gate",
+      "name": "DatasetModeGate",
+      "category": "entry",
+      "kind": "route-gate",
+      "status": "active",
+      "rendering": "React route selection",
+      "source": "front/src/features/bu/routes/DatasetModeGate.tsx",
+      "inputs": ["DatasetOut"],
+      "consumers": ["front/src/App.tsx"],
+      "tests": []
+    },
+    {
+      "id": "td-spectrum-chart",
+      "name": "SpectrumChart",
+      "category": "spectrum",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "D3 + SVG",
+      "source": "front/src/features/prsm/SpectrumChart.tsx",
+      "inputs": ["ChartPeak[]", "Zoom", "EnvelopeOverlayPoint[]", "marker", "peak labels"],
+      "consumers": ["PrsmDetailPage", "MatchedPeakSpectrumPanel", "SpectrumPanel"],
+      "tests": ["front/tests/page-transition.spec.ts", "front/tests/spectra-only-peak-annotations.spec.ts"]
+    },
+    {
+      "id": "td-fragmentation-view",
+      "name": "FragmentationView",
+      "category": "sequence-fragmentation",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "D3 scales + React SVG",
+      "source": "front/src/features/prsm/FragmentationView.tsx",
+      "inputs": ["AnnotatedProtein", "MsPeakRow[]"],
+      "consumers": ["PrsmDetailPage"],
+      "tests": []
+    },
+    {
+      "id": "td-sequence-view",
+      "name": "SequenceView",
+      "category": "sequence-fragmentation",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "React SVG",
+      "source": "front/src/features/prsm/SequenceView.tsx",
+      "inputs": ["AnnotatedProtein", "onCleavageClick"],
+      "consumers": ["PrsmDetailPage"],
+      "tests": []
+    },
+    {
+      "id": "bu-spectrum-chart",
+      "name": "BuSpectrumChart",
+      "category": "spectrum",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "D3 + SVG",
+      "source": "front/src/features/bu/components/spectrum/BuSpectrumChart.tsx",
+      "inputs": ["BuSpectrumV1", "sequence", "precursor charge/mz", "SpectrumExternalAnnotation[]", "product ion selections", "Zoom"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-match-detail.spec.ts", "front/tests/bu-pfmb-visuals.spec.ts", "front/tests/bu-spectrum-label-layout.spec.ts"]
+    },
+    {
+      "id": "bu-interactive-plot",
+      "name": "BuInteractivePlot",
+      "category": "chromatogram-xic",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "D3 + SVG",
+      "source": "front/src/features/bu/components/spectrum/BuInteractivePlot.tsx",
+      "inputs": ["BuPlotPoint[]", "BuPlotSeries[]", "BuPlotBand[]", "BuPlotGuide[]", "Zoom"],
+      "consumers": ["BuChromatogramChart", "BuXicChart", "BuProductIonXicChart"],
+      "tests": ["front/tests/bu-match-detail.spec.ts", "front/tests/bu-rt-linkage.spec.ts", "front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "bu-rt-mz-heatmap",
+      "name": "RtMzMiniHeatmap",
+      "category": "heatmap-scatter-dia",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "React SVG",
+      "source": "front/src/features/bu/components/overview/RtMzMiniHeatmap.tsx",
+      "inputs": ["BuRtMzHeatmapOut"],
+      "consumers": ["BuOverviewPage"],
+      "tests": ["front/tests/bu-overview-chart-states.spec.ts"]
+    },
+    {
+      "id": "bu-dia-window-map",
+      "name": "DiaWindowMap",
+      "category": "heatmap-scatter-dia",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "React SVG",
+      "source": "front/src/features/bu/components/spectrum/DiaWindowMap.tsx",
+      "inputs": ["BuDiaWindowsOut"],
+      "consumers": ["BuOverviewPage"],
+      "tests": ["front/tests/bu-overview-chart-states.spec.ts"]
+    },
+    {
+      "id": "bu-mobility-scatter",
+      "name": "MzMobilityScatter",
+      "category": "heatmap-scatter-dia",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "React SVG",
+      "source": "front/src/features/bu/components/spectrum/MzMobilityScatter.tsx",
+      "inputs": ["BuMobilitySliceOut"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-match-detail.spec.ts"]
+    },
+    {
+      "id": "bu-pfmb-heatmap",
+      "name": "BuPfmbHeatmap",
+      "category": "pfmb",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "React SVG + D3 interpolateViridis",
+      "source": "front/src/features/bu/components/match-detail/BuPfmbHeatmap.tsx",
+      "inputs": ["BuMs2AnnotationMatrixOut", "selected RT", "fragment highlight"],
+      "consumers": ["BuPfmbAnnotationCard"],
+      "tests": ["front/tests/bu-pfmb-visuals.spec.ts", "front/tests/bu-rt-linkage.spec.ts"]
+    },
+    {
+      "id": "bu-pfmb-quality-summary",
+      "name": "BuPfmbQualitySummary",
+      "category": "pfmb",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "React SVG + HTML",
+      "source": "front/src/features/bu/components/match-detail/BuPfmbQualitySummary.tsx",
+      "inputs": ["BuMs2AnnotationOut", "optional BuMs2AnnotationMatrixOut", "selected RT"],
+      "consumers": ["BuPfmbAnnotationCard"],
+      "tests": ["front/tests/bu-pfmb-quality.spec.ts"]
+    },
+    {
+      "id": "lcms-three-scene",
+      "name": "ThreeLcmsScene",
+      "category": "lcms3d",
+      "kind": "direct-renderer",
+      "status": "active",
+      "rendering": "Three.js WebGL canvas",
+      "source": "front/src/features/lcms3d/ThreeLcmsScene.tsx",
+      "inputs": ["Peak[]", "height", "theme", "first-render/error callbacks"],
+      "consumers": ["Lcms3DPanel"],
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "td-matched-peak-panel",
+      "name": "MatchedPeakSpectrumPanel",
+      "category": "spectrum",
+      "kind": "composite",
+      "status": "active",
+      "rendering": "React + SpectrumChart",
+      "source": "front/src/features/prsm/MatchedPeakSpectrumPanel.tsx",
+      "inputs": ["selected MsPeakRow/MatchedIon", "ChartPeak[]", "RawSpectrum"],
+      "consumers": ["PrsmDetailPage"],
+      "tests": []
+    },
+    {
+      "id": "td-matched-peaks-table",
+      "name": "MatchedPeaksTable",
+      "category": "spectrum",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React table",
+      "source": "front/src/features/prsm/MatchedPeaksTable.tsx",
+      "inputs": ["MsPeakRow[]", "selection callback"],
+      "consumers": ["PrsmDetailPage"],
+      "tests": []
+    },
+    {
+      "id": "td-spectrum-modal",
+      "name": "SpectrumModal",
+      "category": "spectrum",
+      "kind": "container",
+      "status": "active",
+      "rendering": "React dialog",
+      "source": "front/src/features/prsm/SpectrumModal.tsx",
+      "inputs": ["title", "subtitle", "children", "actions"],
+      "consumers": ["PrsmDetailPage", "SpectrumPanel"],
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "bu-chart-modal",
+      "name": "BuChartModal",
+      "category": "spectrum",
+      "kind": "container",
+      "status": "active",
+      "rendering": "React dialog",
+      "source": "front/src/features/bu/components/spectrum/BuChartModal.tsx",
+      "inputs": ["title", "subtitle", "children"],
+      "consumers": ["BuOverviewPage", "BuMatchDetailPage", "BuProductIonXicChart"],
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "bu-chromatogram-chart",
+      "name": "BuChromatogramChart",
+      "category": "chromatogram-xic",
+      "kind": "composite",
+      "status": "active",
+      "rendering": "BuInteractivePlot",
+      "source": "front/src/features/bu/components/spectrum/BuChromatogramChart.tsx",
+      "inputs": ["BuChromatogramOut", "Zoom"],
+      "consumers": ["BuOverviewPage", "ChromatogramPanel"],
+      "tests": ["front/tests/bu-overview-chart-states.spec.ts", "front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "bu-precursor-xic-chart",
+      "name": "BuXicChart",
+      "category": "chromatogram-xic",
+      "kind": "composite",
+      "status": "active",
+      "rendering": "BuInteractivePlot",
+      "source": "front/src/features/bu/components/spectrum/BuXicChart.tsx",
+      "inputs": ["BuXicOut", "sequence", "precursor charge", "ppm", "Zoom"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-match-detail.spec.ts", "front/tests/bu-rt-linkage.spec.ts"]
+    },
+    {
+      "id": "bu-product-ion-xic-chart",
+      "name": "BuProductIonXicChart",
+      "category": "chromatogram-xic",
+      "kind": "composite",
+      "status": "active",
+      "rendering": "BuInteractivePlot + BuChartModal",
+      "source": "front/src/features/bu/components/spectrum/BuProductIonXicChart.tsx",
+      "inputs": ["ProductIonXicTrace[]", "raw/normalized mode", "RT markers", "RT window"],
+      "consumers": ["BuProductIonXicCard"],
+      "tests": ["front/tests/bu-match-detail.spec.ts"]
+    },
+    {
+      "id": "bu-product-ion-xic-card",
+      "name": "BuProductIonXicCard",
+      "category": "chromatogram-xic",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React card + BuProductIonXicChart",
+      "source": "front/src/features/bu/components/match-detail/BuProductIonXicCard.tsx",
+      "inputs": ["match/run/scan identifiers", "BuMatchedIon[]", "ProductIonSelection[]", "RT state"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-match-detail.spec.ts", "front/tests/product-ion-selection.spec.ts"]
+    },
+    {
+      "id": "spectra-chromatogram-panel",
+      "name": "ChromatogramPanel",
+      "category": "chromatogram-xic",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React card + BuChromatogramChart",
+      "source": "front/src/features/spectra-only/components/ChromatogramPanel.tsx",
+      "inputs": ["dataset ID", "run ID", "first-render callback"],
+      "consumers": ["SpectraOnlyPage"],
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "bu-pfmb-annotation-card",
+      "name": "BuPfmbAnnotationCard",
+      "category": "pfmb",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React composition",
+      "source": "front/src/features/bu/components/match-detail/BuPfmbAnnotationCard.tsx",
+      "inputs": ["match identifiers", "selected RT/source", "optional BuPfmbEvidence"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-pfmb-annotation.spec.ts", "front/tests/bu-pfmb-visuals.spec.ts", "front/tests/bu-pfmb-quality.spec.ts"]
+    },
+    {
+      "id": "bu-pfmb-fragment-table",
+      "name": "BuPfmbFragmentTable",
+      "category": "pfmb",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React table",
+      "source": "front/src/features/bu/components/match-detail/BuPfmbFragmentTable.tsx",
+      "inputs": ["BuMs2FragmentRow[]", "highlight state"],
+      "consumers": ["BuPfmbAnnotationCard"],
+      "tests": ["front/tests/bu-pfmb-annotation.spec.ts"]
+    },
+    {
+      "id": "bu-live-fragment-table",
+      "name": "BuFragmentTable",
+      "category": "pfmb",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React table",
+      "source": "front/src/features/bu/components/match-detail/BuFragmentTable.tsx",
+      "inputs": ["BuMatchedIon[]", "product ion selection callbacks"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-match-detail.spec.ts"]
+    },
+    {
+      "id": "bu-evidence-summary",
+      "name": "BuEvidenceSummary",
+      "category": "pfmb",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React summary",
+      "source": "front/src/features/bu/components/match-detail/BuEvidenceSummary.tsx",
+      "inputs": ["live/PFMB/XIC evidence state"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-evidence-summary.spec.ts", "front/tests/bu-match-detail.spec.ts"]
+    },
+    {
+      "id": "bu-selected-evidence-bar",
+      "name": "SelectedEvidenceBar",
+      "category": "pfmb",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React controls",
+      "source": "front/src/features/bu/components/match-detail/SelectedEvidenceBar.tsx",
+      "inputs": ["selected RT/source", "live/PFMB availability", "follow state"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-rt-linkage.spec.ts"]
+    },
+    {
+      "id": "bu-follow-pfmb-slot-controls",
+      "name": "FollowPfmbSlotControls",
+      "category": "pfmb",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React controls",
+      "source": "front/src/features/bu/components/match-detail/FollowPfmbSlotControls.tsx",
+      "inputs": ["follow state", "toggle/lock callbacks"],
+      "consumers": ["BuPfmbAnnotationCard", "BuMatchDetailPage"],
+      "tests": ["front/tests/bu-rt-linkage.spec.ts"]
+    },
+    {
+      "id": "bu-evidence-jump-controls",
+      "name": "EvidenceJumpControls",
+      "category": "pfmb",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React controls",
+      "source": "front/src/features/bu/components/match-detail/EvidenceJumpControls.tsx",
+      "inputs": ["section availability", "scroll callbacks"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-rt-linkage.spec.ts"]
+    },
+    {
+      "id": "bu-evidence-update-notice",
+      "name": "EvidenceUpdateNotice",
+      "category": "pfmb",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React notice",
+      "source": "front/src/features/bu/components/match-detail/EvidenceUpdateNotice.tsx",
+      "inputs": ["message"],
+      "consumers": ["BuMatchDetailPage"],
+      "tests": ["front/tests/bu-rt-linkage.spec.ts"]
+    },
+    {
+      "id": "bu-protein-sequence-coverage",
+      "name": "SequenceCoverage",
+      "category": "sequence-fragmentation",
+      "kind": "composite",
+      "status": "active",
+      "rendering": "React HTML/CSS",
+      "source": "front/src/features/bu/components/sequence/SequenceCoverage.tsx",
+      "inputs": ["BuProteinDetailOut"],
+      "consumers": ["BuProteinDetailPage"],
+      "tests": ["front/tests/bu-protein-sequence-coverage.spec.ts"]
+    },
+    {
+      "id": "bu-coverage-bar",
+      "name": "CoverageBar",
+      "category": "sequence-fragmentation",
+      "kind": "direct-layout",
+      "status": "active",
+      "rendering": "React HTML/CSS",
+      "source": "front/src/features/bu/components/sequence/CoverageBar.tsx",
+      "inputs": ["sequence row", "mapped segments", "selection/color maps"],
+      "consumers": ["SequenceCoverage"],
+      "tests": ["front/tests/bu-protein-sequence-coverage.spec.ts"]
+    },
+    {
+      "id": "bu-peptide-legend",
+      "name": "PeptideLegend",
+      "category": "sequence-fragmentation",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React HTML/CSS",
+      "source": "front/src/features/bu/components/sequence/PeptideLegend.tsx",
+      "inputs": ["PeptideLegendItem[]", "selection callback"],
+      "consumers": ["SequenceCoverage"],
+      "tests": ["front/tests/bu-protein-sequence-coverage.spec.ts"]
+    },
+    {
+      "id": "bu-pfmb-sequence-coverage",
+      "name": "BuSequenceCoverage",
+      "category": "sequence-fragmentation",
+      "kind": "direct-layout",
+      "status": "active",
+      "rendering": "React HTML/CSS",
+      "source": "front/src/features/bu/components/match-detail/BuSequenceCoverage.tsx",
+      "inputs": ["peptide", "BuPfmbMatchedIon[]", "highlight state"],
+      "consumers": ["BuPfmbAnnotationCard"],
+      "tests": ["front/tests/bu-pfmb-annotation.spec.ts"]
+    },
+    {
+      "id": "lcms-3d-panel",
+      "name": "Lcms3DPanel",
+      "category": "lcms3d",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React card + ThreeLcmsScene",
+      "source": "front/src/features/lcms3d/Lcms3DPanel.tsx",
+      "inputs": ["Peak[]", "scan", "retention time seconds", "first-render/error callbacks"],
+      "consumers": ["PrsmDetailPage"],
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "spectra-spectrum-panel",
+      "name": "SpectrumPanel",
+      "category": "spectra-only",
+      "kind": "orchestrator",
+      "status": "active",
+      "rendering": "React card + SpectrumChart",
+      "source": "front/src/features/spectra-only/components/SpectrumPanel.tsx",
+      "inputs": ["dataset/run/scan identifiers", "optional precursor highlight", "peak annotation flag"],
+      "consumers": ["SpectraOnlyPage"],
+      "tests": ["front/tests/spectra-only-peak-annotations.spec.ts", "front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "spectra-acquisition-context",
+      "name": "AcquisitionContextPanel",
+      "category": "spectra-only",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React card",
+      "source": "front/src/features/spectra-only/components/AcquisitionContextPanel.tsx",
+      "inputs": ["selected scan", "parent MS1", "child MS2 scans"],
+      "consumers": ["SpectraOnlyPage"],
+      "tests": ["front/tests/spectra-only-scan-relations.spec.ts"]
+    },
+    {
+      "id": "spectra-detected-peaks-table",
+      "name": "DetectedPeaksTable",
+      "category": "spectra-only",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React table",
+      "source": "front/src/features/spectra-only/components/DetectedPeaksTable.tsx",
+      "inputs": ["PeakAnnotationResult", "selected peak callback"],
+      "consumers": ["SpectrumPanel"],
+      "tests": ["front/tests/spectra-only-peak-annotations.spec.ts"]
+    },
+    {
+      "id": "spectra-scan-list",
+      "name": "ScanListPanel",
+      "category": "spectra-only",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React list/table",
+      "source": "front/src/features/spectra-only/components/ScanListPanel.tsx",
+      "inputs": ["SpectraScanIndexItem[]", "selected scan", "loading/error state"],
+      "consumers": ["SpectraOnlyPage"],
+      "tests": ["front/tests/spectra-only-scan-relations.spec.ts"]
+    },
+    {
+      "id": "spectra-run-summary",
+      "name": "RunSummaryCards",
+      "category": "spectra-only",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React cards",
+      "source": "front/src/features/spectra-only/components/RunSummaryCards.tsx",
+      "inputs": ["dataset ID", "run ID"],
+      "consumers": ["SpectraOnlyPage"],
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "spectra-run-selector",
+      "name": "RunSelector (spectra-only)",
+      "category": "spectra-only",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React select",
+      "source": "front/src/features/spectra-only/components/RunSelector.tsx",
+      "inputs": ["DatasetRunSummary[]", "selected run ID"],
+      "consumers": ["SpectraOnlyPage"],
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "bu-run-selector",
+      "name": "RunSelector (BU)",
+      "category": "overview",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React select",
+      "source": "front/src/features/bu/components/overview/RunSelector.tsx",
+      "inputs": ["BuRunSummary[]", "selected run ID"],
+      "consumers": ["BuOverviewPage"],
+      "tests": ["front/tests/bu-overview-chart-states.spec.ts"]
+    },
+    {
+      "id": "bu-qc-stats",
+      "name": "BuQcStats",
+      "category": "overview",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React cards",
+      "source": "front/src/features/bu/components/overview/BuQcStats.tsx",
+      "inputs": ["BuOverviewOut"],
+      "consumers": ["BuOverviewPage"],
+      "tests": ["front/tests/bu-overview-chart-states.spec.ts"]
+    },
+    {
+      "id": "bu-summary-cards",
+      "name": "BuSummaryCards",
+      "category": "overview",
+      "kind": "companion",
+      "status": "active",
+      "rendering": "React cards",
+      "source": "front/src/features/bu/components/BuSummaryCards.tsx",
+      "inputs": ["BuOverviewOut"],
+      "consumers": ["BuOverviewPage"],
+      "tests": ["front/tests/bu-overview-chart-states.spec.ts"]
+    },
+    {
+      "id": "chart-render-boundary",
+      "name": "ChartRenderBoundary",
+      "category": "shared-state",
+      "kind": "error-boundary",
+      "status": "active",
+      "rendering": "React error boundary",
+      "source": "front/src/components/common/chart-render-boundary.tsx",
+      "inputs": ["children", "fallback", "onError"],
+      "consumers": ["BU overview", "BU match detail", "spectra-only panels"],
+      "tests": ["front/tests/bu-overview-chart-states.spec.ts"]
+    },
+    {
+      "id": "plot-status",
+      "name": "PlotStatus",
+      "category": "shared-state",
+      "kind": "state-view",
+      "status": "active",
+      "rendering": "React state panel",
+      "source": "front/src/components/common/plot-status.tsx",
+      "inputs": ["kind", "title", "command", "className"],
+      "consumers": ["all visualization feature areas"],
+      "tests": ["front/tests/bu-overview-chart-states.spec.ts", "front/tests/bu-match-detail.spec.ts"]
+    }
+  ],
+  "supportModules": [
+    {
+      "id": "td-prsm-parser",
+      "name": "PrSM parse model",
+      "status": "support",
+      "role": "Parse TopPIC/TopFD annotation, deconvoluted peaks, raw spectra and envelopes",
+      "source": "front/src/features/prsm/parse.ts",
+      "tests": []
+    },
+    {
+      "id": "bu-types",
+      "name": "BU visualization types",
+      "status": "support",
+      "role": "TypeScript contracts for BU overview, spectra, XIC, mobility and PFMB",
+      "source": "front/src/features/bu/types.ts",
+      "tests": []
+    },
+    {
+      "id": "bu-client",
+      "name": "BU API client",
+      "status": "support",
+      "role": "Fetch BU visualization data",
+      "source": "front/src/features/bu/api/buClient.ts",
+      "tests": ["front/tests/bu-match-detail.spec.ts", "front/tests/bu-overview-chart-states.spec.ts"]
+    },
+    {
+      "id": "spectra-types",
+      "name": "Spectra-only types",
+      "status": "support",
+      "role": "Chromatogram, scan index, run summary and raw spectrum contracts",
+      "source": "front/src/features/spectra-only/types.ts",
+      "tests": []
+    },
+    {
+      "id": "spectra-client",
+      "name": "Spectra-only API client",
+      "status": "support",
+      "role": "Fetch chromatograms, paged/full scan index and raw spectra",
+      "source": "front/src/features/spectra-only/api/spectraClient.ts",
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "lcms-types",
+      "name": "LC-MS 3D types",
+      "status": "support",
+      "role": "Peak m/z/intensity contract",
+      "source": "front/src/features/lcms3d/types.ts",
+      "tests": []
+    },
+    {
+      "id": "chart-colors",
+      "name": "CHART_COLORS",
+      "status": "support",
+      "role": "Theme-aware shared chart colors",
+      "source": "front/src/features/theme/chartColors.ts",
+      "tests": ["front/tests/theme.spec.ts"]
+    },
+    {
+      "id": "bu-chart-theme",
+      "name": "BU chart theme and zoom",
+      "status": "support",
+      "role": "BU semantic colors, sizes, intensity formatting and Zoom",
+      "source": "front/src/features/bu/components/spectrum/chartTheme.ts",
+      "tests": ["front/tests/theme.spec.ts"]
+    },
+    {
+      "id": "bu-spectrum-label-layout",
+      "name": "Spectrum label layout",
+      "status": "support",
+      "role": "Top/all/none modes and collision-aware spectrum label placement",
+      "source": "front/src/features/bu/components/spectrum/spectrumLabelLayout.ts",
+      "tests": ["front/tests/bu-spectrum-label-layout.spec.ts"]
+    },
+    {
+      "id": "bu-spectrum-annotation",
+      "name": "Spectrum external annotation contract",
+      "status": "support",
+      "role": "Live/PFMB annotation source model",
+      "source": "front/src/features/bu/components/spectrum/spectrumAnnotation.ts",
+      "tests": ["front/tests/bu-pfmb-visuals.spec.ts"]
+    },
+    {
+      "id": "bu-pfmb-spectrum-overlay",
+      "name": "PFMB spectrum overlay mapper",
+      "status": "support",
+      "role": "Convert PFMB neutral mass/charge and map annotations to live raw peaks",
+      "source": "front/src/features/bu/components/spectrum/pfmbSpectrumOverlay.ts",
+      "tests": ["front/tests/bu-pfmb-visuals.spec.ts"]
+    },
+    {
+      "id": "spectra-peak-annotations",
+      "name": "Raw peak annotations",
+      "status": "support",
+      "role": "Normalize peaks, base peak, top-N labels, relative intensity and selection",
+      "source": "front/src/features/spectra-only/utils/peakAnnotations.ts",
+      "tests": ["front/tests/spectra-only-peak-annotations.spec.ts"]
+    },
+    {
+      "id": "spectra-scan-relations",
+      "name": "Scan relations",
+      "status": "support",
+      "role": "MS1/MS2 parent-child mapping and precursor peak matching",
+      "source": "front/src/features/spectra-only/utils/scanRelations.ts",
+      "tests": ["front/tests/spectra-only-scan-relations.spec.ts"]
+    },
+    {
+      "id": "spectra-scan-pagination",
+      "name": "Scan pagination",
+      "status": "support",
+      "role": "Paginate scan lists and locate selected scan page",
+      "source": "front/src/features/spectra-only/utils/scanPagination.ts",
+      "tests": ["front/tests/spectra-only-scan-relations.spec.ts"]
+    },
+    {
+      "id": "bu-pfmb-series",
+      "name": "PFMB series model",
+      "status": "support",
+      "role": "b/y/c/z-dot labels, colors, cleavage sites and neutral-to-mz conversion",
+      "source": "front/src/features/bu/components/match-detail/pfmbSeries.ts",
+      "tests": ["front/tests/bu-pfmb-annotation.spec.ts"]
+    },
+    {
+      "id": "bu-pfmb-evidence-hook",
+      "name": "useBuPfmbEvidence",
+      "status": "support",
+      "role": "Query and select PFMB slots, annotation and matrix",
+      "source": "front/src/features/bu/components/match-detail/useBuPfmbEvidence.ts",
+      "tests": ["front/tests/bu-pfmb-annotation.spec.ts", "front/tests/bu-pfmb-visuals.spec.ts"]
+    },
+    {
+      "id": "bu-evidence-summary-model",
+      "name": "Evidence summary model",
+      "status": "support",
+      "role": "Build source-specific evidence sections, coverage and ppm summaries",
+      "source": "front/src/features/bu/components/match-detail/evidenceSummaryModel.ts",
+      "tests": ["front/tests/bu-evidence-summary.spec.ts"]
+    },
+    {
+      "id": "bu-product-ion-selection",
+      "name": "Product ion selection",
+      "status": "support",
+      "role": "Stable IDs, max-8 selection, add/remove/toggle/top-N",
+      "source": "front/src/features/bu/components/match-detail/productIonSelection.ts",
+      "tests": ["front/tests/product-ion-selection.spec.ts"]
+    },
+    {
+      "id": "bu-product-ion-batch",
+      "name": "Product ion batch request model",
+      "status": "support",
+      "role": "Canonical selections, batch payload/query key and response trace mapping",
+      "source": "front/src/features/bu/components/match-detail/productIonBatch.ts",
+      "tests": ["front/tests/product-ion-selection.spec.ts", "front/tests/bu-match-detail.spec.ts"]
+    },
+    {
+      "id": "bu-product-ion-colors",
+      "name": "Product ion colors",
+      "status": "support",
+      "role": "Stable colors across selection changes",
+      "source": "front/src/features/bu/components/match-detail/productIonColors.ts",
+      "tests": ["front/tests/product-ion-selection.spec.ts"]
+    },
+    {
+      "id": "bu-product-ion-xic-view-model",
+      "name": "Product ion XIC view model",
+      "status": "support",
+      "role": "Raw/normalized product ion traces and signal checks",
+      "source": "front/src/features/bu/components/match-detail/productIonXicViewModel.ts",
+      "tests": ["front/tests/bu-match-detail.spec.ts"]
+    },
+    {
+      "id": "bu-coverage-layout",
+      "name": "Sequence coverage layout",
+      "status": "support",
+      "role": "Rows, mapped segments, peptide keys/colors, legend and residue resolution",
+      "source": "front/src/features/bu/components/sequence/coverageLayout.ts",
+      "tests": ["front/tests/bu-protein-sequence-coverage.spec.ts"]
+    },
+    {
+      "id": "bu-coverage-colors",
+      "name": "Sequence coverage colors",
+      "status": "support",
+      "role": "Theme-aware peptide and selection colors",
+      "source": "front/src/features/bu/components/sequence/coverageColors.ts",
+      "tests": ["front/tests/bu-protein-sequence-coverage.spec.ts", "front/tests/theme.spec.ts"]
+    },
+    {
+      "id": "page-transition-context",
+      "name": "Page transition first-frame coordination",
+      "status": "support",
+      "role": "Keep navigation mask until D3/Three/chromatogram first render or terminal state",
+      "source": "front/src/features/page-transition/pageTransitionContext.ts",
+      "tests": ["front/tests/page-transition.spec.ts"]
+    },
+    {
+      "id": "api-error-model",
+      "name": "Visualization API error model",
+      "status": "support",
+      "role": "Retry policy and derived-missing/stale/unsupported error parsing",
+      "source": "front/src/lib/apiError.ts",
+      "tests": ["front/tests/api-error.spec.ts", "front/tests/bu-match-detail.spec.ts"]
+    }
+  ],
+  "inactiveOrLegacy": [
+    {
+      "id": "inactive-bu-pfmb-spectrum-chart",
+      "name": "BuPfmbSpectrumChart",
+      "status": "inactive",
+      "reason": "No consumer; standalone PFMB spectrum was replaced by mapped external annotations on BuSpectrumChart",
+      "source": "front/src/features/bu/components/spectrum/BuPfmbSpectrumChart.tsx",
+      "tests": ["front/tests/bu-pfmb-visuals.spec.ts"]
+    },
+    {
+      "id": "inactive-bu-chart-utils",
+      "name": "chartUtils",
+      "status": "inactive",
+      "reason": "No consumer in the current import graph",
+      "source": "front/src/features/bu/components/spectrum/chartUtils.ts",
+      "tests": []
+    },
+    {
+      "id": "inactive-bu-coming-soon-page",
+      "name": "BuComingSoonPage",
+      "status": "inactive",
+      "reason": "No route or current consumer",
+      "source": "front/src/features/bu/pages/BuComingSoonPage.tsx",
+      "tests": []
+    },
+    {
+      "id": "legacy-bu-viewer",
+      "name": "features/bu-viewer",
+      "status": "legacy",
+      "reason": "67-file historical copy with zero references from outside its own directory",
+      "source": "front/src/features/bu-viewer",
+      "tests": []
+    },
+    {
+      "id": "generated-dist",
+      "name": "front/dist",
+      "status": "legacy",
+      "reason": "Generated bundle, not component source",
+      "source": "front/dist",
+      "tests": []
+    },
+    {
+      "id": "historical-root-images",
+      "name": "front root PR/debug images",
+      "status": "legacy",
+      "reason": "20 unimported historical screenshots; useful only as secondary visual evidence",
+      "source": "front",
+      "tests": []
+    }
+  ],
+  "excludedGeneralUi": [
+    "BU protein/peptide/match list pages without spectrum visualization",
+    "generic buttons, cards, badges, inputs and tables except where directly used as visualization state/companions",
+    "import and agent-import pages",
+    "build output and dependency directories"
+  ]
+}

@@ -8,7 +8,12 @@ from .serialization import to_primitive
 
 BOTTOM_UP_SCHEMA_VERSION = 1
 BOTTOM_UP_OWNER = "bottom_up"
-BOTTOM_UP_IDENTIFICATION_KIND = "dia_precursor_identification"
+BOTTOM_UP_DIA_IDENTIFICATION_KIND = "dia_precursor_identification"
+BOTTOM_UP_DDA_IDENTIFICATION_KIND = "dda_psm_identification"
+BOTTOM_UP_IDENTIFICATION_KIND = BOTTOM_UP_DIA_IDENTIFICATION_KIND
+BOTTOM_UP_IDENTIFICATION_KINDS = frozenset(
+    {BOTTOM_UP_DIA_IDENTIFICATION_KIND, BOTTOM_UP_DDA_IDENTIFICATION_KIND}
+)
 BOTTOM_UP_EXTENSION_TYPES = (
     "bottom_up_metadata",
     "bottom_up_identifications",
@@ -156,9 +161,9 @@ class BottomUpIdentification:
     modification_ids: tuple[str, ...]
     quantification_ids: tuple[str, ...]
     source_fields: dict[str, Any]
-    source_scan: None = None
-    source_native_id: None = None
-    rank: None = None
+    source_scan: int | None = None
+    source_native_id: str | None = None
+    rank: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +200,7 @@ class BottomUpProteinGroup:
     protein_group_id: str
     source_group: str
     member_protein_ids: tuple[str, ...]
-    leading_protein_id: None
+    leading_protein_id: str | None
     identification_ids: tuple[str, ...]
     peptide_ids: tuple[str, ...]
     q_value: float | None

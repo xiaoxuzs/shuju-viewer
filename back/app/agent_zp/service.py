@@ -161,6 +161,8 @@ def prepare_agent_zp_artifact(
         return _validate_existing_zp(source, case_id=case_id)
     if binary_operation == "convert_supported_binary_to_zp":
         return _convert_source_to_zp(source, format_version=format_version)
+    if binary_operation == "convert_declared_mapping_to_zp":
+        return _convert_source_to_zp(source, format_version=format_version)
     raise AgentZpError("AGENT_ZP_INTERNAL_ERROR", "Unsupported Agent ZP binary operation.", status_code=422)
 
 

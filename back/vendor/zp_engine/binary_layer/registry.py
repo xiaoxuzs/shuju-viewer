@@ -33,6 +33,7 @@ def build_default_registry() -> StepRegistry:
     from .tools.real_top_down_intermediate import RealTopDownIntermediateTool
     from .tools.real_topfd_js import RealTopfdJsParseTool
     from .tools.real_dia_result import RealDiaResultTool
+    from .tools.real_composite_bottom_up import RealCompositeBottomUpTool
 
     registry = StepRegistry()
     for step in (
@@ -46,6 +47,7 @@ def build_default_registry() -> StepRegistry:
         RealTopDownIntermediateTool(),
         RealTopfdJsParseTool(),
         RealDiaResultTool(),
+        RealCompositeBottomUpTool(),
         StringPoolBuildTool(),
         IndexBuildTool(),
         ZpWriteStep(),

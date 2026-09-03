@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Literal
 from .blocks import BlockCollection
 
 if TYPE_CHECKING:
+    from .composite_bottom_up_bundle import CompositeBottomUpBundle
     from .dia_result_bundle import DiaResultBundle
     from .top_down_schema import TopDownBundle
     from .top_down_interpretation_schema import TopDownIntermediateBundle
@@ -36,11 +37,13 @@ class SourceProfile:
     top_down_bundle: TopDownBundle | None = None
     top_down_intermediate_bundle: TopDownIntermediateBundle | None = None
     dia_result_bundle: DiaResultBundle | None = None
+    composite_bottom_up_bundle: CompositeBottomUpBundle | None = None
     output_created_at_millis: int | None = None
 
     def relative_label(self, path: Path) -> str:
         bundle = (
-            self.dia_result_bundle
+            self.composite_bottom_up_bundle
+            or self.dia_result_bundle
             or self.top_down_bundle
             or self.top_down_intermediate_bundle
         )

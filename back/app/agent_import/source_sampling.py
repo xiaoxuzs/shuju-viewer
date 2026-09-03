@@ -73,7 +73,15 @@ def summarize_source_root(source_root: str | Path) -> dict[str, Any]:
 
     files.sort(key=lambda item: str(item["relative_path"]).casefold())
     samples: list[dict[str, Any]] = []
-    for item in files:
+    sample_candidates = sorted(
+        files,
+        key=lambda item: (
+            str(item["suffix"]) not in _TEXT_SUFFIXES,
+            len(PurePosixPath(str(item["relative_path"])).parts),
+            str(item["relative_path"]).casefold(),
+        ),
+    )
+    for item in sample_candidates:
         if len(samples) >= MAX_SAMPLES:
             break
         relative_path = str(item["relative_path"])

@@ -54,6 +54,12 @@ from .tools.real_top_down import RealTopDownTool
 from .tools.real_top_down_intermediate import RealTopDownIntermediateTool
 from .tools.real_topfd_js import RealTopfdJsParseTool
 from .tools.real_dia_result import RealDiaResultTool
+from .tools.real_composite_bottom_up import RealCompositeBottomUpTool
+from .composite_bottom_up_bundle import (
+    CompositeBottomUpBundle,
+    CompositeBottomUpBundleInspector,
+)
+from .composite_bottom_up_adapter import CompositeBottomUpAdapter
 from .dia_result_bundle import DiaResultBundle, DiaResultBundleInspector
 from .dia_result_adapter import DiaResultAdapter
 from .dia_spectrum_association import DiaSpectrumAssociator
@@ -115,6 +121,8 @@ __all__ = [
     "RealTopDownTool", "TopDownAdapter", "TopDownBundle", "TopDownBundleManifest",
     "RealTopDownIntermediateTool", "TopDownInterpretationAdapter",
     "RealTopfdJsParseTool", "RealDiaResultTool", "DiaResultBundle", "DiaResultBundleInspector",
+    "RealCompositeBottomUpTool", "CompositeBottomUpBundle",
+    "CompositeBottomUpBundleInspector", "CompositeBottomUpAdapter",
     "DiaResultAdapter", "DiaSpectrumAssociator", "BottomUpReader",
     "BottomUpExtensionValidator", "get_bottom_up_summary",
     "get_bottom_up_identification", "get_bottom_up_identifications_for_spectrum",

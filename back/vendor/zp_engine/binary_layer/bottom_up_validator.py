@@ -7,10 +7,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from .blocks import ExtensionBlock, ISOLATION_WINDOW_KIND
+from .blocks import (
+    ExtensionBlock,
+    ISOLATION_WINDOW_KIND,
+    SELECTED_PRECURSOR_KIND,
+)
 from .bottom_up_schema import (
+    BOTTOM_UP_DDA_IDENTIFICATION_KIND,
+    BOTTOM_UP_DIA_IDENTIFICATION_KIND,
     BOTTOM_UP_EXTENSION_TYPES,
-    BOTTOM_UP_IDENTIFICATION_KIND,
+    BOTTOM_UP_IDENTIFICATION_KINDS,
     BOTTOM_UP_OWNER,
     BOTTOM_UP_SCHEMA_VERSION,
 )
@@ -19,6 +25,22 @@ from .reader import ZpReader
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _WINDOW_EPSILON = 1e-12
+_SUPPORTED_BOTTOM_UP_PROFILES = frozenset(
+    {
+        (
+            "real_dia_result_bundle",
+            "diann_2_parquet",
+            BOTTOM_UP_DIA_IDENTIFICATION_KIND,
+            "bottom_up_dia",
+        ),
+        (
+            "real_blueprint_bottom_up_bundle",
+            "maxquant_mzml_v1",
+            BOTTOM_UP_DDA_IDENTIFICATION_KIND,
+            "bottom_up_dda",
+        ),
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,12 +184,23 @@ class BottomUpExtensionValidator:
 
     @staticmethod
     def _validate_metadata(metadata: dict[str, Any], add: Any) -> None:
-        if metadata.get("source_type") != "real_dia_result_bundle":
-            add("BOTTOM_UP_INVALID_SCHEMA", "metadata source_type is invalid")
-        if metadata.get("adapter_flavor") != "diann_2_parquet":
-            add("BOTTOM_UP_INVALID_SCHEMA", "metadata adapter_flavor is invalid")
-        if metadata.get("identification_kind") != BOTTOM_UP_IDENTIFICATION_KIND:
+        identification_kind = metadata.get("identification_kind")
+        if identification_kind not in BOTTOM_UP_IDENTIFICATION_KINDS:
             add("BOTTOM_UP_INVALID_SCHEMA", "metadata identification_kind is invalid")
+        expected_mode = {
+            BOTTOM_UP_DIA_IDENTIFICATION_KIND: "bottom_up_dia",
+            BOTTOM_UP_DDA_IDENTIFICATION_KIND: "bottom_up_dda",
+        }.get(identification_kind)
+        if metadata.get("analysis_mode") != expected_mode:
+            add("BOTTOM_UP_INVALID_SCHEMA", "metadata analysis_mode does not match identification_kind")
+        profile_identity = (
+            metadata.get("source_type"),
+            metadata.get("adapter_flavor"),
+            identification_kind,
+            metadata.get("analysis_mode"),
+        )
+        if profile_identity not in _SUPPORTED_BOTTOM_UP_PROFILES:
+            add("BOTTOM_UP_INVALID_SCHEMA", "metadata Bottom-Up adapter identity is unsupported")
         coverage = metadata.get("field_coverage")
         if not isinstance(coverage, dict) or coverage.get("unexplained_column_count") != 0:
             add("BOTTOM_UP_INVALID_SCHEMA", "field coverage must account for every source column")
@@ -219,6 +252,10 @@ class BottomUpExtensionValidator:
         modification_ids = _unique_ids(modifications, "modification_id", "BOTTOM_UP_REFERENCE_MISSING", add)
         _unique_ids(fragments, "fragment_id", "BOTTOM_UP_REFERENCE_MISSING", add)
         quantification_ids = _unique_ids(quantification, "quantification_id", "BOTTOM_UP_REFERENCE_MISSING", add)
+        identification_by_id = {
+            str(item.get("identification_id")): item for item in identifications
+        }
+        peptide_by_id = {str(item.get("peptide_id")): item for item in peptides}
         for extension_type, rows, field in (
             ("bottom_up_identifications", identifications, "identification_id"),
             ("bottom_up_peptides", peptides, "peptide_id"),
@@ -234,9 +271,12 @@ class BottomUpExtensionValidator:
         spectra = {item.spectrum_id: item for item in reader.read_spectra()}
         precursors = {item.precursor_id: item for item in reader.read_precursors()}
         run_ids = {item.run_id for item in reader.read_runs()}
+        identification_kind = metadata.get("identification_kind")
+        if reader.read_global_meta().source_type != metadata.get("source_type"):
+            add("BOTTOM_UP_INVALID_SCHEMA", "metadata source_type does not match GlobalMeta")
         for identification in identifications:
             identifier = identification.get("identification_id")
-            if identification.get("identification_kind") != BOTTOM_UP_IDENTIFICATION_KIND:
+            if identification.get("identification_kind") != identification_kind:
                 add("BOTTOM_UP_INVALID_SCHEMA", f"Identification {identifier} kind is invalid")
             spectrum = spectra.get(str(identification.get("spectrum_id")))
             if spectrum is None:
@@ -264,11 +304,24 @@ class BottomUpExtensionValidator:
                 add("BOTTOM_UP_INVALID_NUMERIC", f"Identification {identifier} charge is invalid")
             _nonnegative_finite(identification, "precursor_mz", add)
             _nonnegative_finite(identification, "rt_seconds", add)
+            _nonnegative_finite(identification, "association_rt_delta_seconds", add)
+            _nonnegative_finite(identification, "association_precursor_mz", add)
             _probability_in_typed_fields(identification, add)
             if not _valid_source_fields(identification.get("source_fields")):
                 add("BOTTOM_UP_INVALID_SCHEMA", f"Identification {identifier} source_fields are not canonical JSON")
+            if identification_kind == BOTTOM_UP_DDA_IDENTIFICATION_KIND and spectrum is not None:
+                if identification.get("association_kind") != "exact_scan_number":
+                    add("BOTTOM_UP_INVALID_SCHEMA", f"Identification {identifier} is not an exact scan association")
+                if identification.get("source_scan") != spectrum.scan_number:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"Identification {identifier} source_scan does not match Spectrum")
+                if identification.get("source_native_id") != spectrum.native_id:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"Identification {identifier} source_native_id does not match Spectrum")
+                rank = identification.get("rank")
+                if rank is not None and (
+                    not isinstance(rank, int) or isinstance(rank, bool) or rank <= 0
+                ):
+                    add("BOTTOM_UP_INVALID_NUMERIC", f"Identification {identifier} rank is invalid")
 
-        peptide_by_id = {item.get("peptide_id"): item for item in peptides}
         for peptide in peptides:
             identifier = peptide.get("peptide_id")
             sequence = peptide.get("sequence")
@@ -277,15 +330,48 @@ class BottomUpExtensionValidator:
             for identification_id in peptide.get("identification_ids", []):
                 if identification_id not in identification_ids:
                     add("BOTTOM_UP_REFERENCE_MISSING", f"Peptide {identifier} references no Identification")
+                elif identification_by_id[identification_id].get("peptide_id") != identifier:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"Peptide {identifier} has an inconsistent Identification link")
+            for protein_id in peptide.get("protein_ids", []):
+                if protein_id not in protein_ids:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"Peptide {identifier} references no Protein")
+            for group_id in peptide.get("protein_group_ids", []):
+                if group_id not in group_ids:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"Peptide {identifier} references no ProteinGroup")
+            for modification_id in peptide.get("modification_ids", []):
+                if modification_id not in modification_ids:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"Peptide {identifier} references no Modification")
+
+        for protein in proteins:
+            identifier = protein.get("protein_id")
+            for peptide_id in protein.get("peptide_ids", []):
+                if peptide_id not in peptide_ids:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"Protein {identifier} references no Peptide")
+            for identification_id in protein.get("identification_ids", []):
+                if identification_id not in identification_ids:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"Protein {identifier} references no Identification")
+            for group_id in protein.get("protein_group_ids", []):
+                if group_id not in group_ids:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"Protein {identifier} references no ProteinGroup")
 
         for group in groups:
             identifier = group.get("protein_group_id")
-            for protein_id in group.get("member_protein_ids", []):
+            members = group.get("member_protein_ids", [])
+            for protein_id in members:
                 if protein_id not in protein_ids:
                     add("BOTTOM_UP_REFERENCE_MISSING", f"ProteinGroup {identifier} references no Protein")
+            leading = group.get("leading_protein_id")
+            if leading is not None and leading not in members:
+                add("BOTTOM_UP_REFERENCE_MISSING", f"ProteinGroup {identifier} leading Protein is not a member")
             for identification_id in group.get("identification_ids", []):
                 if identification_id not in identification_ids:
                     add("BOTTOM_UP_REFERENCE_MISSING", f"ProteinGroup {identifier} references no Identification")
+            for peptide_id in group.get("peptide_ids", []):
+                if peptide_id not in peptide_ids:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"ProteinGroup {identifier} references no Peptide")
+            for quantification_id in group.get("quantification_ids", []):
+                if quantification_id not in quantification_ids:
+                    add("BOTTOM_UP_REFERENCE_MISSING", f"ProteinGroup {identifier} references no Quantification")
 
         for modification in modifications:
             identifier = modification.get("modification_id")
@@ -293,6 +379,9 @@ class BottomUpExtensionValidator:
             if modification.get("identification_id") not in identification_ids or peptide is None:
                 add("BOTTOM_UP_REFERENCE_MISSING", f"Modification {identifier} has no owner")
                 continue
+            owner = identification_by_id[str(modification.get("identification_id"))]
+            if owner.get("peptide_id") != modification.get("peptide_id"):
+                add("BOTTOM_UP_REFERENCE_MISSING", f"Modification {identifier} has inconsistent owners")
             position = modification.get("position")
             sequence = peptide.get("sequence", "")
             residue = modification.get("residue")
@@ -313,6 +402,8 @@ class BottomUpExtensionValidator:
             kind = record.get("entity_kind")
             if kind not in entity_ids or record.get("entity_id") not in entity_ids.get(kind, set()):
                 add("BOTTOM_UP_REFERENCE_MISSING", f"Quantification {identifier} has no entity")
+            if record.get("run_id") not in run_ids:
+                add("BOTTOM_UP_REFERENCE_MISSING", f"Quantification {identifier} references no core Run")
             measurements = record.get("measurements")
             if not isinstance(measurements, dict):
                 add("BOTTOM_UP_INVALID_SCHEMA", f"Quantification {identifier} measurements are invalid")
@@ -329,17 +420,31 @@ class BottomUpExtensionValidator:
             if spectrum.ms_level != 2:
                 continue
             precursor = precursors.get(spectrum.precursor_id or "")
-            if (
-                precursor is None
-                or precursor.effective_precursor_kind != ISOLATION_WINDOW_KIND
-                or precursor.charge is not None
-                or precursor.precursor_mz is not None
-                or precursor.intensity is not None
-                or precursor.isolation_lower_mz is None
-                or precursor.isolation_upper_mz is None
-                or precursor.isolation_upper_mz - precursor.isolation_lower_mz <= _WINDOW_EPSILON
-            ):
-                add("DIA_WINDOW_MALFORMED", f"MS2 {spectrum.spectrum_id} has an invalid DIA core precursor")
+            if identification_kind == BOTTOM_UP_DIA_IDENTIFICATION_KIND:
+                if (
+                    precursor is None
+                    or precursor.effective_precursor_kind != ISOLATION_WINDOW_KIND
+                    or precursor.charge is not None
+                    or precursor.precursor_mz is not None
+                    or precursor.intensity is not None
+                    or precursor.isolation_lower_mz is None
+                    or precursor.isolation_upper_mz is None
+                    or precursor.isolation_upper_mz - precursor.isolation_lower_mz <= _WINDOW_EPSILON
+                ):
+                    add("DIA_WINDOW_MALFORMED", f"MS2 {spectrum.spectrum_id} has an invalid DIA core precursor")
+            elif identification_kind == BOTTOM_UP_DDA_IDENTIFICATION_KIND:
+                if (
+                    precursor is None
+                    or precursor.effective_precursor_kind != SELECTED_PRECURSOR_KIND
+                    or not isinstance(precursor.charge, int)
+                    or isinstance(precursor.charge, bool)
+                    or precursor.charge <= 0
+                    or not _finite_nonnegative(precursor.precursor_mz)
+                    or not _finite_nonnegative(precursor.intensity)
+                    or precursor.isolation_lower_mz is not None
+                    or precursor.isolation_upper_mz is not None
+                ):
+                    add("DDA_PRECURSOR_MALFORMED", f"MS2 {spectrum.spectrum_id} has an invalid DDA selected precursor")
 
         declared_counts = metadata.get("entity_counts", {})
         actual_counts = {
@@ -472,6 +577,15 @@ def _nonnegative_finite(record: dict[str, Any], field: str, add: Any) -> None:
         or value < 0
     ):
         add("BOTTOM_UP_INVALID_NUMERIC", f"{field} must be finite and non-negative")
+
+
+def _finite_nonnegative(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    )
 
 
 def _probability_in_typed_fields(record: dict[str, Any], add: Any) -> None:

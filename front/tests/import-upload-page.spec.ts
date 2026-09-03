@@ -93,7 +93,10 @@ test("unknown format import submits required identity and optional prompt contex
 
   const start = dialog.getByRole("button", { name: "Start format analysis" });
   await expect(start).toBeDisabled();
-  await dialog.locator("#unknown-data-type").fill("Bottom-Up");
+  for (const label of ["Top-Down", "Bottom-Up", "Spectra Only", "Custom"]) {
+    await expect(dialog.getByRole("radio", { name: label, exact: true })).toBeVisible();
+  }
+  await dialog.getByRole("radio", { name: "Bottom-Up", exact: true }).click();
   await dialog.locator("#unknown-format-name").fill("DIA-CLIP");
   await dialog.getByRole("button", { name: "Add format details" }).click();
   await dialog.locator("#unknown-format-details").fill("One result TSV and one matching mzML file.");
@@ -113,6 +116,47 @@ test("unknown format import submits required identity and optional prompt contex
   });
 });
 
+test("unknown format import accepts a trimmed custom analysis type without leaking it into presets", async ({ page }) => {
+  let requestBody: unknown = null;
+  await page.route("**/api/v1/imports/pick-folder", async (route) => {
+    await json(route, { path: "E:\\data\\custom-analysis", cancelled: false });
+  });
+  await page.route("**/api/v1/agent-import-cases/from-path", async (route) => {
+    requestBody = route.request().postDataJSON();
+    await json(route, { case_id: "case-custom-analysis", status: "CREATED", version: 1 }, 201);
+  });
+
+  await page.goto("/datasets");
+  await page.getByRole("button", { name: "Upload local dataset" }).click();
+  const dialog = page.getByRole("dialog", { name: "Upload local dataset" });
+  await dialog.getByRole("radio", { name: "Unknown format import", exact: true }).click();
+
+  await dialog.getByRole("radio", { name: "Custom", exact: true }).click();
+  const customDataType = dialog.getByLabel("Custom analysis type", { exact: true });
+  await expect(customDataType).toHaveAttribute("maxlength", "80");
+  await customDataType.fill("   ");
+  await dialog.locator("#unknown-format-name").fill("New Format");
+  await dialog.getByRole("button", { name: "Select source folder" }).click();
+  const start = dialog.getByRole("button", { name: "Start format analysis" });
+  await expect(start).toBeDisabled();
+
+  await customDataType.fill("  Single-cell spatial proteomics  ");
+  await dialog.getByRole("radio", { name: "Top-Down", exact: true }).click();
+  await expect(dialog.getByLabel("Custom analysis type", { exact: true })).toHaveCount(0);
+  await expect(start).toBeEnabled();
+  await dialog.getByRole("radio", { name: "Custom", exact: true }).click();
+  await expect(dialog.getByLabel("Custom analysis type", { exact: true }))
+    .toHaveValue("  Single-cell spatial proteomics  ");
+  await start.click();
+
+  expect(requestBody).toEqual({
+    source_path: "E:\\data\\custom-analysis",
+    data_type: "Single-cell spatial proteomics",
+    format_name: "New Format",
+    format_details: null,
+  });
+});
+
 test("Agent case exposes the validated .zp candidate and requires explicit approval", async ({ page }) => {
   let status = "READY_FOR_REVIEW";
   let approveHeaders: Record<string, string> | null = null;
@@ -120,17 +164,64 @@ test("Agent case exposes the validated .zp candidate and requires explicit appro
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (path.endsWith("/messages")) {
-      await json(route, [{
-        message_id: "message-one",
-        case_id: "case-review",
-        sequence_no: 1,
-        context_revision: 0,
-        sender_type: "AGENT_2",
-        message_kind: "STATUS",
-        content: "A .zp candidate passed deep validation.",
-        structured_payload: null,
-        created_at: NOW,
-      }]);
+      await json(route, [
+        {
+          message_id: "message-strategy",
+          case_id: "case-review",
+          sequence_no: 1,
+          context_revision: 0,
+          sender_type: "AGENT_1",
+          message_kind: "STATUS",
+          content: "Agent 1 completed tool-backed dataset research.",
+          structured_payload: {
+            event: "strategy_ready",
+            strategy: {
+              blueprint: {
+                dataset_family: "Agent-designed scientific dataset",
+                executive_summary: "Local inspectors and official sources support this Blueprint.",
+                source_assets: [{ relative_path: "sample.txt" }],
+                scientific_entities: [{ entity_name: "identification" }],
+                visualizations: [{ view_id: "overview" }],
+              },
+            },
+          },
+          created_at: NOW,
+        },
+        {
+          message_id: "message-one",
+          case_id: "case-review",
+          sequence_no: 2,
+          context_revision: 0,
+          sender_type: "AGENT_2",
+          message_kind: "STATUS",
+          content: "A .zp candidate passed deep validation.",
+          structured_payload: {
+            event: "candidate_ready",
+            candidate: {
+              zp_conversion_plan: {
+                mapping_plan: {
+                  adapter_id: "agent_blueprint_profile_v1",
+                  source_files: [{ relative_path: "evidence.txt" }],
+                  field_mappings: [{ source_field: "Sequence" }],
+                  unmapped_fields: { "evidence.txt": ["Extra column"] },
+                },
+              },
+            },
+          },
+          created_at: NOW,
+        },
+        {
+          message_id: "message-review",
+          case_id: "case-review",
+          sequence_no: 3,
+          context_revision: 0,
+          sender_type: "AGENT_1",
+          message_kind: "EVIDENCE",
+          content: "Agent 1 approved the mapping plan.",
+          structured_payload: { event: "review_approved", review: { status: "APPROVED" } },
+          created_at: NOW,
+        },
+      ]);
       return;
     }
     if (path.endsWith("/attempts")) {
@@ -172,6 +263,11 @@ test("Agent case exposes the validated .zp candidate and requires explicit appro
   await page.goto("/agent-import-cases/case-review");
   await expect(page.getByText("A .zp candidate passed deep validation.")).toBeVisible();
   await expect(page.getByText("ZP_BINARY", { exact: true })).toBeVisible();
+  await expect(page.getByText("ZP mapping plan", { exact: true })).toBeVisible();
+  await expect(page.getByText("Agent 1 Dataset Blueprint", { exact: true })).toBeVisible();
+  await expect(page.getByText("Agent-designed scientific dataset", { exact: true })).toBeVisible();
+  await expect(page.getByText("agent_blueprint_profile_v1", { exact: true })).toBeVisible();
+  await expect(page.getByText("APPROVED", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve and import" })).toBeVisible();
   await page.getByRole("button", { name: "Approve and import" }).click();
 

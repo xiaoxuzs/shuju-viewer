@@ -15,7 +15,7 @@ from sqlalchemy.engine import Engine
 
 from app.agent_import import AUTONOMOUS_ATTEMPT_LIMIT, DEFAULT_WORKSPACE_ID
 from app.agent_import.binary_executor import BinaryExecutionResult
-from app.agent_import.contracts import AgentCandidatePlan
+from app.agent_import.contracts import AgentCandidatePlan, AgentPlanReview
 from app.agent_import.errors import AgentImportError
 from app.agent_import.states import CaseStatus, InteractionMode, TERMINAL_STATUSES, assert_transition
 from app.core.db import engine as default_engine
@@ -354,6 +354,8 @@ class CaseService:
         return updated
 
     def save_candidate(self, case_id: str, plan: AgentCandidatePlan) -> CaseRecord:
+        if plan.status != "READY":
+            raise ValueError("save_candidate requires a READY plan")
         payload = plan.model_dump(mode="json")
         case = self.get_case(case_id)
         updated = self._transition(
@@ -366,6 +368,57 @@ class CaseService:
             release_lease=False,
         )
         self._record_json_artifact(updated.case_id, "candidate_plan", payload)
+        return updated
+
+    def record_candidate_needs_user(self, case_id: str, plan: AgentCandidatePlan) -> CaseRecord:
+        if plan.status == "READY":
+            raise ValueError("record_candidate_needs_user requires a non-ready decision")
+        payload = plan.model_dump(mode="json")
+        content = "\n".join(plan.questions)
+        current = self.get_case(case_id)
+        updated = self._transition(
+            current,
+            CaseStatus.NEEDS_USER,
+            content=content,
+            payload={"event": "candidate_needs_user", "candidate": payload},
+            sender_type="AGENT_2",
+            updates={"candidate_payload": _json(payload)},
+            release_lease=True,
+        )
+        self._record_json_artifact(updated.case_id, "candidate_plan", payload)
+        with self.engine.begin() as connection:
+            self._create_notification(connection, updated, content, _now())
+        return updated
+
+    def save_review(self, case_id: str, review: AgentPlanReview) -> CaseRecord:
+        payload = review.model_dump(mode="json")
+        current = self.get_case(case_id)
+        if review.status == "APPROVED":
+            self._record_json_artifact(case_id, "agent_1_review", payload)
+            with self.engine.begin() as connection:
+                self._append_message(
+                    connection,
+                    case_id=case_id,
+                    context_revision=current.context_revision,
+                    sender_type="AGENT_1",
+                    message_kind="EVIDENCE",
+                    content="Agent 1 approved the mapping plan after deterministic preflight.",
+                    payload={"event": "review_approved", "review": payload},
+                    created_at=_now(),
+                )
+            return self.get_case(case_id)
+        content = "\n".join(review.questions or review.issues)
+        updated = self._transition(
+            current,
+            CaseStatus.NEEDS_USER,
+            content=content,
+            payload={"event": "review_needs_user", "review": payload},
+            sender_type="AGENT_1",
+            release_lease=True,
+        )
+        self._record_json_artifact(case_id, "agent_1_review", payload)
+        with self.engine.begin() as connection:
+            self._create_notification(connection, updated, content, _now())
         return updated
 
     def start_verification(self, case_id: str) -> CaseRecord:
@@ -387,6 +440,7 @@ class CaseService:
             "source_fingerprint": result.source_fingerprint,
             "validation_mode": result.validation_mode,
             "deep_validation_certificate": bool(result.validation_certificate_path),
+            "semantic_reconciliation": result.semantic_verification or None,
         }
         now = _now()
         with self.engine.begin() as connection:

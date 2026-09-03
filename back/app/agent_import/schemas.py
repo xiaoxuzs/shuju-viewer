@@ -6,10 +6,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.agent_import.contracts import AgentAnalysisCategory
+
 
 class AgentCaseFromPathIn(BaseModel):
     source_path: str = Field(..., min_length=1)
-    data_type: str = Field(..., min_length=1, max_length=80)
+    data_type: AgentAnalysisCategory
     format_name: str = Field(..., min_length=1, max_length=160)
     format_details: str | None = Field(default=None, max_length=4000)
 

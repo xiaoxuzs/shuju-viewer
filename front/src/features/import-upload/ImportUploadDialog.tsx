@@ -56,6 +56,7 @@ type UploadUiState =
   | "cancelled";
 
 type ImportWorkflow = "supported-format" | "unknown-format";
+type UnknownAnalysisType = "Top-Down" | "Bottom-Up" | "Spectra Only" | "CUSTOM";
 
 interface UploadUiError {
   title: string;
@@ -85,6 +86,16 @@ const DIRECTORY_INPUT_ATTRIBUTES: DirectoryInputAttributes = { webkitdirectory: 
 const FILE_PREVIEW_LIMIT = 8;
 const IMPORT_JOB_POLL_MS = 900;
 const INTERRUPTED_UPLOAD_KEY = "viewer.interruptedImportUpload";
+
+const UNKNOWN_ANALYSIS_TYPES: Array<{
+  value: UnknownAnalysisType;
+  label: string;
+}> = [
+  { value: "Top-Down", label: "Top-Down" },
+  { value: "Bottom-Up", label: "Bottom-Up" },
+  { value: "Spectra Only", label: "Spectra Only" },
+  { value: "CUSTOM", label: "Custom" },
+];
 
 const ANALYSIS_TYPES: Array<{
   value: AnalysisType;
@@ -152,7 +163,8 @@ function stageTitle(state: UploadUiState, job: ImportJobOut | null): string {
 export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogProps) {
   const queryClient = useQueryClient();
   const [importWorkflow, setImportWorkflow] = useState<ImportWorkflow>("supported-format");
-  const [dataType, setDataType] = useState("");
+  const [unknownAnalysisType, setUnknownAnalysisType] = useState<UnknownAnalysisType | null>(null);
+  const [customDataType, setCustomDataType] = useState("");
   const [formatName, setFormatName] = useState("");
   const [formatDetails, setFormatDetails] = useState("");
   const [formatDetailsOpen, setFormatDetailsOpen] = useState(false);
@@ -195,7 +207,8 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     cancelRequestedRef.current = false;
     speedSamplesRef.current = [];
     setImportWorkflow("supported-format");
-    setDataType("");
+    setUnknownAnalysisType(null);
+    setCustomDataType("");
     setFormatName("");
     setFormatDetails("");
     setFormatDetailsOpen(false);
@@ -332,6 +345,9 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     || jobId !== null
     || cancelBusy;
   const unknownWorkflowBusy = importWorkflow === "unknown-format" && (folderPickerBusy || unknownFormatBusy);
+  const resolvedUnknownDataType = unknownAnalysisType === "CUSTOM"
+    ? customDataType.trim()
+    : unknownAnalysisType ?? "";
   const workflowDisabled = controlsDisabled || unknownWorkflowBusy;
   const closeDisabled = BLOCKING_LEAVE_STATES.has(uiState) || cancelBusy || unknownWorkflowBusy;
   const canCancelUpload = jobId === null && (
@@ -452,10 +468,10 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
   }, []);
 
   const runUnknownFormatAnalysis = useCallback(async () => {
-    if (!dataType.trim() || !formatName.trim() || !serverPath.trim()) {
+    if (!resolvedUnknownDataType || !formatName.trim() || !serverPath.trim()) {
       setUiError({
         title: "Required information is missing",
-        message: "Enter a data type and format name, then select the source folder.",
+        message: "Select an analysis type, enter the format name, then select the source folder.",
         code: null,
         fileName: null,
       });
@@ -467,7 +483,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     try {
       const created = await createUnknownFormatImport({
         source_path: serverPath.trim(),
-        data_type: dataType.trim(),
+        data_type: resolvedUnknownDataType,
         format_name: formatName.trim(),
         format_details: formatDetails.trim() || null,
       });
@@ -483,7 +499,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     } finally {
       setUnknownFormatBusy(false);
     }
-  }, [dataType, formatDetails, formatName, serverPath]);
+  }, [formatDetails, formatName, resolvedUnknownDataType, serverPath]);
 
   const runUpload = useCallback(async () => {
     const selectedImportType = importType;
@@ -692,14 +708,46 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
             <>
               <section className="space-y-1.5" aria-labelledby="unknown-data-type-title">
                 <h3 id="unknown-data-type-title" className="text-sm font-semibold">1. Analysis type</h3>
-                <Input
-                  id="unknown-data-type"
-                  value={dataType}
-                  disabled={unknownWorkflowBusy || unknownFormatResult !== null}
-                  placeholder="e.g. Bottom-Up"
-                  aria-required="true"
-                  onChange={(event) => setDataType(event.target.value)}
-                />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Analysis type">
+                  {UNKNOWN_ANALYSIS_TYPES.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={unknownAnalysisType === option.value}
+                      disabled={unknownWorkflowBusy || unknownFormatResult !== null}
+                      className={cn(
+                        "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                        unknownAnalysisType === option.value
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-background hover:bg-muted",
+                        "disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled disabled:text-disabled-foreground",
+                      )}
+                      onClick={() => {
+                        setUnknownAnalysisType(option.value);
+                        setUiError(null);
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                {unknownAnalysisType === "CUSTOM" && (
+                  <div className="space-y-1.5 pt-1">
+                    <label htmlFor="unknown-custom-data-type" className="text-xs font-medium text-muted-foreground">
+                      Custom analysis type
+                    </label>
+                    <Input
+                      id="unknown-custom-data-type"
+                      value={customDataType}
+                      maxLength={80}
+                      disabled={unknownWorkflowBusy || unknownFormatResult !== null}
+                      placeholder="Enter a new analysis type"
+                      aria-required="true"
+                      onChange={(event) => setCustomDataType(event.target.value)}
+                    />
+                  </div>
+                )}
               </section>
 
               <section className="space-y-1.5" aria-labelledby="unknown-format-name-title">
@@ -791,7 +839,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                   disabled={
                     unknownWorkflowBusy
                     || unknownFormatResult !== null
-                    || !dataType.trim()
+                    || !resolvedUnknownDataType
                     || !formatName.trim()
                     || !serverPath.trim()
                   }

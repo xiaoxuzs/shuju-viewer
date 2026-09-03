@@ -101,6 +101,8 @@ class Settings(BaseSettings):
     moonshot_request_timeout_seconds: int = Field(default=60, ge=1)
     agent_read_model: str = Field(default="kimi-k3")
     agent_read_max_output_tokens: int = Field(default=4096, ge=256)
+    agent_review_max_output_tokens: int = Field(default=16384, ge=1024)
+    agent_review_request_timeout_seconds: int = Field(default=300, ge=1)
     deepseek_api_key: str | None = Field(default=None)
     deepseek_base_url: str = Field(default="https://api.deepseek.com")
     deepseek_request_timeout_seconds: int = Field(default=120, ge=1)

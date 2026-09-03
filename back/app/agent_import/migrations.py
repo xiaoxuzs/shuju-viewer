@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from app.core.db import engine as default_engine
 
@@ -17,7 +17,7 @@ _DDL = (
         source_mode VARCHAR(24) NOT NULL,
         source_ref TEXT NOT NULL,
         dataset_fingerprint CHAR(32) NOT NULL,
-        analysis_category VARCHAR(24) NOT NULL,
+        analysis_category VARCHAR(80) NOT NULL,
         source_profile VARCHAR(160) NOT NULL,
         format_details TEXT NULL,
         interaction_mode VARCHAR(16) NOT NULL,
@@ -105,3 +105,27 @@ def ensure_agent_import_schema(db_engine: Engine | None = None) -> None:
     with (db_engine or default_engine).begin() as connection:
         for statement in _DDL:
             connection.execute(text(statement))
+        _widen_analysis_category_column(connection)
+
+
+def _widen_analysis_category_column(connection: Connection) -> None:
+    if connection.dialect.name != "postgresql":
+        return
+    current_length = connection.execute(
+        text(
+            """
+            SELECT character_maximum_length
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'agent_import_cases'
+              AND column_name = 'analysis_category'
+            """
+        )
+    ).scalar_one_or_none()
+    if current_length is not None and current_length < 80:
+        connection.execute(
+            text(
+                "ALTER TABLE agent_import_cases "
+                "ALTER COLUMN analysis_category TYPE VARCHAR(80)"
+            )
+        )

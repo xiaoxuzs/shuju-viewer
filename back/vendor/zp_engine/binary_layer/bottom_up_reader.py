@@ -46,6 +46,8 @@ class BottomUpReader:
             "source_type": metadata["source_type"],
             "adapter_flavor": metadata["adapter_flavor"],
             "identification_kind": metadata["identification_kind"],
+            "analysis_mode": metadata.get("analysis_mode"),
+            "source_software": metadata.get("source_software"),
             "run_id": metadata["core_run_id"],
             "report_run_name": metadata["report_run_name"],
             **counts,

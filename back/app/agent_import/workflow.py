@@ -9,9 +9,10 @@ from typing import Any
 
 from app.agent_import.binary_executor import BinaryExecutionResult, execute_binary_plan
 from app.agent_import.case_service import CaseRecord, CaseService, get_case_service
-from app.agent_import.contracts import AgentCandidatePlan
+from app.agent_import.contracts import AgentCandidatePlan, AgentPlanReview
 from app.agent_import.errors import AgentImportError
 from app.agent_import.model_provider import AgentModelContext, AgentModelProvider, get_agent_model_provider
+from app.agent_import.mapping_preflight import preflight_mapping_plan
 from app.agent_import.source_sampling import summarize_source_root
 from app.agent_import.states import CaseStatus
 from app.agent_zp.service import AgentZpError, import_agent_zp_candidate
@@ -51,7 +52,19 @@ class AgentImportWorkflow:
             plan = self.provider.build_candidate(context, strategy)
             if plan.analysis_category != case.analysis_category:
                 raise ValueError("Agent candidate cannot change the user-selected analysis_category")
+            if plan.status != "READY":
+                return self.service.record_candidate_needs_user(case_id, plan)
             case = self.service.save_candidate(case_id, plan)
+            preflight = preflight_mapping_plan(source_root=case.source_ref, plan=plan)
+            review_candidate = getattr(self.provider, "review_candidate", None)
+            review = (
+                review_candidate(context, strategy, plan, preflight)
+                if callable(review_candidate)
+                else AgentPlanReview(status="APPROVED", evidence=["Legacy test provider accepted."])
+            )
+            case = self.service.save_review(case_id, review)
+            if review.status != "APPROVED":
+                return case
             self.service.start_verification(case_id)
             result = self.binary_executor(
                 case_id=case_id,
@@ -84,6 +97,12 @@ class AgentImportWorkflow:
                 status_code=409,
             )
         plan = AgentCandidatePlan.model_validate(case.candidate_payload)
+        if plan.status != "READY" or plan.zp_conversion_plan is None:
+            raise AgentImportError(
+                "AGENT_CANDIDATE_MISSING",
+                "Approved Case has no executable ZP plan.",
+                status_code=409,
+            )
         try:
             zp_path = Path(case.candidate_zp_path).resolve(strict=True)
         except OSError as exc:
@@ -123,6 +142,7 @@ class AgentImportWorkflow:
         return AgentModelContext(
             case_id=case.case_id,
             context_revision=case.context_revision,
+            source_root=case.source_ref,
             analysis_category=case.analysis_category,
             requested_source_profile=case.source_profile,
             format_details=case.format_details,

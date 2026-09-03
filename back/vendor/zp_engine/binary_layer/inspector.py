@@ -5,6 +5,11 @@ from typing import Iterable
 from .exceptions import InvalidSourceError
 from .conversion_exceptions import TopDownConversionError
 from .bottom_up_exceptions import DiaResultConversionError
+from .composite_bottom_up_bundle import (
+    SOURCE_TYPE as COMPOSITE_BOTTOM_UP_SOURCE_TYPE,
+    CompositeBottomUpBundleInspector,
+)
+from .composite_bottom_up_exceptions import CompositeBottomUpConversionError
 from .dia_result_bundle import DiaResultBundleInspector
 from .models import SourceProfile
 from .top_down_adapter import TopDownAdapter
@@ -20,6 +25,7 @@ class SourceInspector:
         top_down_adapter: TopDownAdapter | None = None,
         top_down_interpretation_adapter: TopDownInterpretationAdapter | None = None,
         dia_result_bundle_inspector: DiaResultBundleInspector | None = None,
+        composite_bottom_up_inspector: CompositeBottomUpBundleInspector | None = None,
     ) -> None:
         self.top_down_adapter = top_down_adapter or TopDownAdapter()
         self.top_down_interpretation_adapter = (
@@ -27,6 +33,9 @@ class SourceInspector:
         )
         self.dia_result_bundle_inspector = (
             dia_result_bundle_inspector or DiaResultBundleInspector()
+        )
+        self.composite_bottom_up_inspector = (
+            composite_bottom_up_inspector or CompositeBottomUpBundleInspector()
         )
 
     def inspect(
@@ -41,6 +50,35 @@ class SourceInspector:
 
         path = paths[0]
         if path.is_dir():
+            try:
+                composite_bundle = self.composite_bottom_up_inspector.inspect_bundle(path)
+            except CompositeBottomUpConversionError as exc:
+                if exc.code != "COMPOSITE_BOTTOM_UP_BUNDLE_NOT_FOUND":
+                    raise
+            else:
+                return SourceProfile(
+                    source_type=COMPOSITE_BOTTOM_UP_SOURCE_TYPE,
+                    input_files=paths,
+                    file_count=len(composite_bundle.source_files),
+                    has_spectra=True,
+                    has_chromatograms=True,
+                    has_identification=True,
+                    has_quantification=True,
+                    requires_pre_conversion=False,
+                    notes=(
+                        "Single-run mzML plus MaxQuant result bundle inspected by exact Raw file and scan-number contracts.",
+                    ),
+                    path=path,
+                    file_size=sum(item.path.stat().st_size for item in composite_bundle.source_files),
+                    run_count=1,
+                    spectrum_source_type="mzml",
+                    detected_roles=composite_bundle.detected_roles,
+                    missing_required_roles=(),
+                    ambiguous_roles=(),
+                    identity_files=composite_bundle.identity_files,
+                    composite_bottom_up_bundle=composite_bundle,
+                    output_created_at_millis=composite_bundle.output_created_at_millis,
+                )
             try:
                 dia_bundle = self.dia_result_bundle_inspector.inspect_bundle(path)
             except DiaResultConversionError as exc:

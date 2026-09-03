@@ -208,6 +208,13 @@ def count_agent_notifications(workspace_id: str = Query(default=DEFAULT_WORKSPAC
 
 
 def _analysis_category(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise AgentImportError(
+            "AGENT_ANALYSIS_CATEGORY_INVALID",
+            "data_type must contain an analysis category.",
+            status_code=422,
+        )
     normalized = re_normalize(value)
     mapping = {
         "topdown": "TOP_DOWN",
@@ -215,14 +222,7 @@ def _analysis_category(value: str) -> str:
         "spectraonly": "SPECTRA_ONLY",
         "spectrumonly": "SPECTRA_ONLY",
     }
-    try:
-        return mapping[normalized]
-    except KeyError as exc:
-        raise AgentImportError(
-            "AGENT_ANALYSIS_CATEGORY_INVALID",
-            "data_type must be Top-Down, Bottom-Up, or Spectra Only.",
-            status_code=422,
-        ) from exc
+    return mapping.get(normalized, cleaned)
 
 
 def re_normalize(value: str) -> str:
