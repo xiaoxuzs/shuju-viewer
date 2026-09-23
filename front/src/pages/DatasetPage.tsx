@@ -12,6 +12,7 @@ import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLoading } from "@/components/common/page-loading";
 import { Stat } from "@/components/common/stat";
+import { DatasetCapabilityReportSlot } from "@/features/dataset-capabilities/DatasetCapabilityReportSlot";
 import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 
 export function DatasetPage() {
@@ -38,6 +39,8 @@ export function DatasetPage() {
         description={data.description ?? "Choose a cutoff level to browse proteins, proteoforms and PrSMs."}
         crumbs={[{ label: "Datasets", to: "/datasets" }, { label: data.name }]}
       />
+
+      <DatasetCapabilityReportSlot />
 
       <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Cutoffs" value={data.cutoffs.length} />

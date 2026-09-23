@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.bu.deps import require_bu_dataset
+from app.bu.q_value_filter import resolve_q_value_cutoff
 from app.bu.services.overview_service import get_overview, get_rt_mz_heatmap
 from app.schemas import BuOverviewOut, BuRtMzHeatmapOut
 
@@ -24,14 +25,14 @@ def rt_mz(
     slug: str,
     run_id: int | None = None,
     q_max: float | None = None,
+    q_filter: bool = True,
     bins_rt: int = Query(default=80, ge=10, le=200),
     bins_mz: int = Query(default=80, ge=10, le=200),
     decoy: bool = False,
     session: Session = Depends(get_db),
 ) -> BuRtMzHeatmapOut:
     dataset = require_bu_dataset(session, slug)
-    extra = dataset.get("extra_metadata") if isinstance(dataset.get("extra_metadata"), dict) else {}
-    effective_q_max = q_max if q_max is not None else float(extra.get("q_value_cutoff") or 0.01)
+    effective_q_max = resolve_q_value_cutoff(dataset, q_max, enabled=q_filter)
     return get_rt_mz_heatmap(
         session,
         dataset,

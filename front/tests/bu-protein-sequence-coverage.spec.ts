@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import { advisoryCapabilityReport } from "./capability-fixtures";
+
 const dataset = {
   id: 40,
   slug: "demo",
@@ -23,6 +25,7 @@ const protein = {
   gene_name: "GENE",
   description: "Coverage test protein",
   is_decoy: false,
+  is_decoy_state: "DIRECT",
   protein_group: "PTEST",
   peptide_count: 2,
   match_count: 3,
@@ -122,6 +125,9 @@ async function mockProteinDetail(page: Page) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
 
+    if (url.pathname === "/api/v1/datasets/demo/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(dataset.id));
+    }
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
     if (url.pathname === "/api/v1/datasets/demo/proteins/1") return fulfillJson(route, protein);
     if (url.pathname === "/api/v1/datasets/demo/proteins/2") return fulfillJson(route, manyPeptideProtein);

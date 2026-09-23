@@ -8,6 +8,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
+from app.declarative_ingest.contracts import DeclarativeImportPlan
+
 
 AgentAnalysisCategory = Annotated[
     str,
@@ -172,6 +174,7 @@ class ZpConversionPlan(_StrictModel):
     relative_source: str = Field(..., min_length=1, max_length=500)
     target_format_version: int | None = Field(default=None, ge=1, le=3)
     mapping_plan: ZpMappingPlan | None = None
+    declarative_plan: DeclarativeImportPlan | None = None
 
     @field_validator("relative_source")
     @classmethod
@@ -180,9 +183,10 @@ class ZpConversionPlan(_StrictModel):
 
 
 class AgentCandidatePlan(_StrictModel):
-    schema_version: Literal[1, 2] = 1
+    schema_version: Literal[1, 2, 3] = 1
     status: AgentCandidateStatus = "READY"
     analysis_category: AgentAnalysisCategory
+    physical_analysis_mode: Literal["SPECTRA_ONLY", "TOP_DOWN", "BOTTOM_UP"] | None = None
     source_profile: str = Field(..., min_length=1, max_length=160)
     binary_operation: AgentBinaryOperation | None = None
     zp_conversion_plan: ZpConversionPlan | None = None
@@ -214,17 +218,32 @@ class AgentCandidatePlan(_StrictModel):
             return self
         if self.binary_operation is None or self.zp_conversion_plan is None:
             raise ValueError("a READY decision requires an executable ZP operation")
+        if self.physical_analysis_mode is None:
+            if self.analysis_category in {"SPECTRA_ONLY", "TOP_DOWN", "BOTTOM_UP"}:
+                self.physical_analysis_mode = self.analysis_category
+            else:
+                raise ValueError("a READY custom analysis category requires physical_analysis_mode")
         relative_source = self.zp_conversion_plan.relative_source
         if self.binary_operation == "register_existing_zp" and not relative_source.casefold().endswith(".zp"):
             raise ValueError("register_existing_zp requires a .zp relative_source")
         mapping = self.zp_conversion_plan.mapping_plan
+        declarative = self.zp_conversion_plan.declarative_plan
         if self.binary_operation == "convert_declared_mapping_to_zp":
-            if self.schema_version != 2 or mapping is None:
-                raise ValueError("declared mapping conversion requires schema_version=2 and mapping_plan")
-            if self.zp_conversion_plan.target_format_version != mapping.target_format_version:
-                raise ValueError("mapping and conversion target_format_version must match")
-        elif mapping is not None:
-            raise ValueError("mapping_plan is allowed only for convert_declared_mapping_to_zp")
+            if (mapping is None) == (declarative is None):
+                raise ValueError("declared mapping conversion requires exactly one mapping contract")
+            if mapping is not None:
+                if self.schema_version != 2:
+                    raise ValueError("legacy declared mapping requires schema_version=2")
+                if self.zp_conversion_plan.target_format_version != mapping.target_format_version:
+                    raise ValueError("mapping and conversion target_format_version must match")
+            elif self.schema_version != 3:
+                raise ValueError("format-neutral declarative mapping requires schema_version=3")
+            elif self.physical_analysis_mode != "BOTTOM_UP":
+                raise ValueError("declarative Bottom-Up plans require physical_analysis_mode=BOTTOM_UP")
+            elif self.zp_conversion_plan.target_format_version not in {None, 3}:
+                raise ValueError("declarative ingestion writes physical ZP v3; a different requested version is not executable")
+        elif mapping is not None or declarative is not None:
+            raise ValueError("mapping contracts are allowed only for convert_declared_mapping_to_zp")
         return self
 
 
@@ -242,3 +261,17 @@ class AgentPlanReview(_StrictModel):
         if self.status == "REJECTED" and not self.issues:
             raise ValueError("REJECTED review requires issues")
         return self
+
+
+class CapabilityGap(_StrictModel):
+    """Engineering work request, never executable data-plan fields."""
+    schema_version: Literal[1] = 1
+    code: Literal["MISSING_IMPLEMENTATION"] = "MISSING_IMPLEMENTATION"
+    affected_step: Literal["candidate", "execution", "presentation"] = "candidate"
+    required: bool = True
+    analysis_category: AgentAnalysisCategory
+    source_profile: str
+    requirements: list[str] = Field(..., min_length=1, max_length=10)
+    candidate_context_revision: int = Field(ge=1)
+    engineering_status: Literal["BLOCKED_ENGINEERING_GATE"] = "BLOCKED_ENGINEERING_GATE"
+    blockers: list[str] = Field(default_factory=lambda: ["engineering_executor_not_enabled", "sandbox_attestation_required"])

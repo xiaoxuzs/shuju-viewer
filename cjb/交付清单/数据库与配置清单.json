@@ -1,0 +1,51 @@
+{
+  "source_server_version": "18.3",
+  "schema_only": true,
+  "tables": [
+    "agent_artifacts",
+    "agent_attempts",
+    "agent_import_cases",
+    "agent_messages",
+    "agent_notifications",
+    "checkpoint_blobs",
+    "checkpoint_migrations",
+    "checkpoint_writes",
+    "checkpoints",
+    "dataset_zp_assets",
+    "datasets",
+    "identification_matches",
+    "import_jobs",
+    "peptides",
+    "protein_relation_mapping",
+    "proteins",
+    "proteoforms",
+    "runs",
+    "zp_conversion_jobs"
+  ],
+  "business_records_exported": 0,
+  "adjusted_config_keys": [
+    "DATABASE_URL",
+    "DATA_ROOT",
+    "BU_DEFAULT_FASTA_PATH",
+    "ZP_ALLOWED_SOURCE_ROOTS",
+    "ZP_ENGINE_PATH",
+    "ZP_WORKER_PYTHON",
+    "ZP_WORKER_PYTHONPATH",
+    "THERMO_RAW_FILE_PARSER_EXE"
+  ],
+  "preserved_config_keys": [
+    "API_CORS_ORIGINS",
+    "LOG_LEVEL",
+    "SPECTRUM_CACHE_SIZE",
+    "MOONSHOT_API_KEY",
+    "MOONSHOT_BASE_URL",
+    "MOONSHOT_REQUEST_TIMEOUT_SECONDS",
+    "AGENT_READ_MODEL",
+    "AGENT_READ_MAX_OUTPUT_TOKENS",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_REQUEST_TIMEOUT_SECONDS",
+    "AGENT_IMPLEMENTATION_MODEL",
+    "AGENT_IMPLEMENTATION_MAX_OUTPUT_TOKENS"
+  ]
+}

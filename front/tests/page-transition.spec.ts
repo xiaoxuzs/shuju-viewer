@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import { advisoryCapabilityReport } from "./capability-fixtures";
+
 function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>((done) => {
@@ -189,6 +191,9 @@ test("keeps a theme-matched mask over slow navigation until the first D3 paint",
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/v1/datasets") return fulfillJson(route, [buDataset]);
+    if (url.pathname === "/api/v1/datasets/demo/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(buDataset.id));
+    }
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, buDataset);
     if (url.pathname === "/api/v1/datasets/demo/overview") {
       await overviewGate.promise;
@@ -228,6 +233,9 @@ test("uses fresh manual batches for Run changes and the chromatogram modal", asy
   const runTwoGate = deferred();
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/datasets/demo/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(buDataset.id));
+    }
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, buDataset);
     if (url.pathname === "/api/v1/datasets/demo/overview") return fulfillJson(route, buOverview);
     if (url.pathname.endsWith("/runs/1/chromatogram")) return fulfillJson(route, chromatogram(1));
@@ -270,6 +278,9 @@ test("waits for scan metadata, spectrum D3 paint, and the new Run chromatogram",
   ]);
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/datasets/spectra/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(spectraDataset.id));
+    }
     if (url.pathname === "/api/v1/datasets/spectra") return fulfillJson(route, spectraDataset);
     const scanIndexMatch = url.pathname.match(/\/datasets\/60\/runs\/(\d+)\/scan-index$/);
     if (scanIndexMatch) {
@@ -340,6 +351,9 @@ test("routes raw-only datasets to spectra even when legacy mode says bottom-up",
 
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/datasets/dda_raw/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(rawOnlyDataset.id));
+    }
     if (url.pathname === "/api/v1/datasets/dda_raw") return fulfillJson(route, rawOnlyDataset);
     if (url.pathname === "/api/v1/datasets/dda_raw/overview") {
       overviewRequests += 1;
@@ -433,6 +447,12 @@ test("ignores an old request after rapid navigation and covers browser back and 
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/v1/datasets") return fulfillJson(route, [datasetA, datasetB]);
+    if (url.pathname === "/api/v1/datasets/a/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(datasetA.id));
+    }
+    if (url.pathname === "/api/v1/datasets/b/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(datasetB.id));
+    }
     if (url.pathname === "/api/v1/datasets/a") {
       await datasetAGate.promise;
       return fulfillJson(route, datasetA);

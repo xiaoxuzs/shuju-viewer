@@ -78,6 +78,7 @@ _DDL = (
         sha256 CHAR(64) NOT NULL,
         size_bytes BIGINT NOT NULL,
         media_type VARCHAR(100) NULL,
+        payload_json TEXT NULL,
         created_at TEXT NOT NULL
     )
     """,
@@ -98,6 +99,27 @@ _DDL = (
     "CREATE INDEX IF NOT EXISTS ix_agent_messages_case_sequence ON agent_messages(case_id, sequence_no)",
     "CREATE INDEX IF NOT EXISTS ix_agent_artifacts_case_type ON agent_artifacts(case_id, artifact_type)",
     "CREATE INDEX IF NOT EXISTS ix_agent_notifications_active ON agent_notifications(active, kind)",
+    """
+    CREATE TABLE IF NOT EXISTS agent_deliveries (
+        case_id VARCHAR(36) PRIMARY KEY REFERENCES agent_import_cases(case_id),
+        operation_key CHAR(64) NOT NULL UNIQUE,
+        dataset_id BIGINT NOT NULL UNIQUE,
+        candidate_sha256 CHAR(64) NOT NULL,
+        handover_sha256 CHAR(64) NOT NULL,
+        published_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS agent_engineering_operations (
+        operation_key CHAR(64) PRIMARY KEY,
+        case_id VARCHAR(36) NOT NULL REFERENCES agent_import_cases(case_id),
+        context_revision INTEGER NOT NULL,
+        lease_token VARCHAR(36) NOT NULL,
+        state VARCHAR(40) NOT NULL,
+        candidate_sha256 CHAR(64) NOT NULL,
+        result_json TEXT NULL
+    )
+    """,
 )
 
 
@@ -106,6 +128,37 @@ def ensure_agent_import_schema(db_engine: Engine | None = None) -> None:
         for statement in _DDL:
             connection.execute(text(statement))
         _widen_analysis_category_column(connection)
+        _ensure_artifact_payload_column(connection)
+        _ensure_execution_columns(connection)
+        from app.agent_import.authorization_ledger import DDL as authorization_ddl
+        for statement in authorization_ddl:
+            connection.execute(text(statement))
+        from app.agent_import.local_sessions import DDL as session_ddl
+        for statement in session_ddl:
+            connection.execute(text(statement))
+        from app.agent_import.maintenance import DDL as maintenance_ddl
+        connection.execute(text(maintenance_ddl))
+        from app.agent_import.revisions import DDL as revision_ddl
+        for statement in revision_ddl:
+            connection.execute(text(statement))
+        from app.agent_import.asset_retention import DDL as retention_ddl
+        for statement in retention_ddl:
+            connection.execute(text(statement))
+        from app.agent_import.admission_policy import DDL as policy_ddl
+        for statement in policy_ddl:
+            connection.execute(text(statement))
+        from sqlalchemy import inspect
+        bound_columns = {c["name"] for c in inspect(connection).get_columns("agent_case_authority")}
+        if "policy_id" not in bound_columns:
+            connection.execute(text("ALTER TABLE agent_case_authority ADD COLUMN policy_id TEXT NULL"))
+        from app.agent_import.maintenance import ensure_consumer_columns
+        ensure_consumer_columns(connection)
+        from app.agent_import.task_runtime import DDL as task_ddl
+        for statement in task_ddl:
+            connection.execute(text(statement))
+        from app.agent_import.asset_retention import DDL as retention_ddl
+        for statement in retention_ddl:
+            connection.execute(text(statement))
 
 
 def _widen_analysis_category_column(connection: Connection) -> None:
@@ -129,3 +182,32 @@ def _widen_analysis_category_column(connection: Connection) -> None:
                 "ALTER COLUMN analysis_category TYPE VARCHAR(80)"
             )
         )
+
+
+def _ensure_artifact_payload_column(connection: Connection) -> None:
+    from sqlalchemy import inspect
+
+    columns = {item["name"] for item in inspect(connection).get_columns("agent_artifacts")}
+    if "payload_json" not in columns:
+        connection.execute(text("ALTER TABLE agent_artifacts ADD COLUMN payload_json TEXT NULL"))
+
+
+def _ensure_execution_columns(connection: Connection) -> None:
+    from sqlalchemy import inspect
+
+    columns = {item["name"] for item in inspect(connection).get_columns("agent_import_cases")}
+    for name, ddl in {
+        "lease_token": "VARCHAR(36) NULL",
+        "deadline_at": "TEXT NULL",
+        "model_tokens_reserved": "BIGINT NOT NULL DEFAULT 0",
+        "delivery_policy": "VARCHAR(20) NOT NULL DEFAULT 'manual'",
+        "ever_published": "INTEGER NOT NULL DEFAULT 0",
+        "progress_payload": "TEXT NULL",
+        "owner_id": "TEXT NOT NULL DEFAULT 'unowned'",
+        "source_content_sha256": "TEXT NULL",
+        "authorization_wait_reason": "TEXT NULL",
+        "authorization_resume_status": "TEXT NULL",
+    }.items():
+        if name not in columns:
+            connection.execute(text(f"ALTER TABLE agent_import_cases ADD COLUMN {name} {ddl}"))
+    connection.execute(text("UPDATE agent_import_cases SET ever_published=1 WHERE ever_published=0 AND (status='SUCCESS' OR dataset_id IS NOT NULL)"))

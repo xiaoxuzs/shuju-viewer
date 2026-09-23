@@ -131,13 +131,25 @@ def test_rt_mz_uses_postgresql_aggregate_queries_only() -> None:
     assert "SELECT retention_time, precursor_mz" not in aggregate_sql
     assert "run_id = :run_id" in bounds_sql
     assert "run_id = :run_id" in aggregate_sql
-    assert "COALESCE(is_decoy_match, false) = false" in aggregate_sql
+    assert "COALESCE(is_decoy_match, false) = true" in aggregate_sql
+    assert "is_decoy_state" in aggregate_sql
     assert "retention_time IS NOT NULL" in aggregate_sql
     assert "precursor_mz IS NOT NULL" in aggregate_sql
     assert bounds_params == {"dataset_id": 39, "q_max": 0.01, "run_id": 37}
     assert aggregate_params["bins_rt"] == 10
     assert aggregate_params["bins_mz"] == 10
     assert aggregate_params["run_id"] == 37
+
+
+def test_rt_mz_without_q_filter_does_not_exclude_null_q_values() -> None:
+    bounds, rows = _reference_bins([(12.0, 500.0)], bins_rt=10, bins_mz=10)
+    session = _Session(bounds, rows)
+    result = get_rt_mz_heatmap(
+        session, {"dataset_id": 39}, run_id=None, q_max=None,
+        bins_rt=10, bins_mz=10, decoy=False,
+    )
+    assert result.total_points == 1
+    assert all("q_value <=" not in sql and "q_max" not in params for sql, params in session.calls)
 
 
 def test_rt_mz_max_boundaries_are_clamped_to_last_bin() -> None:

@@ -1,0 +1,19 @@
+{
+  "source_snapshot_files": 908,
+  "original_files_changed_since_snapshot": [],
+  "copied_files_identical": 902,
+  "allowed_delivery_adaptations": [
+    "back\\.env",
+    "front\\vite.config.ts",
+    "start-all.bat",
+    "start-back.bat",
+    "start-front.bat",
+    ".gitignore"
+  ],
+  "unexpected_copy_changes": [],
+  "package_directory_links": [],
+  "delivery_data_files": 0,
+  "delivery_database_cluster_exists": false,
+  "package_file_count": 45119,
+  "package_bytes": 1192690155.0
+}

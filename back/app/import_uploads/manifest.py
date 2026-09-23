@@ -38,7 +38,7 @@ def read_manifest(upload_id: str) -> UploadManifest:
 
 def write_manifest(path: Path, manifest: UploadManifest) -> None:
     payload = json.dumps(
-        manifest.model_dump(mode="json"),
+        manifest.model_dump(mode="json", exclude={"case_id"} if manifest.case_id is None else set()),
         ensure_ascii=False,
         indent=2,
         sort_keys=True,

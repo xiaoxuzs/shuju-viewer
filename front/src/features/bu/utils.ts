@@ -20,6 +20,9 @@ export function formatSourceSoftwareName(sourceSoftware: string | null | undefin
 
 export function getBuDatasetDisplayDescription(dataset: DatasetOut): string {
   const isDiaclip = isDiaclipSourceSoftware(dataset.source_software);
+  if (!isDiaclip && dataset.source_software !== "DIA-NN") {
+    return dataset.description ?? `Bottom-Up dataset from ${formatSourceSoftwareName(dataset.source_software) ?? "the supplied source"}.`;
+  }
   const description = dataset.description
     ?? `Bottom-Up DIA dataset imported from ${isDiaclip ? DIACLIP_DISPLAY_NAME : "DIA-NN"} results.`;
   return isDiaclip

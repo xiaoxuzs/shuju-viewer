@@ -19,6 +19,8 @@ interface Props {
   matchId: number;
   match: BuMatchDetailOut;
   hasPfmb: boolean;
+  fragmentAnnotationsAvailable?: boolean;
+  spectrumSource?: string | null;
   inspectedRt: { rt: number; source: InspectedRtSource } | null;
   selectedXicPoint: BuXicPointSelection | null;
   xic: EvidenceDataState<BuXicOut>;
@@ -44,10 +46,10 @@ function BuEvidenceSummaryWithHook(props: Props) {
 }
 
 function BuEvidenceSummaryInner({
-  slug,
-  matchId,
   match,
   hasPfmb,
+  fragmentAnnotationsAvailable = true,
+  spectrumSource,
   inspectedRt,
   selectedXicPoint,
   xic,
@@ -58,9 +60,11 @@ function BuEvidenceSummaryInner({
     () =>
       buildBuEvidenceSummary({
         match,
-        xic,
-        ms2,
+        xic: { data: xic.data, isLoading: xic.isLoading, isError: xic.isError },
+        ms2: { data: ms2.data, isLoading: ms2.isLoading, isError: ms2.isError },
         hasPfmb,
+        fragmentAnnotationsAvailable,
+        spectrumSource,
         pfmbSlots: {
           data: pfmb.slots.data,
           isLoading: pfmb.slots.isLoading,
@@ -77,6 +81,7 @@ function BuEvidenceSummaryInner({
       }),
     [
       hasPfmb,
+      fragmentAnnotationsAvailable,
       inspectedRt,
       match,
       ms2.data,
@@ -90,8 +95,7 @@ function BuEvidenceSummaryInner({
       pfmb.slots.isError,
       pfmb.slots.isLoading,
       selectedXicPoint,
-      slug,
-      matchId,
+      spectrumSource,
       xic.data,
       xic.isError,
       xic.isLoading,

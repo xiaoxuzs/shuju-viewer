@@ -1,0 +1,270 @@
+[
+  {
+    "path": ".agents",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": ".codex",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": ".git",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": ".tmp",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": ".vscode",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\.pytest_cache",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\.pytest-tmp",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\.venv",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\agent_import\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\agent_zp\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\api\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\api\\v1\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\api\\v1\\bu\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\bu\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\bu\\services\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\bu\\tdf_reader\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\core\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\dataset_capabilities\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\dataset_ingest_root\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\declarative_ingest\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\fingerprint\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\import_uploads\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\ingest\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\ingest\\td\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\ingest\\zp\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\pfmb\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\raw_conversion\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\schemas\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\services\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\services\\import_planner\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\source_inspection\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\zp_conversion\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\app\\zp_runtime\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\scripts\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\tests\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "back\\uvicorn-diaclip-fix.err.log",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "back\\uvicorn-diaclip-fix.out.log",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "back\\uvicorn-pr8.err.log",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "back\\uvicorn-pr8.out.log",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "back\\uvicorn-pr9.err.log",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "back\\uvicorn-pr9.out.log",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "cjb",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "dia-ms2-pipei\\Hela_DIA_v2_for_frontend\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "dia-ms2-pipei\\Hela_DIA_v2_for_frontend\\data",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "dia-ms2-pipei\\Hela_DIA_v2_for_frontend.zip",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "front\\.pnpm-store",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "front\\dist",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "front\\node_modules",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "front\\debug.log",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "front\\tsconfig.app.tsbuildinfo",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "front\\tsconfig.node.tsbuildinfo",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "Hela_DIA_v2_PFMB_delivery_20260629\\data",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "logs",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "MD5-demo\\__pycache__",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "mzml-demo\\.venv",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "mzml-demo\\data",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "shuju",
+    "reason": "data/cache/local-environment directory"
+  },
+  {
+    "path": "_p2_1s_run.sh",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "deploy_ssh_helper.py",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "importtime.log",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "vite-err.txt",
+    "reason": "data/cache/local-operations file"
+  },
+  {
+    "path": "vite-out.txt",
+    "reason": "data/cache/local-operations file"
+  }
+]

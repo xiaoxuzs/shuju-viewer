@@ -8,6 +8,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.bu.decoy_truth import confirmed_decoy_sql, decoy_value_for_api
+from app.bu.q_value_filter import resolve_q_value_cutoff
 from app.schemas import (
     BuMatchDetailOut,
     BuMatchListItemOut,
@@ -32,6 +34,11 @@ from app.zp_runtime import (
 )
 
 
+_CONFIRMED_MATCH_DECOY_SQL = confirmed_decoy_sql("im.is_decoy_match", "im.extra_metadata")
+_CONFIRMED_PROTEIN_DECOY_SQL = confirmed_decoy_sql("p.is_decoy", "p.extra_metadata")
+_CONFIRMED_UNALIASED_MATCH_DECOY_SQL = confirmed_decoy_sql("is_decoy_match", "extra_metadata")
+
+
 def _json_object(raw: Any) -> dict[str, Any]:
     return dict(raw) if isinstance(raw, dict) else {}
 
@@ -40,17 +47,6 @@ def _protein_accessions(protein_group: str | None) -> list[str]:
     if not protein_group:
         return []
     return [part.strip() for part in protein_group.split(";") if part.strip()]
-
-
-def _q_value_cutoff(dataset: dict[str, Any], q_max: float | None) -> float | None:
-    if q_max is not None:
-        return q_max
-    extra = _json_object(dataset.get("extra_metadata"))
-    value = extra.get("q_value_cutoff")
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _pagination(page: int, page_size: int) -> tuple[int, int]:
@@ -95,16 +91,17 @@ def list_matches(
     decoy: bool,
     sort: str,
     order: str,
+    q_filter: bool = True,
 ) -> Page[BuMatchListItemOut]:
     dataset_id = int(dataset["dataset_id"])
     params: dict[str, Any] = {"dataset_id": dataset_id}
     where = ["im.dataset_id = :dataset_id", "im.entity_type = 'PEPTIDE'"]
-    cutoff = _q_value_cutoff(dataset, q_max)
+    cutoff = resolve_q_value_cutoff(dataset, q_max, enabled=q_filter)
     if cutoff is not None:
         where.append("im.q_value <= :q_max")
         params["q_max"] = cutoff
     if not decoy:
-        where.append("im.is_decoy_match = false")
+        where.append(f"NOT {_CONFIRMED_MATCH_DECOY_SQL}")
     if run_id is not None:
         where.append("im.run_id = :run_id")
         params["run_id"] = run_id
@@ -170,6 +167,9 @@ def list_matches(
             f"""
             SELECT
                 im.match_id AS id,
+                jsonb_extract_path_text(im.extra_metadata, 'source_record_id') AS source_record_id,
+                jsonb_extract_path_text(im.extra_metadata, 'source_run_name') AS source_run_name,
+                jsonb_extract_path_text(im.extra_metadata, 'source_relative_path') AS source_relative_path,
                 im.run_id,
                 r.file_name AS run_name,
                 im.entity_id AS peptide_id,
@@ -183,8 +183,10 @@ def list_matches(
                 im.score,
                 im.intensity,
                 im.is_decoy_match,
+                jsonb_extract_path_text(im.extra_metadata, 'is_decoy_state') AS is_decoy_state,
                 im.scan_number,
                 jsonb_extract_path_text(im.extra_metadata, 'protein_group') AS protein_group,
+                jsonb_extract_path(im.extra_metadata, 'protein_accessions') AS source_protein_accessions,
                 jsonb_extract_path_text(im.extra_metadata, 'genes') AS genes,
                 im.search_engine
             {base_sql}
@@ -194,13 +196,20 @@ def list_matches(
         ),
         params,
     ).mappings().all()
-    items = [
-        BuMatchListItemOut(
-            **dict(row),
-            protein_accessions=_protein_accessions(row.get("protein_group")),
+    items = []
+    for row in rows:
+        payload = dict(row)
+        declared_accessions = payload.pop("source_protein_accessions", None)
+        payload["is_decoy_match"], payload["is_decoy_state"] = decoy_value_for_api(
+            payload.get("is_decoy_match"),
+            payload.get("is_decoy_state"),
         )
-        for row in rows
-    ]
+        items.append(
+            BuMatchListItemOut(
+                **payload,
+                protein_accessions=declared_accessions if isinstance(declared_accessions, list) else _protein_accessions(row.get("protein_group")),
+            )
+        )
     return Page[BuMatchListItemOut](items=items, total=total, page=page, page_size=page_size)
 
 
@@ -216,7 +225,7 @@ def list_proteins(
     params: dict[str, Any] = {"dataset_id": int(dataset["dataset_id"])}
     where = ["p.dataset_id = :dataset_id"]
     if not decoy:
-        where.append("p.is_decoy = false")
+        where.append(f"NOT {_CONFIRMED_PROTEIN_DECOY_SQL}")
     if search:
         where.append(
             """
@@ -230,35 +239,34 @@ def list_proteins(
         )
         params["search"] = f"%{search}%"
     where_sql = " AND ".join(where)
-    base_sql = f"""
-        FROM proteins p
-        LEFT JOIN protein_relation_mapping prm
-          ON prm.dataset_id = p.dataset_id
-         AND prm.protein_id = p.protein_id
-         AND prm.entity_type = 'PEPTIDE'
-        LEFT JOIN identification_matches im
-          ON im.dataset_id = prm.dataset_id
-         AND im.entity_type = 'PEPTIDE'
-         AND im.entity_id = prm.entity_id
-        WHERE {where_sql}
-        GROUP BY p.protein_id
-    """
-    total = int(session.scalar(text(f"SELECT count(*) FROM (SELECT p.protein_id {base_sql}) q"), params) or 0)
+    base_sql = f"FROM proteins p LEFT JOIN relation_counts rc ON rc.protein_id=p.protein_id WHERE {where_sql}"
+    total = int(session.scalar(text(f"SELECT count(*) FROM proteins p WHERE {where_sql}"), params) or 0)
     offset, limit = _pagination(page, page_size)
     params.update({"offset": offset, "limit": limit})
     rows = session.execute(
         text(
             f"""
+            WITH match_counts AS MATERIALIZED (
+                SELECT entity_id,count(*) AS n,min(q_value) AS best_q
+                FROM identification_matches WHERE dataset_id=:dataset_id AND entity_type='PEPTIDE' GROUP BY entity_id
+            ), relation_counts AS MATERIALIZED (
+                SELECT prm.protein_id,count(DISTINCT prm.entity_id) AS peptide_count,
+                       sum(COALESCE(mc.n,0)) AS match_count,min(mc.best_q) AS best_q_value
+                FROM (SELECT DISTINCT protein_id,entity_id FROM protein_relation_mapping
+                      WHERE dataset_id=:dataset_id AND entity_type='PEPTIDE') prm
+                LEFT JOIN match_counts mc ON mc.entity_id=prm.entity_id GROUP BY prm.protein_id
+            )
             SELECT
                 p.protein_id AS id,
                 p.accession,
                 p.gene_name,
                 p.description,
                 p.is_decoy,
+                jsonb_extract_path_text(p.extra_metadata, 'is_decoy_state') AS is_decoy_state,
                 jsonb_extract_path_text(p.extra_metadata, 'protein_group') AS protein_group,
-                count(DISTINCT prm.entity_id) AS peptide_count,
-                count(im.match_id) AS match_count,
-                min(im.q_value) AS best_q_value,
+                COALESCE(rc.peptide_count,0) AS peptide_count,
+                COALESCE(rc.match_count,0) AS match_count,
+                rc.best_q_value,
                 CAST(jsonb_extract_path_text(p.extra_metadata, 'pg_max_lfq') AS double precision) AS pg_max_lfq,
                 CAST(jsonb_extract_path_text(p.extra_metadata, 'pg_q_value') AS double precision) AS pg_q_value,
                 NULL::double precision AS pg_quantity
@@ -280,6 +288,10 @@ def list_proteins(
         )
         if binary is not None:
             payload = _binary_protein_list_payload(payload, binary)
+        payload["is_decoy"], payload["is_decoy_state"] = decoy_value_for_api(
+            payload.get("is_decoy"),
+            payload.get("is_decoy_state"),
+        )
         items.append(BuProteinListItemOut(**payload))
     return Page[BuProteinListItemOut](
         items=items,
@@ -297,54 +309,49 @@ def list_peptides(
     page_size: int,
     search: str | None,
     q_max: float | None,
+    q_filter: bool = True,
 ) -> Page[BuPeptideListItemOut]:
     params: dict[str, Any] = {"dataset_id": int(dataset["dataset_id"])}
     where = ["p.dataset_id = :dataset_id"]
     if search:
         where.append("p.sequence ILIKE :search")
         params["search"] = f"%{search}%"
-    cutoff = _q_value_cutoff(dataset, q_max)
+    cutoff = resolve_q_value_cutoff(dataset, q_max, enabled=q_filter)
     im_filter = ""
     if cutoff is not None:
         im_filter = "AND im.q_value <= :q_max"
         params["q_max"] = cutoff
     where_sql = " AND ".join(where)
-    base_sql = f"""
-        FROM peptides p
-        LEFT JOIN identification_matches im
-          ON im.dataset_id = p.dataset_id
-         AND im.entity_type = 'PEPTIDE'
-         AND im.entity_id = p.peptide_id
-         AND im.is_decoy_match = false
-         {im_filter}
-        LEFT JOIN protein_relation_mapping prm
-          ON prm.dataset_id = p.dataset_id
-         AND prm.entity_type = 'PEPTIDE'
-         AND prm.entity_id = p.peptide_id
-        WHERE {where_sql}
-        GROUP BY p.peptide_id
-    """
-    total = int(session.scalar(text(f"SELECT count(*) FROM (SELECT p.peptide_id {base_sql}) q"), params) or 0)
+    base_sql = f"FROM peptides p LEFT JOIN match_counts mc ON mc.entity_id=p.peptide_id LEFT JOIN protein_counts pc ON pc.entity_id=p.peptide_id WHERE {where_sql}"
+    total = int(session.scalar(text(f"SELECT count(*) FROM peptides p WHERE {where_sql}"), params) or 0)
     offset, limit = _pagination(page, page_size)
     params.update({"offset": offset, "limit": limit})
     rows = session.execute(
         text(
             f"""
+            WITH match_counts AS MATERIALIZED (
+                SELECT im.entity_id,count(*) AS match_count,min(im.q_value) AS best_q_value,
+                    (array_agg(im.precursor_mz ORDER BY im.q_value ASC NULLS LAST,im.match_id))[1] AS best_precursor_mz,
+                    (array_agg(im.precursor_charge ORDER BY im.q_value ASC NULLS LAST,im.match_id))[1] AS best_charge,
+                    (array_agg(im.match_id ORDER BY im.q_value ASC NULLS LAST,im.match_id))[1] AS best_match_id,
+                    (array_agg(im.modified_sequence ORDER BY im.q_value ASC NULLS LAST,im.match_id))[1] AS example_modified,
+                    string_agg(DISTINCT jsonb_extract_path_text(im.extra_metadata,'protein_group'),';') AS protein_groups,
+                    string_agg(DISTINCT jsonb_extract_path_text(im.extra_metadata,'genes'),';') AS genes
+                FROM identification_matches im WHERE im.dataset_id=:dataset_id AND im.entity_type='PEPTIDE'
+                    AND NOT {_CONFIRMED_MATCH_DECOY_SQL} {im_filter} GROUP BY im.entity_id
+            ), protein_counts AS MATERIALIZED (
+                SELECT entity_id,count(DISTINCT protein_id) AS protein_count FROM protein_relation_mapping
+                WHERE dataset_id=:dataset_id AND entity_type='PEPTIDE' GROUP BY entity_id
+            )
             SELECT
                 p.peptide_id AS id,
                 p.sequence,
                 p.length,
                 p.theoretical_mass,
                 p.missed_cleavages,
-                count(im.match_id) AS match_count,
-                count(DISTINCT prm.protein_id) AS protein_count,
-                min(im.q_value) AS best_q_value,
-                (array_agg(im.precursor_mz ORDER BY im.q_value ASC NULLS LAST))[1] AS best_precursor_mz,
-                (array_agg(im.precursor_charge ORDER BY im.q_value ASC NULLS LAST))[1] AS best_charge,
-                (array_agg(im.match_id ORDER BY im.q_value ASC NULLS LAST))[1] AS best_match_id,
-                string_agg(DISTINCT jsonb_extract_path_text(im.extra_metadata, 'protein_group'), ';') AS protein_groups,
-                string_agg(DISTINCT jsonb_extract_path_text(im.extra_metadata, 'genes'), ';') AS genes,
-                (array_agg(im.modified_sequence ORDER BY im.q_value ASC NULLS LAST))[1] AS example_modified
+                COALESCE(mc.match_count,0) AS match_count,
+                COALESCE(pc.protein_count,0) AS protein_count,
+                mc.best_q_value,mc.best_precursor_mz,mc.best_charge,mc.best_match_id,mc.protein_groups,mc.genes,mc.example_modified
             {base_sql}
             ORDER BY best_q_value ASC NULLS LAST, p.peptide_id ASC
             OFFSET :offset LIMIT :limit
@@ -408,13 +415,23 @@ def get_match_detail(
         {"dataset_id": int(dataset["dataset_id"]), "peptide_id": int(match["entity_id"])},
     ).mappings().all()
     protein_group = meta.get("protein_group")
+    direct_accessions = meta.get("protein_accessions")
+    if isinstance(direct_accessions, list):
+        proteins = [p for p in proteins if p["accession"] in direct_accessions]
     links_base = f"/api/v1/datasets/{dataset['slug']}/matches/{match['match_id']}"
     rt_apex = _first_value(
         _seconds_to_minutes(binary_identification.get("rt_seconds")),
         match.get("retention_time"),
     )
+    is_decoy_match, is_decoy_state = decoy_value_for_api(
+        match.get("is_decoy_match"),
+        meta.get("is_decoy_state"),
+    )
     list_item = BuMatchListItemOut(
         id=int(match["match_id"]),
+        source_record_id=meta.get("source_record_id"),
+        source_run_name=meta.get("source_run_name"),
+        source_relative_path=meta.get("source_relative_path"),
         run_id=int(match["run_id"]),
         run_name=str(match["run_name"] or ""),
         peptide_id=int(match["entity_id"]),
@@ -427,10 +444,11 @@ def get_match_detail(
         q_value=_first_value(binary_typed.get("q_value"), match.get("q_value")),
         score=_first_value(binary_typed.get("global_q_value"), binary_typed.get("q_value"), match.get("score")),
         intensity=_first_value(_binary_identification_intensity(binary), match.get("intensity")),
-        is_decoy_match=bool(match.get("is_decoy_match")),
+        is_decoy_match=is_decoy_match,
+        is_decoy_state=is_decoy_state,
         scan_number=scan_number,
         protein_group=protein_group,
-        protein_accessions=_protein_accessions(protein_group),
+        protein_accessions=direct_accessions if isinstance(direct_accessions, list) else _protein_accessions(protein_group),
         genes=meta.get("genes"),
         search_engine=match.get("search_engine"),
     )
@@ -564,9 +582,12 @@ def _binary_protein_list_payload(
     protein = binary.protein
     out = dict(payload)
     out["accession"] = _first_value(protein.get("accession"), out.get("accession"))
-    out["gene_name"] = _first_value(protein.get("gene"), protein.get("name"), out.get("gene_name"))
+    out["gene_name"] = _first_value(protein.get("gene"), out.get("gene_name"))
     out["description"] = _first_value(protein.get("description"), out.get("description"))
-    out["is_decoy"] = bool(_first_value(protein.get("is_decoy"), out.get("is_decoy")))
+    if "is_decoy" in protein:
+        binary_decoy = protein.get("is_decoy")
+        out["is_decoy"] = binary_decoy if isinstance(binary_decoy, bool) else None
+        out["is_decoy_state"] = "DIRECT" if isinstance(binary_decoy, bool) else "MISSING"
     out["protein_group"] = _first_value(_joined_values(binary.protein_groups, "source_group"), out.get("protein_group"))
     out["peptide_count"] = len(binary.peptides)
     out["match_count"] = len(binary.identifications)
@@ -662,7 +683,7 @@ def get_peptide_detail(session: Session, dataset: dict[str, Any], peptide_id: in
 
     item_rows = session.execute(
         text(
-            """
+            f"""
             SELECT
                 p.peptide_id AS id,
                 p.sequence,
@@ -684,7 +705,7 @@ def get_peptide_detail(session: Session, dataset: dict[str, Any], peptide_id: in
               ON im.dataset_id = p.dataset_id
              AND im.entity_type = 'PEPTIDE'
              AND im.entity_id = p.peptide_id
-             AND im.is_decoy_match = false
+             AND NOT {_CONFIRMED_MATCH_DECOY_SQL}
             LEFT JOIN protein_relation_mapping prm
               ON prm.dataset_id = p.dataset_id
              AND prm.entity_type = 'PEPTIDE'
@@ -720,7 +741,7 @@ def get_peptide_detail(session: Session, dataset: dict[str, Any], peptide_id: in
     ).mappings().all()
     match_rows = session.execute(
         text(
-            """
+            f"""
             SELECT
                 im.match_id AS id,
                 im.run_id,
@@ -735,7 +756,7 @@ def get_peptide_detail(session: Session, dataset: dict[str, Any], peptide_id: in
             WHERE im.dataset_id = :dataset_id
               AND im.entity_type = 'PEPTIDE'
               AND im.entity_id = :peptide_id
-              AND im.is_decoy_match = false
+              AND NOT {_CONFIRMED_MATCH_DECOY_SQL}
             ORDER BY im.q_value ASC NULLS LAST, im.match_id ASC
             LIMIT 20
             """
@@ -745,13 +766,13 @@ def get_peptide_detail(session: Session, dataset: dict[str, Any], peptide_id: in
     total_matches = int(
         session.scalar(
             text(
-                """
+                f"""
                 SELECT count(*)
                 FROM identification_matches
                 WHERE dataset_id = :dataset_id
                   AND entity_type = 'PEPTIDE'
                   AND entity_id = :peptide_id
-                  AND is_decoy_match = false
+                  AND NOT {_CONFIRMED_UNALIASED_MATCH_DECOY_SQL}
                 """
             ),
             {"dataset_id": int(dataset["dataset_id"]), "peptide_id": peptide_id},

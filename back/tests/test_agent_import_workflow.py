@@ -14,6 +14,7 @@ from app.agent_import.migrations import ensure_agent_import_schema
 from app.agent_import.states import CaseStatus
 from app.agent_import.workflow import AgentImportWorkflow
 from app.agent_zp.service import AgentZpError
+from app.fingerprint import compute_dataset_metadata_fingerprint
 
 
 class FakeProvider:
@@ -31,6 +32,9 @@ class FakeProvider:
             }
         )
 
+    def review_candidate(self, context, strategy, candidate, preflight):
+        return AgentPlanReview(status="APPROVED", evidence=["test review"])
+
 
 def test_workflow_generates_zp_then_waits_for_user_approval(tmp_path: Path) -> None:
     engine = create_engine(f"sqlite+pysqlite:///{(tmp_path / 'agent.sqlite').as_posix()}", future=True)
@@ -39,13 +43,14 @@ def test_workflow_generates_zp_then_waits_for_user_approval(tmp_path: Path) -> N
     source = tmp_path / "unknown"
     source.mkdir()
     (source / "candidate.zp").write_bytes(b"input")
+    fingerprint = compute_dataset_metadata_fingerprint(source).fingerprint
     output = tmp_path / "validated.zp"
     output.write_bytes(b"validated")
     certificate = tmp_path / "deep.json"
     certificate.write_text("{}", encoding="utf-8")
     case = service.create_case(
         source_ref=str(source),
-        dataset_fingerprint="a" * 32,
+        dataset_fingerprint=fingerprint,
         analysis_category="SPECTRA_ONLY",
         source_profile="vendor-zp",
         format_details=None,
@@ -60,8 +65,12 @@ def test_workflow_generates_zp_then_waits_for_user_approval(tmp_path: Path) -> N
             format_version=3,
             validation_mode="deep",
             validation_certificate_path=certificate,
-            source_fingerprint="a" * 32,
+            source_fingerprint=fingerprint,
         ),
+        candidate_stager=lambda _case, _result, _plan: {
+            "verification": {"readable_run_count": 1},
+            "capability_report": None,
+        },
         candidate_importer=lambda _case, body: SimpleNamespace(dataset_id=91, dataset_slug=body.slug),
     )
 
@@ -103,9 +112,10 @@ def test_agent_1_review_can_require_user_input_before_binary_execution(tmp_path:
     source = tmp_path / "unknown-review"
     source.mkdir()
     (source / "candidate.zp").write_bytes(b"input")
+    fingerprint = compute_dataset_metadata_fingerprint(source).fingerprint
     case = service.create_case(
         source_ref=str(source),
-        dataset_fingerprint="c" * 32,
+        dataset_fingerprint=fingerprint,
         analysis_category="SPECTRA_ONLY",
         source_profile="vendor-zp",
         format_details=None,
@@ -121,8 +131,53 @@ def test_agent_1_review_can_require_user_input_before_binary_execution(tmp_path:
         service=service,
         provider=NeedsUserProvider(),
         binary_executor=binary_executor,
+        candidate_stager=lambda _case, _result, _plan: {},
     ).run_case(case.case_id)
 
     assert waiting.status == CaseStatus.NEEDS_USER
     assert executed is False
     assert len(service.list_notifications()) == 1
+
+
+def test_approval_rejects_source_changed_after_candidate_review(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite+pysqlite:///{(tmp_path / 'source-change.sqlite').as_posix()}", future=True)
+    ensure_agent_import_schema(engine)
+    service = CaseService(engine)
+    source = tmp_path / "source-change"
+    source.mkdir()
+    source_file = source / "candidate.zp"
+    source_file.write_bytes(b"input")
+    fingerprint = compute_dataset_metadata_fingerprint(source).fingerprint
+    output = tmp_path / "source-change-validated.zp"
+    output.write_bytes(b"validated")
+    case = service.create_case(
+        source_ref=str(source),
+        dataset_fingerprint=fingerprint,
+        analysis_category="SPECTRA_ONLY",
+        source_profile="vendor-zp",
+        format_details=None,
+    )
+    workflow = AgentImportWorkflow(
+        service=service,
+        provider=FakeProvider(),
+        binary_executor=lambda **_kwargs: BinaryExecutionResult(
+            zp_path=output,
+            output_sha256="b" * 64,
+            format_version=3,
+            validation_mode="deep",
+            validation_certificate_path=None,
+            source_fingerprint=fingerprint,
+        ),
+        candidate_stager=lambda _case, _result, _plan: {"verification": {}, "capability_report": None},
+        candidate_importer=lambda _case, _body: (_ for _ in ()).throw(
+            AssertionError("changed source must not publish")
+        ),
+    )
+    ready = workflow.run_case(case.case_id)
+    source_file.write_bytes(b"changed")
+
+    with pytest.raises(AgentImportError) as exc_info:
+        workflow.approve_case(case.case_id, expected_version=ready.version)
+
+    assert exc_info.value.code == "SOURCE_CHANGED"
+    assert service.get_case(case.case_id).status == CaseStatus.READY_FOR_REVIEW

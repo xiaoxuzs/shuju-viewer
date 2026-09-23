@@ -54,6 +54,8 @@ export function BuListFilters({
             min="0"
             step="0.001"
             value={qMax ?? ""}
+            aria-label="Q max"
+            placeholder="No filter"
             onChange={(e) => onQMaxChange(e.target.value)}
           />
         </div>
@@ -62,6 +64,7 @@ export function BuListFilters({
         <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           Run
           <select
+            aria-label="Run"
             value={runId ?? ""}
             onChange={(e) => onRunIdChange(e.target.value)}
             className="max-w-[280px] rounded-md border border-input bg-background px-2 py-2 text-xs text-foreground"
@@ -83,7 +86,7 @@ export function BuListFilters({
             onChange={(e) => onHideDecoyChange(e.target.checked)}
             className="h-4 w-4 rounded border-border"
           />
-          Hide decoy
+          Hide confirmed decoys
         </label>
       )}
       <Button

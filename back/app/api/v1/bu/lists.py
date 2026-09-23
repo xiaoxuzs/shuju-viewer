@@ -40,6 +40,7 @@ def peptides(
     page_size: int = Query(50, ge=1, le=500),
     search: str | None = None,
     q_max: float | None = None,
+    q_filter: bool = True,
     session: Session = Depends(get_db),
 ) -> Page[BuPeptideListItemOut]:
     dataset = require_bu_dataset(session, slug)
@@ -50,6 +51,7 @@ def peptides(
         page_size=page_size,
         search=search,
         q_max=q_max,
+        q_filter=q_filter,
     )
 
 
@@ -72,6 +74,7 @@ def matches(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     q_max: float | None = None,
+    q_filter: bool = True,
     run_id: int | None = None,
     peptide_id: int | None = None,
     protein_id: int | None = None,
@@ -89,6 +92,7 @@ def matches(
         page=page,
         page_size=page_size,
         q_max=q_max,
+        q_filter=q_filter,
         run_id=run_id,
         peptide_id=peptide_id,
         protein_id=protein_id,
@@ -98,4 +102,3 @@ def matches(
         sort=sort,
         order=order,
     )
-

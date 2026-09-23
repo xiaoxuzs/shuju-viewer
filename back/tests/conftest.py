@@ -20,7 +20,7 @@ from postgres_support import (
 )
 
 
-_TEST_ENV_KEYS = ("VIEWER_ENV", "DATABASE_URL", "DATA_ROOT", "MOONSHOT_API_KEY", "DEEPSEEK_API_KEY")
+_TEST_ENV_KEYS = ("VIEWER_ENV", "DATABASE_URL", "DATA_ROOT", "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "AGENT_MODEL_AUTHORIZATION_REQUIRED")
 _PREVIOUS_ENV = {name: os.environ.get(name) for name in _TEST_ENV_KEYS}
 _PREVIOUS_DONT_WRITE_BYTECODE = sys.dont_write_bytecode
 _TEST_DIRECTORY = tempfile.TemporaryDirectory(prefix="viewer-pytest-")
@@ -31,8 +31,10 @@ _TEST_DATA_ROOT.mkdir()
 os.environ["VIEWER_ENV"] = "test"
 os.environ["DATABASE_URL"] = f"sqlite+pysqlite:///{(_TEST_ROOT / 'viewer-test.sqlite').as_posix()}"
 os.environ["DATA_ROOT"] = str(_TEST_DATA_ROOT)
-os.environ.pop("MOONSHOT_API_KEY", None)
-os.environ.pop("DEEPSEEK_API_KEY", None)
+os.environ.pop("OPENAI_API_KEY", None)
+os.environ["OPENAI_BASE_URL"] = "https://model-fixture.invalid/v1"
+os.environ["OPENAI_MODEL"] = "gpt-offline-fixture"
+os.environ["AGENT_MODEL_AUTHORIZATION_REQUIRED"] = "false"  # offline mocked providers; live tests explicitly enable the guard
 sys.dont_write_bytecode = True
 
 

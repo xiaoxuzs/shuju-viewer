@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.bu.decoy_truth import confirmed_decoy_sql, decoy_value_for_api
 from app.bu.services.lists_service import _use_binary_entities
 from app.bu.services.peptide_mapper import coverage_percent, map_peptide, normalize_aa
 from app.bu.services.protein_sequence_resolver import resolve_base_sequence
@@ -14,18 +15,23 @@ from app.schemas import BuCoverageSegment, BuProteinDetailOut, BuProteinListItem
 from app.zp_runtime import ZpBottomUpProtein, get_binary_bottom_up_protein
 
 
+_CONFIRMED_MATCH_DECOY_SQL = confirmed_decoy_sql("im.is_decoy_match", "im.extra_metadata")
+
+
 def get_protein_detail(session: Session, dataset: dict[str, Any], protein_id: int) -> BuProteinDetailOut | None:
     dataset_id = int(dataset["dataset_id"])
     protein = _protein_row(session, dataset_id, protein_id)
     if protein is None:
         return None
+    protein = _protein_decoy_payload(protein)
+    confirmed_decoy = protein.get("is_decoy") is True
 
     binary = (
         get_binary_bottom_up_protein(session, dataset_id, str(protein.get("accession") or ""))
         if _use_binary_entities(session, dataset_id)
         else None
     )
-    peptides = _peptide_rows(session, dataset_id, protein_id, include_decoy=bool(protein.get("is_decoy")))
+    peptides = _peptide_rows(session, dataset_id, protein_id, include_decoy=confirmed_decoy)
     peptide_refs = [BuProteinPeptideRef(**_peptide_ref_payload(row)) for row in peptides]
     base_sequence, metadata = resolve_base_sequence(session, dataset, protein)
     if binary is not None:
@@ -35,14 +41,14 @@ def get_protein_detail(session: Session, dataset: dict[str, Any], protein_id: in
 
     segments, mapped_intervals = _coverage_segments(normalized_sequence, peptides)
     mode = _coverage_mode(
-        is_decoy=bool(protein.get("is_decoy")),
+        is_decoy=confirmed_decoy,
         has_sequence=bool(normalized_sequence),
         has_mapped=bool(mapped_intervals),
         has_unmapped=any(segment.start is None or segment.end is None for segment in segments),
     )
     percent = coverage_percent(len(normalized_sequence), mapped_intervals) if normalized_sequence else None
 
-    list_payload = {key: protein[key] for key in BuProteinListItemOut.model_fields}
+    list_payload = {key: protein.get(key) for key in BuProteinListItemOut.model_fields}
     if binary is not None:
         list_payload = _binary_protein_list_payload(list_payload, binary)
     list_item = BuProteinListItemOut(**list_payload)
@@ -97,7 +103,7 @@ def _protein_row(session: Session, dataset_id: int, protein_id: int) -> dict[str
 def _peptide_rows(session: Session, dataset_id: int, protein_id: int, *, include_decoy: bool) -> list[dict[str, Any]]:
     rows = session.execute(
         text(
-            """
+            f"""
             SELECT
                 pep.peptide_id,
                 pep.sequence,
@@ -114,7 +120,7 @@ def _peptide_rows(session: Session, dataset_id: int, protein_id: int, *, include
               ON im.dataset_id = prm.dataset_id
              AND im.entity_type = 'PEPTIDE'
              AND im.entity_id = prm.entity_id
-             AND (:include_decoy OR im.is_decoy_match = false)
+             AND (:include_decoy OR NOT {_CONFIRMED_MATCH_DECOY_SQL})
             WHERE prm.dataset_id = :dataset_id
               AND prm.protein_id = :protein_id
               AND prm.entity_type = 'PEPTIDE'
@@ -199,14 +205,28 @@ def _binary_protein_list_payload(
     protein = binary.protein
     out = dict(payload)
     out["accession"] = _first_value(protein.get("accession"), out.get("accession"))
-    out["gene_name"] = _first_value(protein.get("gene"), protein.get("name"), out.get("gene_name"))
+    out["gene_name"] = _first_value(protein.get("gene"), out.get("gene_name"))
     out["description"] = _first_value(protein.get("description"), out.get("description"))
-    out["is_decoy"] = bool(_first_value(protein.get("is_decoy"), out.get("is_decoy")))
+    if "is_decoy" in protein:
+        binary_decoy = protein.get("is_decoy")
+        out["is_decoy"] = binary_decoy if isinstance(binary_decoy, bool) else None
+        out["is_decoy_state"] = "DIRECT" if isinstance(binary_decoy, bool) else "MISSING"
     out["protein_group"] = _first_value(_joined_values(binary.protein_groups, "source_group"), out.get("protein_group"))
     out["peptide_count"] = len(binary.peptides)
     out["match_count"] = len(binary.identifications)
     out["best_q_value"] = _first_value(_best_bottom_up_q_value(binary.identifications), out.get("best_q_value"))
     out["pg_q_value"] = _first_value(protein.get("q_value"), out.get("pg_q_value"))
+    return out
+
+
+def _protein_decoy_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    out = dict(payload)
+    raw_metadata = out.get("extra_metadata")
+    metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+    out["is_decoy"], out["is_decoy_state"] = decoy_value_for_api(
+        out.get("is_decoy"),
+        metadata.get("is_decoy_state"),
+    )
     return out
 
 

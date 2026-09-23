@@ -16,7 +16,7 @@ class AgentCaseAdmission:
     file_count: int
 
 
-def admit_unknown_source_path(source_path: str | Path) -> AgentCaseAdmission:
+def admit_unknown_source_path(source_path: str | Path, *, enforce_policy: bool = False) -> AgentCaseAdmission:
     selected = Path(source_path).expanduser()
     try:
         source_root = selected.resolve(strict=True)
@@ -24,6 +24,15 @@ def admit_unknown_source_path(source_path: str | Path) -> AgentCaseAdmission:
         raise AgentSourceInvalidError(f"source_path must be an existing directory: {selected}") from exc
     if not source_root.is_dir():
         raise AgentSourceInvalidError(f"source_path must be an existing directory: {source_root}")
+    if enforce_policy:
+        from app.agent_import.input_assets import source_files
+        from app.core.config import settings
+        from app.agent_import.source_code import _linked
+        if _linked(selected.absolute()):
+            raise AgentSourceInvalidError("source root must not be a link or junction")
+        if not any(source_root.is_relative_to(root.resolve()) for root in settings.zp_allowed_source_root_list):
+            raise AgentSourceInvalidError("source root is outside the configured allowed roots")
+        source_files(source_root)
 
     fingerprint = compute_dataset_metadata_fingerprint(source_root)
     if fingerprint.file_count == 0:

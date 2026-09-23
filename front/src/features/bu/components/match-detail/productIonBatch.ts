@@ -3,6 +3,7 @@ import type {
   BuProductXicBatchOut,
   BuProductXicBatchTraceOut,
 } from "@/features/bu/types";
+import { pinnedDatasetRevision } from "@/api/client";
 import type { ProductIonSelection } from "@/features/bu/components/match-detail/productIonSelection";
 import {
   buildProductIonXicTrace,
@@ -52,6 +53,7 @@ export function buildProductIonBatchQueryKey(input: {
     "bu",
     input.datasetId,
     input.slug,
+    pinnedDatasetRevision(input.slug),
     "matches",
     input.matchId,
     "run",

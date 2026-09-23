@@ -40,6 +40,8 @@ export interface BuildBuEvidenceSummaryInput {
   xic: EvidenceDataState<BuXicOut>;
   ms2: EvidenceDataState<BuSpectrumV1>;
   hasPfmb: boolean;
+  fragmentAnnotationsAvailable?: boolean;
+  spectrumSource?: string | null;
   pfmbSlots: EvidenceDataState<BuMs2SlotListOut>;
   pfmbAnnotation: EvidenceDataState<BuMs2AnnotationOut>;
   activePfmbSlot: BuMs2SlotItem | null;
@@ -62,9 +64,15 @@ export function buildBuEvidenceSummary(input: BuildBuEvidenceSummaryInput): Evid
 
   const diaclip = buildDiaclipEvidence(input.match);
   const chromatographic = buildChromatographicEvidence(input);
-  const liveMs2 = buildLiveMs2Evidence(input.ms2, input.match.sequence);
+  const fragmentAnnotationsAvailable = input.fragmentAnnotationsAvailable !== false;
+  const liveMs2 = buildLiveMs2Evidence(
+    input.ms2,
+    input.match.sequence,
+    fragmentAnnotationsAvailable,
+    input.spectrumSource,
+  );
   const pfmb = buildPfmbEvidence(input);
-  const massAccuracy = buildMassAccuracy(input.ms2, input.pfmbAnnotation);
+  const massAccuracy = buildMassAccuracy(input.ms2, input.pfmbAnnotation, fragmentAnnotationsAvailable);
   return [identification, ...(diaclip ? [diaclip] : []), chromatographic, liveMs2, pfmb, massAccuracy];
 }
 
@@ -122,12 +130,28 @@ function buildChromatographicEvidence(input: BuildBuEvidenceSummaryInput): Evide
 function buildLiveMs2Evidence(
   ms2: EvidenceDataState<BuSpectrumV1>,
   sequence: string,
+  fragmentAnnotationsAvailable: boolean,
+  spectrumSource?: string | null,
 ): EvidenceSection {
+  const title = fragmentAnnotationsAvailable
+    ? spectrumSource === "zp" ? "ZP MS2 evidence" : "Live mzML MS2 evidence"
+    : "MS2 spectrum evidence";
   if (ms2.isLoading) {
-    return { key: "live-ms2", title: "Live mzML MS2 evidence", rows: [], empty: "Loading MS2 evidence..." };
+    return { key: "live-ms2", title, rows: [], empty: "Loading MS2 evidence..." };
   }
   if (ms2.isError || !ms2.data) {
-    return { key: "live-ms2", title: "Live mzML MS2 evidence", rows: [], empty: "MS2 scan not available" };
+    return { key: "live-ms2", title, rows: [], empty: "MS2 scan not available" };
+  }
+  if (!fragmentAnnotationsAvailable) {
+    return {
+      key: "live-ms2",
+      title,
+      rows: [
+        { label: "Fragment annotations", value: "Unavailable", detail: "Raw MS2 peaks remain viewable." },
+        { label: "MS2 scan", value: `#${ms2.data.scan}` },
+        { label: "MS2 scan RT", value: displayRt(ms2.data.rt_minutes) },
+      ],
+    };
   }
   const theoretical = Math.max(0, sequence.length * 2 - 2);
   return {
@@ -188,9 +212,10 @@ function buildPfmbEvidence(input: BuildBuEvidenceSummaryInput): EvidenceSection 
 function buildMassAccuracy(
   liveMs2: EvidenceDataState<BuSpectrumV1>,
   pfmbAnnotation: EvidenceDataState<BuMs2AnnotationOut>,
+  fragmentAnnotationsAvailable = true,
 ): EvidenceSection {
   const rows: EvidenceRow[] = [];
-  if (liveMs2.data) {
+  if (fragmentAnnotationsAvailable && liveMs2.data) {
     const live = summarizePpm(liveMs2.data.matched_ions.map((ion) => ion.ppm));
     if (live) rows.push({ label: "Live MS2 mass accuracy", value: ppmText(live) });
   }

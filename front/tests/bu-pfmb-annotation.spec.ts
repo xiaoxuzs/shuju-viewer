@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import { advisoryCapabilityReport } from "./capability-fixtures";
+
 const dataset = {
   id: 39,
   slug: "demo",
@@ -33,6 +35,7 @@ function matchDetail() {
     score: 10,
     intensity: 1000,
     is_decoy_match: false,
+    is_decoy_state: "DIRECT",
     scan_number: -1,
     protein_group: null,
     protein_accessions: [],
@@ -168,6 +171,7 @@ async function mockPfmb(page: Page, opts: Opts = {}) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
+    if (p === "/api/v1/datasets/demo/capability-report") return fulfillJson(route, advisoryCapabilityReport(dataset.id));
     if (p === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
     if (p === "/api/v1/datasets/demo/matches/1") return fulfillJson(route, matchDetail());
     if (p.endsWith("/matches/1/ms2-slots")) {

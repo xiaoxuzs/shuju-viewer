@@ -21,6 +21,8 @@ dependencies = [
     "numpy>=2.0.0",
     "lxml>=6.1.0",
     "pyarrow>=23.0.0",
+    "langgraph>=1.2",
+    "langgraph-checkpoint-postgres>=3.0",
 ]
 
 [dependency-groups]

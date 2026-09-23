@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, CheckCircle2, Loader2, MessageSquare, OctagonX, RefreshCw } from "lucide-react";
 import { useParams } from "react-router-dom";
 
 import type { AgentImportCaseOut, AgentImportMessageOut } from "@/api/types";
+import { api } from "@/api/client";
 import { PageHeader } from "@/components/common/page-header";
+import { DataLoadError } from "@/components/common/data-state";
 import { PageLoading } from "@/components/common/page-loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,9 +21,11 @@ import {
   reworkAgentImportCase,
   stopAgentImportCase,
 } from "@/features/agent-import/api";
+import { CapabilityReportPanel } from "@/features/dataset-capabilities/CapabilityReportPanel";
 import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 import { parseApiError } from "@/lib/apiError";
 import { cn } from "@/lib/utils";
+import { PublishedFeedback } from "@/features/agent-import/PublishedFeedback";
 
 const TERMINAL_STATUSES = new Set(["SUCCESS", "FAILED", "STOPPED"]);
 
@@ -67,6 +71,14 @@ export function AgentImportCasePage() {
     enabled: Boolean(caseId),
     refetchInterval: detailPollInterval,
   });
+  const caseStatus = caseQuery.data?.status;
+  const caseVersion = caseQuery.data?.version;
+  useEffect(() => {
+    if (!caseStatus || !TERMINAL_STATUSES.has(caseStatus)) return;
+    for (const section of ["messages", "attempts", "artifacts"]) {
+      void queryClient.invalidateQueries({ queryKey: ["agent-import-case", caseId, section], exact: true });
+    }
+  }, [caseId, caseStatus, caseVersion, queryClient]);
   usePageTransitionReady(!caseQuery.isLoading);
 
   const item = caseQuery.data;
@@ -100,14 +112,26 @@ export function AgentImportCasePage() {
   }
 
   const canStop = !TERMINAL_STATUSES.has(item.status) && item.status !== "STOPPING";
-  const canAnswer = item.status === "NEEDS_USER";
-  const canReview = item.status === "READY_FOR_REVIEW";
+  const engineeringError = ["FAILED", "NEEDS_USER"].includes(item.status) && (
+    item.verification?.failure_class === "ENGINEERING_REVIEW"
+    || item.verification?.failure_code === "AGENT_CANDIDATE_SCHEMA_INVALID"
+  );
+  const canAnswer = item.status === "NEEDS_USER" && !engineeringError;
+  const canReview = item.status === "READY_FOR_REVIEW" && item.delivery_policy !== "auto_test";
   const datasetBlueprint = latestStructuredValue(messagesQuery.data, "strategy", ["blueprint"]);
-  const mappingPlan = latestStructuredValue(messagesQuery.data, "candidate", ["zp_conversion_plan", "mapping_plan"]);
+  const mappingPlan =
+    latestStructuredValue(messagesQuery.data, "candidate", ["zp_conversion_plan", "declarative_plan"])
+    ?? latestStructuredValue(messagesQuery.data, "candidate", ["zp_conversion_plan", "mapping_plan"]);
   const agentReview = latestStructuredValue(messagesQuery.data, "review", []);
-  const sourceFileCount = Array.isArray(mappingPlan?.source_files) ? mappingPlan.source_files.length : 0;
+  const sourceFileCount = Array.isArray(mappingPlan?.sources)
+    ? mappingPlan.sources.length
+    : Array.isArray(mappingPlan?.source_files)
+      ? mappingPlan.source_files.length
+      : 0;
   const fieldMappingCount = Array.isArray(mappingPlan?.field_mappings) ? mappingPlan.field_mappings.length : 0;
   const unmappedFieldCount = mappingPlan ? countArrayValues(mappingPlan.unmapped_fields) : 0;
+  const capabilityReport = item.verification?.dataset_capability_report;
+  const capabilityReportError = item.verification?.dataset_capability_report_error;
 
   return (
     <>
@@ -122,9 +146,30 @@ export function AgentImportCasePage() {
         actions={
           <>
             <Badge variant={statusVariant(item.status)}>{item.status.replaceAll("_", " ")}</Badge>
+            {item.progress && !TERMINAL_STATUSES.has(item.status) && item.status !== "READY_FOR_REVIEW" && <span className="text-xs text-muted-foreground" data-testid="agent-processing-progress">
+              {item.progress.phase}: {item.progress.processed === null ? "processing" : `${item.progress.processed.toLocaleString()} records processed`}
+              {item.progress.total !== null && ` / ${item.progress.total.toLocaleString()} total; ${item.progress.remaining?.toLocaleString()} remaining`}
+            </span>}
+            {item.status === "STOPPING" && <span className="text-xs text-muted-foreground">Cancellation requested; waiting for the current processing checkpoint.</span>}
             {canStop && (
               <Button variant="outline" size="sm" disabled={busyAction !== null} onClick={() => void runAction("stop", () => stopAgentImportCase(caseId))}>
                 <OctagonX className="h-4 w-4" /> Stop
+              </Button>
+            )}
+            {canReview && (
+              <Button variant="outline" size="sm" disabled={busyAction !== null} onClick={() => void runAction("reverify", async () => {
+                const response = await api.post<AgentImportCaseOut>(`/agent-import-cases/${caseId}/reverify`, {}, { headers: { "If-Match": String(item.version) } });
+                return response.data;
+              })}>
+                <RefreshCw className="h-4 w-4" /> Recheck validation
+              </Button>
+            )}
+            {["FAILED", "NEEDS_USER"].includes(item.status) && !item.ever_published && !item.dataset_id && (
+              <Button variant="outline" size="sm" disabled={busyAction !== null} onClick={() => void runAction("retry", async () => {
+                const response = await api.post<AgentImportCaseOut>(`/agent-import-cases/${caseId}/retry`, {}, { headers: { "If-Match": String(item.version) } });
+                return response.data;
+              })}>
+                <RefreshCw className="h-4 w-4" /> Retry failed task
               </Button>
             )}
           </>
@@ -199,7 +244,11 @@ export function AgentImportCasePage() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Detail label="Adapter" value={String(mappingPlan.adapter_id ?? "unknown")} mono />
+                  <Detail
+                    label="Protocol"
+                    value={String(mappingPlan.plan_id ?? mappingPlan.adapter_id ?? "unknown")}
+                    mono
+                  />
                   <Detail label="Source files" value={String(sourceFileCount)} />
                   <Detail label="Mapped fields" value={String(fieldMappingCount)} />
                   <Detail label="Declared unmapped" value={String(unmappedFieldCount)} />
@@ -218,6 +267,24 @@ export function AgentImportCasePage() {
                     {JSON.stringify(mappingPlan, null, 2)}
                   </pre>
                 </details>
+              </CardContent>
+            </Card>
+          )}
+
+          {capabilityReport && <CapabilityReportPanel report={capabilityReport} />}
+          {capabilityReportError && (
+            <DataLoadError
+              compact
+              message={`Capability report is invalid (${capabilityReportError.code}): ${capabilityReportError.message}`}
+            />
+          )}
+
+          {engineeringError && (
+            <Card data-testid="agent-engineering-error" className="border-destructive/40">
+              <CardHeader><CardTitle>Agent plan requires engineering review</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>This is an internal plan or contract error. No scientific confirmation or additional format answer is requested.</p>
+                <p className="break-words text-muted-foreground">{String(item.verification?.summary ?? "Inspect the candidate validation diagnostics below.")}</p>
               </CardContent>
             </Card>
           )}
@@ -257,6 +324,12 @@ export function AgentImportCasePage() {
             </Card>
           )}
 
+          {item.status === "WAITING_AUTHORIZATION" && <section role="status" className="rounded border p-3" data-testid="agent-authorization-wait">
+            <h3 className="font-semibold">Historical experiment paused</h3>
+            <p>Your source is retained. This is not a data error and does not require another model API key.</p>
+            <p>This older experiment retains its original restrictions and is not resumed automatically. New ordinary imports and maintenance use server task settings without a separate model grant.</p>
+          </section>}
+          {item.ever_published && <PublishedFeedback caseId={caseId} />}
           {item.status === "SUCCESS" && item.dataset_slug && (
             <Card className="border-[hsl(var(--success)/0.4)]">
               <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
@@ -265,6 +338,22 @@ export function AgentImportCasePage() {
               </CardContent>
             </Card>
           )}
+          {artifactsQuery.data?.filter((artifact) => artifact.artifact_type === "handover").slice(-1).map((artifact) => (
+            <Card key={artifact.artifact_id}>
+              <CardHeader><CardTitle>Verified HANDOVER.md</CardTitle></CardHeader>
+              <CardContent>
+                <Button variant="outline" onClick={() => void (async () => {
+                  try {
+                    const response = await api.get(`/agent-import-cases/${caseId}/handover`, { responseType: "blob" });
+                    const url = URL.createObjectURL(response.data);
+                    const link = document.createElement("a"); link.href = url; link.download = "HANDOVER.md";
+                    link.click(); URL.revokeObjectURL(url);
+                  } catch (cause) { setActionError(parseApiError(cause).message ?? "Could not download the handover."); }
+                })()}>Download HANDOVER.md</Button>
+                <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap text-xs">{String(artifact.structured_payload?.markdown ?? "")}</pre>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         <div className="space-y-5">
@@ -272,6 +361,8 @@ export function AgentImportCasePage() {
             <CardHeader><CardTitle className="text-lg">Case details</CardTitle></CardHeader>
             <CardContent><dl className="space-y-3 text-sm">
               <Detail label="Analysis" value={item.analysis_category.replaceAll("_", " ")} />
+              {item.deadline_at && <Detail label="Execution deadline" value={item.deadline_at} />}
+              {item.model_tokens_reserved !== undefined && <Detail label="Request reservation units (not billed tokens)" value={String(item.model_tokens_reserved)} />}
               <Detail label="Fingerprint" value={item.dataset_fingerprint} mono />
               <Detail label="Source" value={item.source_ref} mono />
               <Detail label="Mode" value={item.interaction_mode} />
@@ -301,6 +392,9 @@ export function AgentImportCasePage() {
                   <div className="font-medium">{artifact.artifact_type}</div>
                   <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{artifact.sha256}</div>
                   <div className="mt-1 text-xs text-muted-foreground">{artifact.size_bytes.toLocaleString()} bytes</div>
+                  {artifact.artifact_type === "candidate_diagnostic" && artifact.structured_payload && (
+                    <CandidateDiagnostic payload={artifact.structured_payload} />
+                  )}
                 </div>
               ))}
               {artifactsQuery.data?.length === 0 && <p className="text-muted-foreground">No artifacts yet.</p>}
@@ -321,6 +415,26 @@ export function AgentImportCasePage() {
 
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return <div><dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt><dd className={cn("mt-0.5 break-all", mono && "font-mono text-xs")}>{value}</dd></div>;
+}
+
+function CandidateDiagnostic({ payload }: { payload: Record<string, unknown> }) {
+  const errors = Array.isArray(payload.errors) ? payload.errors : [];
+  return (
+    <div className="mt-2 space-y-2" data-testid="candidate-diagnostic">
+      <div className="text-xs">Candidate attempt {String(payload.candidate_attempt ?? "?")} · revision {String(payload.context_revision ?? "?")} · rejected</div>
+      <ul className="space-y-1 text-xs text-destructive">
+        {errors.map((value, index) => {
+          const error = asRecord(value);
+          const location = Array.isArray(error?.loc) ? error.loc.map(String).join(".") : "";
+          return <li key={index}><code>{location || "candidate"}</code>: {String(error?.msg ?? "Invalid candidate")}</li>;
+        })}
+      </ul>
+      <details>
+        <summary className="cursor-pointer text-xs">Inspect redacted rejected candidate</summary>
+        <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 p-2 text-xs">{JSON.stringify(payload, null, 2)}</pre>
+      </details>
+    </div>
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

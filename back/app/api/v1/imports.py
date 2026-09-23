@@ -5,7 +5,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from app.agent_import.authorization import guard_workspace_request
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -16,7 +17,7 @@ from app.services.import_selection import validate_import_selection
 from app.services.native_folder_dialog import NativeFolderDialogError, pick_folder_native
 from app.dataset_ingest_root import resolve_ingest_root
 
-router = APIRouter(tags=["imports"])
+router = APIRouter(tags=["imports"], dependencies=[Depends(guard_workspace_request)])
 log = get_logger(__name__)
 
 _ENQUEUE_TIMING_ORDER: tuple[str, ...] = (

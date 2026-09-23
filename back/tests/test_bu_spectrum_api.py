@@ -148,6 +148,40 @@ def test_match_ms2_without_explicit_scan_uses_scan_index_and_indexed_reader(
     assert len(out.matched_ions) >= 10
 
 
+def test_agent_zp_ms2_returns_raw_peaks_without_fabricated_fragment_annotations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        spectrum_facade,
+        "find_nearest_ms2_scan",
+        lambda *_args, **_kwargs: _scan_metadata(67726, ms_level=2, retention_time=92.48),
+    )
+    monkeypatch.setattr(
+        spectrum_facade,
+        "get_spectrum_by_scan",
+        lambda *_args: (_ms2_spec(67726), False),
+    )
+    _install_no_full_load_guards(monkeypatch)
+
+    out = spectrum_facade.get_match_ms2(
+        None,  # type: ignore[arg-type]
+        {
+            "dataset_id": 39,
+            "capabilities": {
+                "import_mode": "agent_declarative",
+                "has_fragment_annotations": False,
+            },
+        },
+        _match(raw_format="zp"),
+    )
+
+    assert out.mz
+    assert out.intensity
+    assert out.matched_ions == []
+    assert out.annotation_status == "not_requested"
+    assert "raw peaks only" in out.annotation_warnings[0]
+
+
 def test_match_ms2_explicit_rt_uses_unbounded_nearest_scan_index_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

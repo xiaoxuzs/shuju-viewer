@@ -10,6 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.api.v1.universal_compat import cutoff_id, cutoff_label, require_dataset
+from app.dataset_capabilities import (
+    DatasetCapabilityReport,
+    compile_legacy_capability_report,
+    validate_capability_report,
+)
 from app.schemas import BuRunSummary, CutoffOut, DatasetDeletedOut, DatasetOut, DatasetRunSummary
 from app.services import import_jobs
 
@@ -253,6 +258,49 @@ def get_dataset_detail(
         bu_runs=bu_runs_by_dataset.get(dataset_id) if dataset_mode == "bottom_up" else None,
         runs=runs_by_dataset.get(dataset_id) if dataset_mode == "spectra_only" else None,
     )
+
+
+@router.get("/datasets/{slug}/capability-report", response_model=DatasetCapabilityReport)
+def get_dataset_capability_report(
+    slug: str,
+    session: Session = Depends(get_db),
+) -> DatasetCapabilityReport:
+    """Return a validated Agent report or a conservative legacy projection."""
+
+    dataset = require_dataset(session, slug)
+    dataset_id = int(dataset["dataset_id"])
+    extra_metadata = _json_object(dataset.get("extra_metadata"))
+    if "dataset_capability_report" in extra_metadata:
+        try:
+            return validate_capability_report(
+                extra_metadata["dataset_capability_report"],
+                expected_dataset_id=dataset_id,
+                expected_analysis_mode=str(dataset.get("analysis_mode") or "") or None,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "code": "INVALID_DATASET_CAPABILITY_REPORT",
+                    "message": str(exc),
+                },
+            ) from exc
+
+    capabilities = dataset.get("capabilities")
+    return compile_legacy_capability_report(
+        dataset_id=dataset_id,
+        capabilities=capabilities if isinstance(capabilities, dict) else None,
+        source_case_id=_legacy_source_case_id(extra_metadata),
+        analysis_mode=str(dataset.get("analysis_mode") or "") or None,
+    )
+
+
+def _legacy_source_case_id(extra_metadata: dict[str, Any]) -> str | None:
+    agent_zp = extra_metadata.get("agent_zp")
+    if not isinstance(agent_zp, dict):
+        return None
+    case_id = agent_zp.get("case_id")
+    return case_id if isinstance(case_id, str) and case_id else None
 
 
 @router.delete("/datasets/{slug}", response_model=DatasetDeletedOut)

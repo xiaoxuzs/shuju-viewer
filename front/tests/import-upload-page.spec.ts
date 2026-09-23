@@ -28,8 +28,10 @@ test("analysis type reveals only its supported second-level import formats", asy
   await expect(dialog.getByRole("radio", { name: "Unknown format import", exact: true })).toBeVisible();
 
   await dialog.getByRole("radio", { name: "Unknown format import", exact: true }).click();
+  await expect(dialog.getByText("Local operator access", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByLabel("Viewer operator token", { exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("heading", { name: "1. Analysis type" })).toBeVisible();
-  await expect(dialog.getByRole("heading", { name: "2. Import format" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "2. Format name" })).toBeVisible();
   await expect(dialog.locator("#unknown-format-details")).toHaveCount(0);
   await expect(dialog.getByText("Binary operation", { exact: false })).toHaveCount(0);
   await expect(dialog.getByText("Source profile", { exact: false })).toHaveCount(0);
@@ -76,7 +78,69 @@ test("analysis type reveals only its supported second-level import formats", asy
   expect(oldPathRequests).toEqual([]);
 });
 
-test("unknown format import submits required identity and optional prompt context", async ({ page }) => {
+test.describe("closed managed source upload panel", () => {
+  test.use({ locale: "zh-CN" });
+
+  test("does not show or activate the separate upload panel when switching import modes", async ({ page }) => {
+    const uploadRequests: string[] = [];
+    page.on("request", request => {
+      const path = new URL(request.url()).pathname;
+      if (request.method() === "POST" && (path.startsWith("/api/v1/import-uploads")
+        || path === "/api/v1/agent-import-cases/from-upload")) uploadRequests.push(path);
+    });
+
+    await page.goto("/datasets");
+    await page.getByRole("button", { name: "Upload local dataset" }).click();
+    const dialog = page.getByRole("dialog", { name: "Upload local dataset" });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await dialog.getByRole("radio", { name: "Unknown format import", exact: true }).click();
+      await expect(dialog.getByRole("heading", { name: "Upload unknown-format source files", exact: true })).toHaveCount(0);
+      await expect(dialog.getByLabel("Unknown source files", { exact: true })).toHaveCount(0);
+      await expect(dialog.getByRole("checkbox", { name: "Automatically deliver in an authorized test environment" })).toHaveCount(0);
+      await expect(dialog.getByRole("button", { name: "Upload files and create Case", exact: true })).toHaveCount(0);
+      await expect(dialog.getByRole("button", { name: "Select source folder", exact: true })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Start format analysis", exact: true })).toBeVisible();
+      await dialog.getByRole("radio", { name: "Supported format import", exact: true }).click();
+    }
+    expect(uploadRequests).toEqual([]);
+  });
+});
+
+test("unknown format import can start with automatic type and format detection", async ({ page }) => {
+  let requestBody: unknown = null;
+  await page.route("**/api/v1/imports/pick-folder", async (route) => {
+    await json(route, { path: "E:\\data\\agent-auto", cancelled: false });
+  });
+  await page.route("**/api/v1/agent-import-cases/from-path", async (route) => {
+    requestBody = route.request().postDataJSON();
+    await json(route, { case_id: "case-agent-auto", status: "CREATED", version: 1 }, 201);
+  });
+
+  await page.goto("/datasets");
+  await page.getByRole("button", { name: "Upload local dataset" }).click();
+  const dialog = page.getByRole("dialog", { name: "Upload local dataset" });
+  await dialog.getByRole("radio", { name: "Unknown format import", exact: true }).click();
+
+  await expect(dialog.getByText("The Agent checks files, fields, types", { exact: false })).toBeVisible();
+  await expect(dialog.getByText("defaults to automatic detection", { exact: false })).toBeVisible();
+  await expect(dialog.getByRole("radio", { name: "Auto-detect", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.locator("#unknown-format-name")).not.toHaveAttribute("aria-required", "true");
+  const start = dialog.getByRole("button", { name: "Start format analysis" });
+  await expect(start).toBeDisabled();
+  await dialog.getByRole("button", { name: "Select source folder" }).click();
+  await expect(start).toBeEnabled();
+  await start.click();
+
+  await expect(dialog.getByText("Format analysis started", { exact: true })).toBeVisible();
+  expect(requestBody).toEqual({
+    source_path: "E:\\data\\agent-auto",
+    data_type: "AUTO",
+    format_name: "Unknown format",
+    format_details: null,
+  });
+});
+
+test("unknown format import preserves explicit type, format, and prompt hints", async ({ page }) => {
   let requestBody: unknown = null;
   await page.route("**/api/v1/imports/pick-folder", async (route) => {
     await json(route, { path: "E:\\data\\new-format", cancelled: false });
@@ -138,7 +202,7 @@ test("unknown format import accepts a trimmed custom analysis type without leaki
   await dialog.locator("#unknown-format-name").fill("New Format");
   await dialog.getByRole("button", { name: "Select source folder" }).click();
   const start = dialog.getByRole("button", { name: "Start format analysis" });
-  await expect(start).toBeDisabled();
+  await expect(start).toBeEnabled();
 
   await customDataType.fill("  Single-cell spatial proteomics  ");
   await dialog.getByRole("radio", { name: "Top-Down", exact: true }).click();
@@ -279,6 +343,8 @@ test("Agent case exposes the validated .zp candidate and requires explicit appro
 
 test("local files upload sequentially, auto-start ImportJob, and clear restored state on success", async ({ page }) => {
   await installBeforeUnloadAudit(page);
+  let releaseUploads!: () => void;
+  const uploadsChecked = new Promise<void>((resolve) => { releaseUploads = resolve; });
   const uploadOrder: string[] = [];
   let activeUploads = 0;
   let maxActiveUploads = 0;
@@ -306,7 +372,9 @@ test("local files upload sequentially, auto-start ImportJob, and clear restored 
     const relativePath = new URL(route.request().url()).searchParams.get("relative_path");
     uploadOrder.push(relativePath ?? "");
     expect(route.request().headers()["content-type"]).toContain("application/octet-stream");
-    await delay(220);
+    // Hold the first response until the upload UI has been observed. A fixed
+    // 220ms response could finish both files before the second progress assertion.
+    await uploadsChecked;
     activeUploads -= 1;
     await json(route, {
       upload_id: "upload-one",
@@ -346,6 +414,8 @@ test("local files upload sequentially, auto-start ImportJob, and clear restored 
   await expect(dialog.getByRole("progressbar", { name: "Current file upload" })).toBeVisible();
   await expect(dialog.getByRole("progressbar", { name: "Overall upload" })).toBeVisible();
   await expect.poll(() => beforeUnloadCount(page, "adds")).toBeGreaterThan(0);
+
+  releaseUploads();
 
   await expect(dialog.getByText("Importing", { exact: true }).first()).toBeVisible();
   await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), ACTIVE_JOB_KEY))

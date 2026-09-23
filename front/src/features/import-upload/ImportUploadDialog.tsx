@@ -5,6 +5,7 @@ import { CheckCircle2, FileQuestion, FileUp, FolderOpen, Loader2, Plus, RotateCc
 import {
   ImportUploadRequestError,
   createUnknownFormatImport,
+  createUnknownFormatFromUpload,
   createImportUpload,
   deleteImportUpload,
   fetchImportJob,
@@ -56,7 +57,7 @@ type UploadUiState =
   | "cancelled";
 
 type ImportWorkflow = "supported-format" | "unknown-format";
-type UnknownAnalysisType = "Top-Down" | "Bottom-Up" | "Spectra Only" | "CUSTOM";
+type UnknownAnalysisType = "AUTO" | "Top-Down" | "Bottom-Up" | "Spectra Only" | "CUSTOM";
 
 interface UploadUiError {
   title: string;
@@ -86,11 +87,14 @@ const DIRECTORY_INPUT_ATTRIBUTES: DirectoryInputAttributes = { webkitdirectory: 
 const FILE_PREVIEW_LIMIT = 8;
 const IMPORT_JOB_POLL_MS = 900;
 const INTERRUPTED_UPLOAD_KEY = "viewer.interruptedImportUpload";
+const DEFAULT_UNKNOWN_DATA_TYPE = "AUTO";
+const DEFAULT_UNKNOWN_FORMAT_NAME = "Unknown format";
 
 const UNKNOWN_ANALYSIS_TYPES: Array<{
   value: UnknownAnalysisType;
   label: string;
 }> = [
+  { value: "AUTO", label: "Auto-detect" },
   { value: "Top-Down", label: "Top-Down" },
   { value: "Bottom-Up", label: "Bottom-Up" },
   { value: "Spectra Only", label: "Spectra Only" },
@@ -163,12 +167,17 @@ function stageTitle(state: UploadUiState, job: ImportJobOut | null): string {
 export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogProps) {
   const queryClient = useQueryClient();
   const [importWorkflow, setImportWorkflow] = useState<ImportWorkflow>("supported-format");
-  const [unknownAnalysisType, setUnknownAnalysisType] = useState<UnknownAnalysisType | null>(null);
+  const [unknownAnalysisType, setUnknownAnalysisType] = useState<UnknownAnalysisType>("AUTO");
   const [customDataType, setCustomDataType] = useState("");
   const [formatName, setFormatName] = useState("");
   const [formatDetails, setFormatDetails] = useState("");
   const [formatDetailsOpen, setFormatDetailsOpen] = useState(false);
   const [serverPath, setServerPath] = useState("");
+  const [unknownSourceMode, setUnknownSourceMode] = useState<"server" | "files">("server");
+  const [unknownFiles, setUnknownFiles] = useState<File[]>([]);
+  const unknownFileInput = useRef<HTMLInputElement>(null);
+  const unknownUpload = useRef<{ id: string; completed: number } | null>(null);
+  const [unknownUploaded, setUnknownUploaded] = useState(0);
   const [folderPickerBusy, setFolderPickerBusy] = useState(false);
   const [unknownFormatBusy, setUnknownFormatBusy] = useState(false);
   const [unknownFormatResult, setUnknownFormatResult] = useState<UnknownFormatImportOut | null>(null);
@@ -207,12 +216,16 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     cancelRequestedRef.current = false;
     speedSamplesRef.current = [];
     setImportWorkflow("supported-format");
-    setUnknownAnalysisType(null);
+    setUnknownAnalysisType("AUTO");
     setCustomDataType("");
     setFormatName("");
     setFormatDetails("");
     setFormatDetailsOpen(false);
     setServerPath("");
+    setUnknownSourceMode("server");
+    setUnknownFiles([]);
+    unknownUpload.current = null;
+    setUnknownUploaded(0);
     setFolderPickerBusy(false);
     setUnknownFormatBusy(false);
     setUnknownFormatResult(null);
@@ -345,9 +358,10 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     || jobId !== null
     || cancelBusy;
   const unknownWorkflowBusy = importWorkflow === "unknown-format" && (folderPickerBusy || unknownFormatBusy);
-  const resolvedUnknownDataType = unknownAnalysisType === "CUSTOM"
-    ? customDataType.trim()
-    : unknownAnalysisType ?? "";
+  const resolvedUnknownDataType = (
+    unknownAnalysisType === "CUSTOM" ? customDataType.trim() : unknownAnalysisType
+  ) || DEFAULT_UNKNOWN_DATA_TYPE;
+  const resolvedUnknownFormatName = formatName.trim() || DEFAULT_UNKNOWN_FORMAT_NAME;
   const workflowDisabled = controlsDisabled || unknownWorkflowBusy;
   const closeDisabled = BLOCKING_LEAVE_STATES.has(uiState) || cancelBusy || unknownWorkflowBusy;
   const canCancelUpload = jobId === null && (
@@ -468,10 +482,10 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
   }, []);
 
   const runUnknownFormatAnalysis = useCallback(async () => {
-    if (!resolvedUnknownDataType || !formatName.trim() || !serverPath.trim()) {
+    if (unknownSourceMode === "server" ? !serverPath.trim() : !unknownFiles.length) {
       setUiError({
-        title: "Required information is missing",
-        message: "Select an analysis type, enter the format name, then select the source folder.",
+        title: "Source folder is missing",
+        message: "Select the source folder the Agent should inspect.",
         code: null,
         fileName: null,
       });
@@ -481,12 +495,27 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     setUnknownFormatResult(null);
     setUiError(null);
     try {
-      const created = await createUnknownFormatImport({
-        source_path: serverPath.trim(),
+      const details = {
         data_type: resolvedUnknownDataType,
-        format_name: formatName.trim(),
+        format_name: resolvedUnknownFormatName,
         format_details: formatDetails.trim() || null,
-      });
+      };
+      let created: UnknownFormatImportOut;
+      if (unknownSourceMode === "files") {
+        if (!unknownUpload.current) {
+          const session = await createImportUpload("AGENT_UNKNOWN");
+          unknownUpload.current = { id: session.upload_id, completed: 0 };
+        }
+        const session = unknownUpload.current;
+        for (; session.completed < unknownFiles.length; session.completed++) {
+          const file = unknownFiles[session.completed];
+          await uploadImportFile(session.id, file.webkitRelativePath || file.name, file).promise;
+          setUnknownUploaded(session.completed + 1);
+        }
+        created = await createUnknownFormatFromUpload({ upload_id: session.id, ...details });
+      } else {
+        created = await createUnknownFormatImport({ source_path: serverPath.trim(), ...details });
+      }
       setUnknownFormatResult(created);
     } catch (error) {
       const parsed = parseApiError(error);
@@ -499,7 +528,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     } finally {
       setUnknownFormatBusy(false);
     }
-  }, [formatDetails, formatName, resolvedUnknownDataType, serverPath]);
+  }, [formatDetails, resolvedUnknownDataType, resolvedUnknownFormatName, serverPath, unknownSourceMode, unknownFiles]);
 
   const runUpload = useCallback(async () => {
     const selectedImportType = importType;
@@ -642,7 +671,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
               <CardDescription className="mt-1.5">
                 {importWorkflow === "supported-format"
                   ? "Select local files or a folder. Files upload in order, then the existing import task starts automatically."
-                  : "Describe an unsupported data format and select its source folder for analysis."}
+                  : "Select a source folder. The Agent will inspect the data and decide how Viewer can use it."}
               </CardDescription>
             </div>
             <Button
@@ -706,9 +735,13 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
 
           {importWorkflow === "unknown-format" ? (
             <>
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm text-muted-foreground">
+                The Agent checks files, fields, types, scientific entities, relationships, and Viewer capabilities.
+                Analysis type defaults to automatic detection. Choosing another type makes it an explicit constraint.
+              </div>
               <section className="space-y-1.5" aria-labelledby="unknown-data-type-title">
                 <h3 id="unknown-data-type-title" className="text-sm font-semibold">1. Analysis type</h3>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Analysis type">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" role="radiogroup" aria-label="Analysis type">
                   {UNKNOWN_ANALYSIS_TYPES.map((option) => (
                     <button
                       key={option.value}
@@ -742,8 +775,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                       value={customDataType}
                       maxLength={80}
                       disabled={unknownWorkflowBusy || unknownFormatResult !== null}
-                      placeholder="Enter a new analysis type"
-                      aria-required="true"
+                      placeholder="Optional constraint for the Agent"
                       onChange={(event) => setCustomDataType(event.target.value)}
                     />
                   </div>
@@ -751,13 +783,12 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
               </section>
 
               <section className="space-y-1.5" aria-labelledby="unknown-format-name-title">
-                <h3 id="unknown-format-name-title" className="text-sm font-semibold">2. Import format</h3>
+                <h3 id="unknown-format-name-title" className="text-sm font-semibold">2. Format name (optional hint)</h3>
                 <Input
                   id="unknown-format-name"
                   value={formatName}
                   disabled={unknownWorkflowBusy || unknownFormatResult !== null}
-                  placeholder="e.g. DIA-CLIP"
-                  aria-required="true"
+                  placeholder="Optional, e.g. MaxQuant"
                   onChange={(event) => setFormatName(event.target.value)}
                 />
               </section>
@@ -770,7 +801,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                     rows={4}
                     value={formatDetails}
                     disabled={unknownWorkflowBusy || unknownFormatResult !== null}
-                    placeholder="Describe the files, fields, and relationships that may help identify this format."
+                    placeholder="Add known semantics or constraints that may help the Agent interpret the data."
                     onChange={(event) => setFormatDetails(event.target.value)}
                     className={cn(
                       "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
@@ -794,6 +825,18 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
 
               <section className="space-y-3" aria-labelledby="unknown-source-folder-title">
                 <h3 id="unknown-source-folder-title" className="text-sm font-semibold">4. Source folder</h3>
+                <div className="flex gap-2" role="group" aria-label="Source location">
+                  <Button type="button" variant="outline" size="sm" aria-pressed={unknownSourceMode === "server"}
+                    disabled={unknownWorkflowBusy || unknownFormatResult !== null || unknownUpload.current !== null}
+                    onClick={() => setUnknownSourceMode("server")}>Server folder</Button>
+                  <Button type="button" variant="outline" size="sm" aria-pressed={unknownSourceMode === "files"}
+                    disabled={unknownWorkflowBusy || unknownFormatResult !== null || unknownUpload.current !== null}
+                    onClick={() => setUnknownSourceMode("files")}>Files on this computer</Button>
+                </div>
+                {unknownSourceMode === "server" ? <>
+                <Input aria-label="Server source directory" value={serverPath}
+                  disabled={unknownWorkflowBusy || unknownFormatResult !== null}
+                  onChange={(event) => setServerPath(event.target.value)} placeholder="Directory within the authorized data root" />
                 <Button
                   type="button"
                   variant="outline"
@@ -809,6 +852,13 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                     {serverPath}
                   </div>
                 )}
+                </> : <>
+                  <input ref={unknownFileInput} type="file" multiple hidden aria-label="Choose browser source files"
+                    onChange={(event) => setUnknownFiles(Array.from(event.target.files ?? []))} />
+                  <Button type="button" variant="outline" size="sm" disabled={unknownWorkflowBusy || unknownUpload.current !== null || unknownFormatResult !== null}
+                    onClick={() => unknownFileInput.current?.click()}>Choose files</Button>
+                  <p role="status" className="text-xs text-muted-foreground">{unknownFiles.length} files selected; {unknownUploaded} uploaded.</p>
+                </>}
               </section>
 
               {unknownFormatResult && (
@@ -839,9 +889,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                   disabled={
                     unknownWorkflowBusy
                     || unknownFormatResult !== null
-                    || !resolvedUnknownDataType
-                    || !formatName.trim()
-                    || !serverPath.trim()
+                    || (unknownSourceMode === "server" ? !serverPath.trim() : !unknownFiles.length)
                   }
                   onClick={() => void runUnknownFormatAnalysis()}
                 >

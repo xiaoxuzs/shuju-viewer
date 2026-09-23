@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.bu.decoy_truth import DecoyTruthState
+
 
 class BuRunSummary(BaseModel):
     """Run summary embedded in Bottom-Up dataset responses."""
@@ -68,7 +70,8 @@ class BuProteinListItemOut(BaseModel):
     accession: str
     gene_name: str | None = None
     description: str | None = None
-    is_decoy: bool = False
+    is_decoy: bool | None = False
+    is_decoy_state: DecoyTruthState = "DIRECT"
     protein_group: str | None = None
     peptide_count: int = 0
     match_count: int = 0
@@ -126,6 +129,9 @@ class BuPeptideListItemOut(BaseModel):
 
 class BuMatchListItemOut(BaseModel):
     id: int
+    source_record_id: str | None = None
+    source_run_name: str | None = None
+    source_relative_path: str | None = None
     run_id: int
     run_name: str
     peptide_id: int
@@ -138,7 +144,8 @@ class BuMatchListItemOut(BaseModel):
     q_value: float | None = None
     score: float | None = None
     intensity: float | None = None
-    is_decoy_match: bool = False
+    is_decoy_match: bool | None = False
+    is_decoy_state: DecoyTruthState = "DIRECT"
     scan_number: int
     protein_group: str | None = None
     protein_accessions: list[str] = Field(default_factory=list)

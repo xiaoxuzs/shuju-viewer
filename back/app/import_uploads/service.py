@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.import_uploads.dispatch import dispatch_import
 from app.import_uploads.errors import UploadError
 from app.import_uploads.manifest import manifest_path, read_manifest, write_manifest
+from app.import_uploads.locking import locked_upload, locked_session
 from app.import_uploads.models import (
     ImportType,
     ImportUploadCreatedOut,
@@ -122,6 +123,7 @@ def _check_disk_space(root: Path, content_length: int) -> None:
         raise UploadError("UPLOAD_DISK_SPACE_LOW", "磁盘可用空间不足，无法安全上传。", 507)
 
 
+@locked_upload
 async def upload_file(
     *,
     upload_id: str,
@@ -259,6 +261,7 @@ def _validate_ready_files(upload_id: str, manifest: UploadManifest) -> Path:
     return root
 
 
+@locked_session
 def start_upload(
     upload_id: str,
     *,
@@ -297,10 +300,11 @@ def start_upload(
     return result
 
 
+@locked_session
 def delete_upload(upload_id: str) -> None:
     require_enabled()
     manifest = read_manifest(upload_id)
-    if manifest.state == UploadState.STARTED or manifest.job_id is not None:
+    if manifest.state in {UploadState.STARTED, UploadState.CASE_PINNED} or manifest.job_id is not None or manifest.case_id is not None:
         raise UploadError("UPLOAD_ALREADY_STARTED", "已开始导入的上传会话不能删除。", 409)
     session = session_dir(upload_id)
     root = upload_root(create=False)

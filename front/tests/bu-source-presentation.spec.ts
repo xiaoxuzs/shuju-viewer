@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import { advisoryCapabilityReport } from "./capability-fixtures";
+
 type SourceSoftware = "DIA-CLIP" | "DIA-NN";
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -83,6 +85,7 @@ function matches() {
       score: 0.91,
       intensity: 123456,
       is_decoy_match: false,
+      is_decoy_state: "DIRECT",
       scan_number: 100,
       extra_metadata: {},
     }],
@@ -92,6 +95,9 @@ function matches() {
 async function mockDataset(page: Page, slug: string, sourceSoftware: SourceSoftware) {
   await page.route("**/api/v1/**", async (route) => {
     const pathname = new URL(route.request().url()).pathname;
+    if (pathname === `/api/v1/datasets/${slug}/capability-report`) {
+      return fulfillJson(route, advisoryCapabilityReport(dataset(slug, sourceSoftware).id));
+    }
     if (pathname === `/api/v1/datasets/${slug}`) {
       return fulfillJson(route, dataset(slug, sourceSoftware));
     }

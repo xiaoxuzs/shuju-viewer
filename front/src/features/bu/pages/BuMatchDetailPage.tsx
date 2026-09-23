@@ -3,10 +3,13 @@ import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
+import type { DatasetViewCapability } from "@/api/types";
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { DecoyTruthBadge } from "@/components/common/decoy-truth-badge";
 import { ChartRenderBoundary } from "@/components/common/chart-render-boundary";
 import { PageLoading } from "@/components/common/page-loading";
 import { PlotStatus } from "@/components/common/plot-status";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -47,6 +50,10 @@ import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/compo
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
 import type { BuMs2SlotItem, BuSpectrumV1, BuXicOut } from "@/features/bu/types";
 import {
+  findDatasetViewCapability,
+  useDatasetCapability,
+} from "@/features/dataset-capabilities/DatasetCapabilityContext";
+import {
   RT_LINK_TOLERANCE_MIN,
   SCAN_UNAVAILABLE_REASON,
   formatDecimal,
@@ -57,6 +64,7 @@ import {
 import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 import {
+  TransitionLink,
   usePageTransitionReady,
   useTransitionSignal,
 } from "@/features/page-transition";
@@ -82,6 +90,7 @@ type EvidenceNotice = {
 
 export function BuMatchDetailPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
+  const capabilityReport = useDatasetCapability();
   const { matchId = "" } = useParams();
   const parsedMatchId = Number(matchId);
   const [xicFullOpen, setXicFullOpen] = useState(false);
@@ -105,21 +114,29 @@ export function BuMatchDetailPage() {
   const inspectedRt = toInspectedRt(ms2Selection);
   const pfmbInspectedRt = toInspectedRt(pfmbSelection);
   const { data, isLoading, error } = useQuery({
-    queryKey: ["bu", dataset.slug, "matches", parsedMatchId],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "matches", parsedMatchId],
     queryFn: () => fetchBuMatch(dataset.slug, parsedMatchId),
     enabled: Number.isFinite(parsedMatchId),
   });
-  const isMzml = data?.run.raw_format === "mzml";
+  const spectraCapability = findDatasetViewCapability(capabilityReport, "spectra");
+  const chromatogramCapability = findDatasetViewCapability(capabilityReport, "chromatogram");
+  const fragmentCapability = findDatasetViewCapability(capabilityReport, "fragment_annotation");
+  const quantificationCapability = findDatasetViewCapability(capabilityReport, "quantification");
+  const isMzmlRun = data?.run.raw_format === "mzml";
+  const rawSupportsSpectra = isMzmlRun || data?.run.raw_format === "zp";
+  const isMzml = rawSupportsSpectra && spectraCapability?.availability !== "DISABLED";
+  const canRequestXic = isMzml && chromatogramCapability?.availability !== "DISABLED";
+  const fragmentAvailable = fragmentCapability?.availability !== "DISABLED";
   const isBruker = data?.run.raw_format === "bruker_d";
-  const hasPfmb = Boolean(dataset.capabilities?.has_ms2_pfmb);
+  const hasPfmb = fragmentAvailable && Boolean(dataset.capabilities?.has_ms2_pfmb);
   const xic = useQuery({
-    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "xic", XIC_PPM],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "matches", parsedMatchId, "xic", XIC_PPM],
     queryFn: () => fetchBuMatchXic(dataset.slug, parsedMatchId, XIC_PPM),
-    enabled: !!isMzml && Number.isFinite(parsedMatchId),
+    enabled: canRequestXic && Number.isFinite(parsedMatchId),
     retry: chartQueryRetry,
   });
   const ms2 = useQuery({
-    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms2", MS2_PPM, selectedMs2Rt ?? "default"],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "matches", parsedMatchId, "ms2", MS2_PPM, selectedMs2Rt ?? "default"],
     queryFn: () =>
       fetchBuMatchMs2(
         dataset.slug,
@@ -132,13 +149,13 @@ export function BuMatchDetailPage() {
     placeholderData: (previousData) => previousData,
   });
   const ms1 = useQuery({
-    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "ms1"],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "matches", parsedMatchId, "ms1"],
     queryFn: () => fetchBuMatchMs1(dataset.slug, parsedMatchId),
     enabled: !!isMzml && Number.isFinite(parsedMatchId),
     retry: chartQueryRetry,
   });
   const mobility = useQuery({
-    queryKey: ["bu", dataset.slug, "matches", parsedMatchId, "mobility-slice"],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "matches", parsedMatchId, "mobility-slice"],
     queryFn: () => fetchBuMatchMobilitySlice(dataset.slug, parsedMatchId),
     enabled: !!isBruker && Number.isFinite(parsedMatchId),
     retry: chartQueryRetry,
@@ -151,7 +168,7 @@ export function BuMatchDetailPage() {
   });
   const pfmbOverlay = useMemo(
     () =>
-      ms2.data && pfmbEvidence.annotation.data
+      fragmentAvailable && ms2.data && pfmbEvidence.annotation.data
         ? buildPfmbSpectrumOverlay({
             ions: pfmbEvidence.annotation.data.matched_ions,
             rawMz: ms2.data.mz,
@@ -159,7 +176,7 @@ export function BuMatchDetailPage() {
             ppmTolerance: MS2_PPM,
           })
         : null,
-    [ms2.data, pfmbEvidence.annotation.data],
+    [fragmentAvailable, ms2.data, pfmbEvidence.annotation.data],
   );
   const ms2ExternalAnnotations = pfmbOverlay?.mappedAnnotations ?? EMPTY_MS2_EXTERNAL_ANNOTATIONS;
   const ms2AnnotationMode = ms2ExternalAnnotations.length > 0 ? "both" : "live";
@@ -357,9 +374,13 @@ export function BuMatchDetailPage() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle title={data.modified_sequence ?? data.sequence}>
-            {formatModifiedSequenceForDisplay(data.modified_sequence ?? data.sequence)}
-          </CardTitle>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <CardTitle title={data.modified_sequence ?? data.sequence}>
+              {formatModifiedSequenceForDisplay(data.modified_sequence ?? data.sequence)}
+            </CardTitle>
+            <DecoyTruthBadge value={data.is_decoy_match} state={data.is_decoy_state} />
+          </div>
+          {data.peptide_id && <TransitionLink className="text-sm text-primary underline" to={`/datasets/${dataset.slug}/peptides/${data.peptide_id}`}>View peptide</TransitionLink>}
         </CardHeader>
         <CardContent
           className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4"
@@ -370,7 +391,7 @@ export function BuMatchDetailPage() {
           <Field label="m/z" value={formatDecimal(data.precursor_mz)} />
           <Field label="Q.Value" value={formatDecimal(data.q_value)} />
           <Field
-            label="Identification RT apex"
+            label="Identification RT apex (min)"
             value={formatDecimal(data.identification_rt_apex ?? data.rt_window.rt_apex)}
           />
           <Field
@@ -383,15 +404,26 @@ export function BuMatchDetailPage() {
             }
           />
           <Field label="Proteins" value={data.proteins.map((p) => p.accession).join(", ") || "-"} />
-          <Field label="Spectrum" value={isMzml ? "mzML precursor XIC + MS1/MS2" : "match-level spectra unsupported"} />
+          <Field
+            label="Spectrum"
+            value={isMzml ? "validated spectrum source" : "match-level spectra unavailable"}
+          />
         </CardContent>
       </Card>
+
+      <QuantificationCard
+        capability={quantificationCapability}
+        rows={quantificationRows(data.extra_metadata)}
+        legacyIntensity={data.intensity}
+      />
 
       <BuEvidenceSummary
         slug={dataset.slug}
         matchId={parsedMatchId}
         match={data}
         hasPfmb={hasPfmb}
+        fragmentAnnotationsAvailable={fragmentAvailable}
+        spectrumSource={data.run.raw_format}
         inspectedRt={inspectedRt}
         selectedXicPoint={selectedXicPoint}
         xic={{ data: xic.data, isLoading: xic.isLoading, isError: xic.isError }}
@@ -401,7 +433,12 @@ export function BuMatchDetailPage() {
 
       {isMzml ? (
         <>
-          {xic.isLoading ? (
+          {!canRequestXic ? (
+            <PlotStatus
+              kind="unsupported"
+              title={chromatogramCapability?.message ?? "Precursor XIC is unavailable for this dataset."}
+            />
+          ) : xic.isLoading ? (
             <PlotStatus kind="loading" title="Loading precursor XIC..." />
           ) : xic.error ? (
             <MatchPlotErrorState error={xic.error} plot="xic" />
@@ -457,7 +494,7 @@ export function BuMatchDetailPage() {
           ) : ms1.data ? (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">MS1 spectrum from mzML</CardTitle>
+                <CardTitle className="text-base">{isMzmlRun ? "MS1 spectrum from mzML" : "MS1 spectrum"}</CardTitle>
                 <p className="text-xs text-muted-foreground">
                   MS1 scan #{ms1.data.scan}. MS1 scan RT: {ms1.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
                 </p>
@@ -489,9 +526,13 @@ export function BuMatchDetailPage() {
           ) : ms2.data ? (
             <Card className="[overflow-anchor:none]" data-testid="live-ms2-evidence-section">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Live mzML MS2 Evidence</CardTitle>
+                <CardTitle className="text-base">{isMzmlRun ? "Live mzML MS2 Evidence" : "MS2 Evidence"}</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Raw mzML MS2 peaks and live b/y fragment matches from the selected scan.
+                  {fragmentAvailable
+                    ? isMzmlRun
+                      ? "Raw mzML MS2 peaks and Viewer-calculated b/y fragment matches from the selected scan."
+                      : "Raw MS2 peaks and Viewer-calculated b/y fragment matches from the selected scan."
+                    : "Raw MS2 peaks from the selected scan; fragment annotations are unavailable."}
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -507,15 +548,17 @@ export function BuMatchDetailPage() {
                     && activePfmbSlot.slot_index === pfmbEvidence.slotData.apex_slot,
                   )}
                   sourceMode={evidenceSourceMode}
-                  matchedIonCount={ms2.data?.matched_ions.length ?? null}
+                  matchedIonCount={fragmentAvailable ? ms2.data?.matched_ions.length ?? null : null}
                 />
                 <EvidenceUpdateNotice message={evidenceNotice?.message} />
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <EvidenceJumpControls
-                    onJumpToMs2={scrollToLiveMs2}
-                    onJumpToPfmb={scrollToPfmbHeatmap}
-                  />
-                </div>
+                {fragmentAvailable && (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <EvidenceJumpControls
+                      onJumpToMs2={scrollToLiveMs2}
+                      onJumpToPfmb={scrollToPfmbHeatmap}
+                    />
+                  </div>
+                )}
 
                 <section
                   ref={liveMs2SectionRef}
@@ -526,7 +569,11 @@ export function BuMatchDetailPage() {
                   <div className="mb-2">
                     <h3 className="text-sm font-semibold">MS2 spectrum</h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Matched fragments are calculated from the selected mzML MS2 scan. Click a live-primary b/y fragment peak to add or remove its product ion XIC.
+                      {fragmentAvailable
+                        ? isMzmlRun
+                          ? "Matched fragments are calculated from the selected mzML MS2 scan."
+                          : "Matched fragments are calculated from the selected MS2 scan."
+                        : "No fragment labels are drawn because this dataset has no approved fragment annotation capability."}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground" data-testid="ms2-current-rt">
                       MS2 scan {formatEvidenceScan(ms2.data.scan)}. MS2 scan RT: {ms2.data.rt_minutes.toFixed(4)} min. {ZOOM_HINT}
@@ -564,10 +611,10 @@ export function BuMatchDetailPage() {
                       precursorCharge={data.precursor_charge}
                       precursorMz={data.precursor_mz}
                       ppm={MS2_PPM}
-                      onMatchedIonClick={toggleProductIon}
+                      onMatchedIonClick={fragmentAvailable ? toggleProductIon : undefined}
                       selectedProductIonIds={selectedProductIonIds}
                       externalAnnotations={ms2ExternalAnnotations}
-                      annotationMode={ms2AnnotationMode}
+                      annotationMode={fragmentAvailable ? ms2AnnotationMode : "external"}
                       onOpenFull={() => setMs2FullOpen(true)}
                       onFirstRender={markMs2Rendered}
                     />
@@ -575,6 +622,7 @@ export function BuMatchDetailPage() {
                   </div>
                 </section>
 
+                {fragmentAvailable ? (
                 <section className="border-t border-border/70 pt-5" data-testid="product-ion-evidence-section">
                   <h3 className="text-sm font-semibold">Product ion evidence</h3>
                   <div
@@ -612,6 +660,12 @@ export function BuMatchDetailPage() {
                     </div>
                   </div>
                 </section>
+                ) : (
+                  <PlotStatus
+                    kind="unsupported"
+                    title={fragmentCapability?.message ?? "Fragment annotations are unavailable."}
+                  />
+                )}
               </CardContent>
             </Card>
           ) : null}
@@ -644,9 +698,11 @@ export function BuMatchDetailPage() {
         <>
           <Card>
             <CardContent className="p-6 text-sm text-muted-foreground">
-              {isBruker
-                ? "Bruker .d match-level Precursor XIC and MS1/MS2 spectra are not supported."
-                : "This raw format does not support match-level Precursor XIC or MS1/MS2 spectra."}
+              {rawSupportsSpectra && spectraCapability?.availability === "DISABLED"
+                ? spectraCapability.message ?? "Match-level spectra are unavailable for this dataset."
+                : isBruker
+                  ? "Bruker .d match-level Precursor XIC and MS1/MS2 spectra are not supported."
+                  : "This raw format does not support match-level Precursor XIC or MS1/MS2 spectra."}
               <BuProductIonXicCard
                 datasetId={dataset.id}
                 slug={dataset.slug}
@@ -722,7 +778,7 @@ export function BuMatchDetailPage() {
 
       {ms1FullOpen && ms1.data && (
         <BuChartModal
-          title="MS1 spectrum from mzML"
+          title={isMzmlRun ? "MS1 spectrum from mzML" : "MS1 spectrum"}
           subtitle={`${data.sequence} · ${ZOOM_HINT}`}
           onClose={() => setMs1FullOpen(false)}
           actions={<ResetZoomButton zoom={ms1ModalZoom} onReset={() => setMs1ModalZoom(DEFAULT_ZOOM)} />}
@@ -741,7 +797,7 @@ export function BuMatchDetailPage() {
 
       {ms2FullOpen && ms2.data && (
         <BuChartModal
-          title="Live mzML MS2 matching"
+          title={fragmentAvailable ? isMzmlRun ? "Live mzML MS2 matching" : "MS2 matching" : "Raw MS2 spectrum"}
           subtitle={`${data.sequence} · ${ZOOM_HINT}`}
           onClose={() => setMs2FullOpen(false)}
           actions={<ResetZoomButton zoom={ms2ModalZoom} onReset={() => setMs2ModalZoom(DEFAULT_ZOOM)} />}
@@ -755,10 +811,10 @@ export function BuMatchDetailPage() {
             height={Math.max(BU_CHART.ms2Height, 620)}
             zoom={ms2ModalZoom}
             onZoomChange={setMs2ModalZoom}
-            onMatchedIonClick={toggleProductIon}
+            onMatchedIonClick={fragmentAvailable ? toggleProductIon : undefined}
             selectedProductIonIds={selectedProductIonIds}
             externalAnnotations={ms2ExternalAnnotations}
-            annotationMode={ms2AnnotationMode}
+            annotationMode={fragmentAvailable ? ms2AnnotationMode : "external"}
           />
         </BuChartModal>
       )}
@@ -851,9 +907,94 @@ function MatchPlotErrorState({ error, plot }: { error: unknown; plot: "xic" | "s
   );
 }
 
+interface QuantificationRow {
+  metric: string | null;
+  channel: string | null;
+  sample: string | null;
+  value: number | null;
+  unit: string | null;
+  normalization_kind: string | null;
+}
+
+function quantificationRows(metadata: Record<string, unknown>): QuantificationRow[] {
+  const raw = metadata.quantification;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    const value = record.value;
+    return [{
+      metric: textOrNull(record.metric),
+      channel: textOrNull(record.channel),
+      sample: textOrNull(record.sample),
+      value: typeof value === "number" && Number.isFinite(value) ? value : null,
+      unit: textOrNull(record.unit),
+      normalization_kind: textOrNull(record.normalization_kind),
+    }];
+  });
+}
+
+function textOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value.trim();
+  return cleaned || null;
+}
+
+function QuantificationCard({
+  capability,
+  rows,
+  legacyIntensity,
+}: {
+  capability: DatasetViewCapability | null;
+  rows: QuantificationRow[];
+  legacyIntensity: number | null;
+}) {
+  if (!capability && rows.length === 0 && legacyIntensity === null) return null;
+  if (capability?.availability === "DISABLED") {
+    return (
+      <Card data-testid="quantification-unavailable">
+        <CardHeader><CardTitle className="text-base">Quantification</CardTitle></CardHeader>
+        <CardContent>
+          <PlotStatus kind="unsupported" title={capability.message ?? "Quantification is unavailable."} />
+        </CardContent>
+      </Card>
+    );
+  }
+  const visibleRows = rows.length > 0
+    ? rows
+    : [{ metric: null, channel: null, sample: null, value: legacyIntensity, unit: null, normalization_kind: null }];
+  return (
+    <Card data-testid="match-quantification">
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-base">Quantification</CardTitle>
+          {capability && <Badge variant="outline">{capability.availability.toLowerCase()}</Badge>}
+        </div>
+        {capability?.availability === "PARTIAL" && (
+          <p className="text-xs text-muted-foreground">
+            {capability.message ?? "Some quantification fields are unavailable or ambiguous."}
+          </p>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        {visibleRows.map((row, index) => (
+          <div key={`${row.channel ?? "value"}-${index}`} className="grid grid-cols-2 gap-2 rounded-md border p-3 md:grid-cols-5">
+            <Field label="Channel" value={row.channel ?? "Unlabelled"} />
+            <Field label="Metric" value={row.metric ?? "Not provided"} />
+            <Field label="Sample" value={row.sample ?? "Not provided"} />
+            <Field label="Value" value={row.value === null ? "Missing" : formatDecimal(row.value)} />
+            <Field label="Unit" value={row.unit ?? "Ambiguous"} />
+            <Field label="Normalization" value={row.normalization_kind ?? "Not provided"} />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+    <div className="rounded-md border border-border/60 bg-muted/30 p-3" data-field={label}>
       <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="mt-1 break-words font-medium">{value}</div>
       {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}

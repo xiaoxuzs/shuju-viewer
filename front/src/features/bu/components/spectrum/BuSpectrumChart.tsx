@@ -173,7 +173,11 @@ export function BuSpectrumChart({
   const subtitle =
     spectrum.ms_level === 1
       ? `precursor marker ${markerMz?.toFixed(4) ?? "-"}${precursorCharge ? ` · charge +${precursorCharge}` : ""}`
-      : `live matched ${spectrum.matched_ions.length}/${theoreticalCount(sequence)} theoretical b/y ions (±${ppm} ppm)`;
+      : showLiveAnnotations
+        ? `live matched ${spectrum.matched_ions.length}/${theoreticalCount(sequence)} theoretical b/y ions (±${ppm} ppm)`
+        : mappedExternalAnnotations.length > 0
+          ? `${mappedExternalAnnotations.length} supplied fragment annotations`
+          : "raw MS2 peaks; fragment annotations unavailable";
   const peaks = useMemo(() => {
     const mapped: ChartPeak[] = spectrum.mz.map((mz, index) => ({
       mz,
@@ -218,6 +222,14 @@ export function BuSpectrumChart({
   zoomRef.current = zoom;
   const onMatchedIonClickRef = useRef(onMatchedIonClick);
   onMatchedIonClickRef.current = onMatchedIonClick;
+  const pendingClicks = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const timers = pendingClicks.current;
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
+    };
+  }, [spectrum]);
   const onFirstRenderRef = useRef(onFirstRender);
   onFirstRenderRef.current = onFirstRender;
   const commitZoomRef = useRef<(zoom: Zoom) => void>(() => {});
@@ -418,13 +430,20 @@ export function BuSpectrumChart({
     applyZoomRef.current = applyZoom;
 
     let suppressClickUntil = 0;
-    let clickTimer: ReturnType<typeof setTimeout> | null = null;
     const brush = d3
       .brushX()
       .extent([[0, 0], [innerW, innerH]])
       .on("end", (event) => {
-        if (!event.selection) return;
-        const [a, b] = event.selection as [number, number];
+        const selection = event.selection as [number, number] | null;
+        // d3-brush suppresses the native click after ANY pointer movement,
+        // including a 1px tremor below our 4px zoom threshold. Resolve that
+        // gesture here, once, instead of dropping both zoom and ion selection.
+        if (event.sourceEvent?.type === "mouseup" && (!selection || Math.abs(selection[1] - selection[0]) < 4)) {
+          onClick(event.sourceEvent as MouseEvent);
+          suppressClickUntil = Date.now() + 50;
+        }
+        if (!selection) return;
+        const [a, b] = selection;
         brushG.call(brush.move as any, null);
         if (Math.abs(b - a) < 4) return;
         suppressClickUntil = Date.now() + 250;
@@ -433,10 +452,8 @@ export function BuSpectrumChart({
     brushG.call(brush as any);
 
     const onDblClick = (event: MouseEvent) => {
-      if (clickTimer) {
-        clearTimeout(clickTimer);
-        clickTimer = null;
-      }
+      for (const timer of pendingClicks.current) clearTimeout(timer);
+      pendingClicks.current.clear();
       const rect = svgEl.getBoundingClientRect();
       const cx = event.clientX - rect.left - margin.left;
       const cy = event.clientY - rect.top - margin.top;
@@ -455,10 +472,13 @@ export function BuSpectrumChart({
       if (!selected?.ion || Math.abs(xScale(selected.mz) - cx) > 8) return;
       const peakY = yScale(peakDisplayIntensity(selected, intensityMode));
       if (cy < peakY - 8 || cy > yScale(0) + 8) return;
-      clickTimer = setTimeout(() => {
+      // A redraw (ResizeObserver, labels or selection styling) must not discard
+      // an accepted click. Cancel only on double-click, spectrum change/unmount.
+      const timer = setTimeout(() => {
+        pendingClicks.current.delete(timer);
         onMatchedIonClickRef.current?.(selected.ion!);
-        clickTimer = null;
       }, 180);
+      pendingClicks.current.add(timer);
     };
     const onMove = (event: MouseEvent) => {
       const rect = svgEl.getBoundingClientRect();
@@ -517,7 +537,6 @@ export function BuSpectrumChart({
       svgEl.removeEventListener("mousemove", onMove);
       svgEl.removeEventListener("mouseleave", onLeave);
       svgEl.removeEventListener("wheel", onWheel);
-      if (clickTimer) clearTimeout(clickTimer);
       applyZoomRef.current = null;
     };
   }, [fullX, height, intensityMode, labelMode, peaks, selectedProductIonIds, spectrum.markers, width]);

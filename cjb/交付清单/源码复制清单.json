@@ -1,0 +1,4542 @@
+[
+  {
+    "path": "back\\app\\agent_import\\resources\\agent1\\实测.md",
+    "bytes": 77526,
+    "sha256": "F2FA59B5B1318C8540A19AE5043336F7810C8DB085B23E0E1CC41CB64048A7A2"
+  },
+  {
+    "path": "back\\app\\agent_import\\resources\\agent1\\示例_MaxQuant数据内容与可视化方案.md",
+    "bytes": 56523,
+    "sha256": "49FDCFF5D9320F2489C2C557C273CDA6BA535ED8088920152896B43FCC1F0868"
+  },
+  {
+    "path": "back\\app\\agent_import\\resources\\agent1\\研究提示词.md",
+    "bytes": 20677,
+    "sha256": "F6656140F69DB1F3E026F8125E9C21081335AADF4B114A1A078794293DA6489A"
+  },
+  {
+    "path": "back\\app\\agent_import\\__init__.py",
+    "bytes": 182,
+    "sha256": "32444E7C1F4B01906C1135AF693B52E7A8174CBA395620C0B90F6469C9829CAE"
+  },
+  {
+    "path": "back\\app\\agent_import\\admission.py",
+    "bytes": 1213,
+    "sha256": "4150B3E67F88F1DF3B5F49247A0657CF1DF9C84F968F0DE1C26C3FDEC3085DB4"
+  },
+  {
+    "path": "back\\app\\agent_import\\api.py",
+    "bytes": 10066,
+    "sha256": "CA58EBEEFB88EA9E59D3C07139C213489F98415EEAC957ADCD3AB58EDEC95D1C"
+  },
+  {
+    "path": "back\\app\\agent_import\\binary_executor.py",
+    "bytes": 9851,
+    "sha256": "BC6E3B6E7125DE1D0F8C3003AA57F1B4943DE5626F9DBF73432283B0732DBCC5"
+  },
+  {
+    "path": "back\\app\\agent_import\\case_service.py",
+    "bytes": 42752,
+    "sha256": "B8F2F0987721342751BFE49E1A9539D1D545CAFE9542FEFE8C007A4ABEE86D75"
+  },
+  {
+    "path": "back\\app\\agent_import\\contracts.py",
+    "bytes": 11305,
+    "sha256": "6CA6005384212E16D57A6964FF6DE4DAB5BED276E74AE5E51625263EB0838E9B"
+  },
+  {
+    "path": "back\\app\\agent_import\\errors.py",
+    "bytes": 820,
+    "sha256": "F866C251E967A1394715D11963E57488F09EA4E45FD5591F494CFC60EDAC5A28"
+  },
+  {
+    "path": "back\\app\\agent_import\\failure_policy.py",
+    "bytes": 1749,
+    "sha256": "D0BCF75B81AAEAB7355848AC00F45A23C0E3BDA03552C9C733054E27FD3009DE"
+  },
+  {
+    "path": "back\\app\\agent_import\\graph.py",
+    "bytes": 7186,
+    "sha256": "B4276BEF31AE02F2437014609B11AA523296688521CA4349DC5716DE825F3DFD"
+  },
+  {
+    "path": "back\\app\\agent_import\\kimi_research_runtime.py",
+    "bytes": 32048,
+    "sha256": "9473256A76F9C6BCCD6106B6749A092A27175192BD83C3C8410DEA93B7E201DC"
+  },
+  {
+    "path": "back\\app\\agent_import\\mapping_preflight.py",
+    "bytes": 16328,
+    "sha256": "FDA71427646E213454D0CAC22AAE34E8DC671C4F81BB0922BA744E88CD5168E3"
+  },
+  {
+    "path": "back\\app\\agent_import\\migrations.py",
+    "bytes": 5401,
+    "sha256": "CE5434EE6028108B4C5377CB4B1101AE6D3821EC71216830DAE6D840896DAEC0"
+  },
+  {
+    "path": "back\\app\\agent_import\\model_diagnostics.py",
+    "bytes": 4973,
+    "sha256": "7108ECE5207913CCBBEE06294BF61816B3F4862FD9CEAC8DD2411C544FE83119"
+  },
+  {
+    "path": "back\\app\\agent_import\\model_provider.py",
+    "bytes": 28080,
+    "sha256": "8AC7077C9397D726E16B815C93AC5B326979A8E40BA3D48283560D13D495F7F2"
+  },
+  {
+    "path": "back\\app\\agent_import\\research_contracts.py",
+    "bytes": 8754,
+    "sha256": "48DBF23F568CD612A6D15D4D9EED766E404EEB9B4D2AE275E984717DD3161EAC"
+  },
+  {
+    "path": "back\\app\\agent_import\\research_tools.py",
+    "bytes": 33572,
+    "sha256": "6C4D5C5FA2D3442CD86844394834EA42F5641721506A060B678BF4E4E34D1973"
+  },
+  {
+    "path": "back\\app\\agent_import\\schemas.py",
+    "bytes": 2307,
+    "sha256": "FAD5EDE3F2C3531851DC28A5904AABEA48291EAF87B313E528BBD5E9DF7C3A61"
+  },
+  {
+    "path": "back\\app\\agent_import\\source_sampling.py",
+    "bytes": 4390,
+    "sha256": "AFF96732CF29F411B05662646DB22D189EE0458563217291B1F388A1C56249B3"
+  },
+  {
+    "path": "back\\app\\agent_import\\states.py",
+    "bytes": 2009,
+    "sha256": "017E6E1285A142417BC9B1A9792E1AAE478CDA5474918719153DC69A517C151C"
+  },
+  {
+    "path": "back\\app\\agent_import\\worker.py",
+    "bytes": 4543,
+    "sha256": "6DF953299FF1EBF7602A68FA036071AE1DB499B7447FD32CA21157F27FAB214C"
+  },
+  {
+    "path": "back\\app\\agent_import\\workflow.py",
+    "bytes": 15210,
+    "sha256": "79B350B235B7953033B4BD177125962B22CD13D79101767C574C15C7E91DC824"
+  },
+  {
+    "path": "back\\app\\agent_import\\zp_capabilities.py",
+    "bytes": 9936,
+    "sha256": "CED3DD0D5B0C55474567FC24B12140F85CE8C94DA59380CA01810BCF6045F574"
+  },
+  {
+    "path": "back\\app\\agent_zp\\__init__.py",
+    "bytes": 74,
+    "sha256": "FFCB08E0868CBE0C6B34E5933AD5701FD087A88F44A883BCF680A8856C2901BA"
+  },
+  {
+    "path": "back\\app\\agent_zp\\service.py",
+    "bytes": 38817,
+    "sha256": "369B22DD7C8410A5CBDC6BC73F450055081B4FB9FEEA7A98E10BC8EF6E96B3BF"
+  },
+  {
+    "path": "back\\app\\api\\v1\\bu\\__init__.py",
+    "bytes": 479,
+    "sha256": "B7C75A088BA5A0F05E64D5D53EB12AB6F0DEB5715AF8FE54336CDEC615456DDF"
+  },
+  {
+    "path": "back\\app\\api\\v1\\bu\\chromatogram.py",
+    "bytes": 1103,
+    "sha256": "56845273E617EEEF26058BB12DD579AA78DBBF9C4A7979D9F53C024D2DC4799F"
+  },
+  {
+    "path": "back\\app\\api\\v1\\bu\\lists.py",
+    "bytes": 3035,
+    "sha256": "5019F2D10E1FAF6AF7E655DA08993BED79331BF3EE19F97E243D2B39877222FA"
+  },
+  {
+    "path": "back\\app\\api\\v1\\bu\\matches.py",
+    "bytes": 3637,
+    "sha256": "92251B11B2C09B1935B47532AA15549B4259CEC7559706D95ECC1A06EF25FB9E"
+  },
+  {
+    "path": "back\\app\\api\\v1\\bu\\ms2_annotations.py",
+    "bytes": 1792,
+    "sha256": "000F5816B187A96F960E2E842D6185618CD4D12DAE33FDB17453CB344C3FD6C9"
+  },
+  {
+    "path": "back\\app\\api\\v1\\bu\\overview.py",
+    "bytes": 1405,
+    "sha256": "374FA3F3F920080B887962E63E03701A8ED131822C3A830FBCBEBA9EC76B07D5"
+  },
+  {
+    "path": "back\\app\\api\\v1\\bu\\proteins.py",
+    "bytes": 820,
+    "sha256": "685316D8E7D11382511F5900790C45C2CC28AF5267E810123D6C3A3A803D4831"
+  },
+  {
+    "path": "back\\app\\api\\v1\\__init__.py",
+    "bytes": 1405,
+    "sha256": "01BE6A8165A55CEB9B7CC540FD2B4EAE4E86D337A3AFAA994D8CCE3B05D1F65C"
+  },
+  {
+    "path": "back\\app\\api\\v1\\agent_zp.py",
+    "bytes": 913,
+    "sha256": "1D687AFADFF702FD8A2AD35868215A22160A91BBCE46723FAAA12BBB4CBE5457"
+  },
+  {
+    "path": "back\\app\\api\\v1\\datasets.py",
+    "bytes": 13260,
+    "sha256": "FC1EE2B47C4291FD0B2366CBEAA70CA80F7FDAB317B1DA053A98344B9E485585"
+  },
+  {
+    "path": "back\\app\\api\\v1\\import_uploads.py",
+    "bytes": 2540,
+    "sha256": "1F6D71B66D965397DC273DA51E5E2E386A81153522E06B844C473307C660B72B"
+  },
+  {
+    "path": "back\\app\\api\\v1\\imports.py",
+    "bytes": 5235,
+    "sha256": "213EC7F6B06A4D2047E96E228D54A468A7B8396F227622B9E2134B3A2A9E5046"
+  },
+  {
+    "path": "back\\app\\api\\v1\\mzml_spectra.py",
+    "bytes": 11045,
+    "sha256": "741E3E1109F910952A7A69DD3F90B45E3C167314F5F087ECF1EC3212525D38FD"
+  },
+  {
+    "path": "back\\app\\api\\v1\\proteins.py",
+    "bytes": 13763,
+    "sha256": "9DBA206DEC31F90219080584FF37C7EC3F9FF42DAF233BF5FDCB783C0B16CFF6"
+  },
+  {
+    "path": "back\\app\\api\\v1\\proteoforms.py",
+    "bytes": 13499,
+    "sha256": "3CA2F31564B44D1BBF6FE4708AA263EAC0D64E8A874A181E76C009C136928225"
+  },
+  {
+    "path": "back\\app\\api\\v1\\prsms.py",
+    "bytes": 12381,
+    "sha256": "D3D5C03530FBFEAC1ABF4106D0E8CEB12CF9D1BA35ECF1E980D472455C994896"
+  },
+  {
+    "path": "back\\app\\api\\v1\\spectra.py",
+    "bytes": 1593,
+    "sha256": "EB5EE95CA54D56767EB4AFC1FC72EA4E3F66E45F270BBB0BC8BD35BAF05739E4"
+  },
+  {
+    "path": "back\\app\\api\\v1\\universal_compat.py",
+    "bytes": 5951,
+    "sha256": "6708BAF500B0B0ED084586299B1C240E6150773BE5A07A132963684CB8DB94F0"
+  },
+  {
+    "path": "back\\app\\api\\v1\\zp_conversions.py",
+    "bytes": 6994,
+    "sha256": "CE43A955DD0D246507BF82E8510001108E71412262AB6C20CF9C57E5BE577DD2"
+  },
+  {
+    "path": "back\\app\\api\\__init__.py",
+    "bytes": 2,
+    "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+  },
+  {
+    "path": "back\\app\\api\\deps.py",
+    "bytes": 548,
+    "sha256": "C3172C9892A586F84A7AD1B989DFD6F8F94EC107120A2C327E68EA46E3CF2588"
+  },
+  {
+    "path": "back\\app\\bu\\services\\__init__.py",
+    "bytes": 71,
+    "sha256": "DC85364977E66A4D54D5C0A4B6056325FC53867413B6D73F2D3FF3554DB11B71"
+  },
+  {
+    "path": "back\\app\\bu\\services\\chromatogram_service.py",
+    "bytes": 6619,
+    "sha256": "391A1A9C4222C3B83EB466A008F22BE1533C4E1D967910A8F1251A1112A30455"
+  },
+  {
+    "path": "back\\app\\bu\\services\\chromatogram_summary.py",
+    "bytes": 6809,
+    "sha256": "E4324CEBE520860F14B3ABD23CD3C50FDA519C6C414FAA543894A648478811E5"
+  },
+  {
+    "path": "back\\app\\bu\\services\\fasta_index.py",
+    "bytes": 5492,
+    "sha256": "1055F7AD471D26D1517CD7B26447EA25448250AACBE2C5513B4584920FCAF8D5"
+  },
+  {
+    "path": "back\\app\\bu\\services\\lists_service.py",
+    "bytes": 31529,
+    "sha256": "C74322E631866A9DCE4CF7F6069688F874C0698F557ABA7BE21FF1B2CA3BFC72"
+  },
+  {
+    "path": "back\\app\\bu\\services\\mobility_service.py",
+    "bytes": 1963,
+    "sha256": "3AB7A218E639281DC251D5F258E27F8E133F79B538AE3FEAE2FF249791BFCC04"
+  },
+  {
+    "path": "back\\app\\bu\\services\\modified_sequence.py",
+    "bytes": 6426,
+    "sha256": "D7F4DDC5E7A2E889624EE2F03362CB3BC7D29C57A702936138DA49CDF3B2CCB3"
+  },
+  {
+    "path": "back\\app\\bu\\services\\ms2_annotation_svc.py",
+    "bytes": 7561,
+    "sha256": "2A448B71F16173CD01EAB2DB8374C1EC2ECFCEA4F7571DA3294E8B263B892CBA"
+  },
+  {
+    "path": "back\\app\\bu\\services\\overview_service.py",
+    "bytes": 14446,
+    "sha256": "C7209B58987D1647EEDEBEA61C2B71DA5D2BEE9ABD49B67C0F2CBB7CB083D436"
+  },
+  {
+    "path": "back\\app\\bu\\services\\peptide_mapper.py",
+    "bytes": 2086,
+    "sha256": "1BD21D0D310D4CB6FE00C98613113E602AE17001C6949588DCC53D78693C484C"
+  },
+  {
+    "path": "back\\app\\bu\\services\\precursor_isotopes.py",
+    "bytes": 997,
+    "sha256": "679C3AA5C87424A73B3D2267D14B27B1113E9EBDC58783CEEAE2786BEE209E85"
+  },
+  {
+    "path": "back\\app\\bu\\services\\product_xic_service.py",
+    "bytes": 8870,
+    "sha256": "FED838D01B13E4F806FBD09B868E4F1AB11EF5C831DDD3DE167FB04C64A3ADB3"
+  },
+  {
+    "path": "back\\app\\bu\\services\\protein_detail_service.py",
+    "bytes": 11590,
+    "sha256": "1A8915AB73D89C5BB8B1B9FE0103588EFB22435635BA21476EC2397366C878FE"
+  },
+  {
+    "path": "back\\app\\bu\\services\\protein_sequence_backfill.py",
+    "bytes": 5968,
+    "sha256": "0ED2395330E76C28D1D3E0AB9506E8E8AB716C95B50B32DB0F2E7E5F6CCA0D4D"
+  },
+  {
+    "path": "back\\app\\bu\\services\\protein_sequence_resolver.py",
+    "bytes": 11367,
+    "sha256": "0E3249310CA086A09DC202F5B1B0D61FD792D4EFD385CC4BD075E1D01D71E023"
+  },
+  {
+    "path": "back\\app\\bu\\services\\scan_resolver.py",
+    "bytes": 6350,
+    "sha256": "51341D2938343349E18CEB78F0F4FC69E2FEC4D93F6601F6643E174F28B95143"
+  },
+  {
+    "path": "back\\app\\bu\\services\\spectrum_facade.py",
+    "bytes": 14132,
+    "sha256": "5D6207B6E3C61A7A7A1B486DE5E8635B0FC9966FD1FE54C2ED6A31A9F92B4EA5"
+  },
+  {
+    "path": "back\\app\\bu\\services\\theoretical_fragments.py",
+    "bytes": 3610,
+    "sha256": "9B58DC89106F65F2C7093B1F37AA665EB22A392B016F1D5A3BC85BC854204E21"
+  },
+  {
+    "path": "back\\app\\bu\\services\\xic_service.py",
+    "bytes": 7564,
+    "sha256": "D3085A89257A99F8530E1BD208AAB5A009248CF11D7BFCC7898878D7E551B5C3"
+  },
+  {
+    "path": "back\\app\\bu\\tdf_reader\\__init__.py",
+    "bytes": 93,
+    "sha256": "78D99678B4765D67450C5A4504213CCAEA9EBED772BA7EE2C9EA0853E3921B6D"
+  },
+  {
+    "path": "back\\app\\bu\\tdf_reader\\chromatogram.py",
+    "bytes": 2043,
+    "sha256": "7B8E1DF51B6AB24F55AA67422BE96E64D569662B4FF5241D3DAA1743FDEB0887"
+  },
+  {
+    "path": "back\\app\\bu\\tdf_reader\\dia_windows.py",
+    "bytes": 987,
+    "sha256": "7AB4706C8592145B95C2A2C75BFCA473A7E0EF8DC994EBFA0703745FE31697FD"
+  },
+  {
+    "path": "back\\app\\bu\\tdf_reader\\mobility_slice.py",
+    "bytes": 1596,
+    "sha256": "87649FA16BFB726EA0F5DEDECF9DCD4A9571D125053601D06569F9ADF5020D5E"
+  },
+  {
+    "path": "back\\app\\bu\\tdf_reader\\root_resolver.py",
+    "bytes": 760,
+    "sha256": "394F674196BA732ABBE1E1BBE68CEF1F29F21895143C355D94FDCFCC6D16FCCC"
+  },
+  {
+    "path": "back\\app\\bu\\tdf_reader\\session_cache.py",
+    "bytes": 1894,
+    "sha256": "E587573C9A3FA34A2D7FC80937D63341F0A76F30F87192FE0DB6A64A049A27F0"
+  },
+  {
+    "path": "back\\app\\bu\\__init__.py",
+    "bytes": 74,
+    "sha256": "90C4F25486DE9798760E2C9696E70B26AD862298CA639638B7421E8D98917022"
+  },
+  {
+    "path": "back\\app\\bu\\decoy_truth.py",
+    "bytes": 1859,
+    "sha256": "376C5AC80AAF2B9DA24FC0E6C32AB80520918FC3168D5F067DD70F63FBBB6CF4"
+  },
+  {
+    "path": "back\\app\\bu\\deps.py",
+    "bytes": 1714,
+    "sha256": "C9DADD9BB35C654A43B8307DC93A0BC6466F99719C10FF27283A7B849798A85F"
+  },
+  {
+    "path": "back\\app\\bu\\q_value_filter.py",
+    "bytes": 669,
+    "sha256": "ADFB2E54164A422DA8373048171B1268EA350A2A81AA8F80D1DABDE500725C17"
+  },
+  {
+    "path": "back\\app\\core\\__init__.py",
+    "bytes": 2,
+    "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+  },
+  {
+    "path": "back\\app\\core\\config.py",
+    "bytes": 12373,
+    "sha256": "54535712EA66B18834A52702BC5BCF2D9EF93C9C2B9F4B805FE6405A5092AA17"
+  },
+  {
+    "path": "back\\app\\core\\db.py",
+    "bytes": 1635,
+    "sha256": "11014014294C55B7F5B7370C4068DAFCFCD3768242337A31D6AF7C98C367DAF4"
+  },
+  {
+    "path": "back\\app\\core\\logging.py",
+    "bytes": 510,
+    "sha256": "FD932504A6B08F165132DD64D593A30F76BC18CF26F3EA3E93C46F5BDCC92097"
+  },
+  {
+    "path": "back\\app\\dataset_capabilities\\__init__.py",
+    "bytes": 1062,
+    "sha256": "E65B0A36EB71B086756387A10981BA1A6EEE0FD47EF16B21D289C8C6EB2AD628"
+  },
+  {
+    "path": "back\\app\\dataset_capabilities\\catalog.py",
+    "bytes": 4808,
+    "sha256": "3CDB37FE5E023F586DC8D3C426AE3B2C7D0C155BD76F3B0319F3B6DA3EF4EC67"
+  },
+  {
+    "path": "back\\app\\dataset_capabilities\\compiler.py",
+    "bytes": 11995,
+    "sha256": "FC7088CB3F8B20277F4A8B83C82BED0ACB20F36B86D676AAAC163D637E29F287"
+  },
+  {
+    "path": "back\\app\\dataset_capabilities\\contracts.py",
+    "bytes": 5414,
+    "sha256": "3B3F73B097D431A5BF31DDDAF6DEA752F614B749C5E2848465B109594A84BF20"
+  },
+  {
+    "path": "back\\app\\dataset_capabilities\\semantic_compiler.py",
+    "bytes": 20909,
+    "sha256": "75FD93542D7F0C42199A97AC6075E810BCF5C9A7F4E74A80CEF45B1E9DE048D2"
+  },
+  {
+    "path": "back\\app\\dataset_ingest_root\\__init__.py",
+    "bytes": 333,
+    "sha256": "70E740461F652C1F799AB71271F35CAA47E021911B8111EAE0BB980FE6E642EB"
+  },
+  {
+    "path": "back\\app\\dataset_ingest_root\\resolver.py",
+    "bytes": 4684,
+    "sha256": "86F8B8087AFD6EE2607BFFFBB2CBD84125D5C8606FF6B017AEF5EB732095E75B"
+  },
+  {
+    "path": "back\\app\\declarative_ingest\\__init__.py",
+    "bytes": 823,
+    "sha256": "BE5C81B16327943B1CF111875DF9F561B23E96FAD5C48B084679FFCDAD563EF2"
+  },
+  {
+    "path": "back\\app\\declarative_ingest\\contracts.py",
+    "bytes": 11213,
+    "sha256": "44BEF5A4F6CE40896F7C74736B4F938C5AE4F9C15A00974CC4771B64E625B9CF"
+  },
+  {
+    "path": "back\\app\\declarative_ingest\\executor.py",
+    "bytes": 30584,
+    "sha256": "B5F3E5F8DFF0BD5680D54EB73E89852A634203FEF6529785232A85A982B52EA4"
+  },
+  {
+    "path": "back\\app\\declarative_ingest\\preflight.py",
+    "bytes": 33304,
+    "sha256": "82D048C725016924F8F235C969A59B6B65C167CCCA47E8272609C2D12455976C"
+  },
+  {
+    "path": "back\\app\\declarative_ingest\\semantic_schema.py",
+    "bytes": 10893,
+    "sha256": "BAE1DD2F3EDBDEDA0F5A588252C128249A18F4298D96CFFEF905E5C56CC80D4C"
+  },
+  {
+    "path": "back\\app\\declarative_ingest\\zp_artifact.py",
+    "bytes": 29504,
+    "sha256": "A7955EDA1C625D0A4BF757A06E3597FD36B0CBAEF0B614377D007A99D2795EFF"
+  },
+  {
+    "path": "back\\app\\fingerprint\\__init__.py",
+    "bytes": 319,
+    "sha256": "345AD66884349962AACB28537B1B3207F1A9208D10C88B3A4304B803B76A43A5"
+  },
+  {
+    "path": "back\\app\\fingerprint\\dataset_metadata_fingerprint.py",
+    "bytes": 3230,
+    "sha256": "A323A0B7317460F5AFC6C1D0C7867D85FD6C84A93BA90AF6F46BB00080F880A9"
+  },
+  {
+    "path": "back\\app\\import_uploads\\__init__.py",
+    "bytes": 175,
+    "sha256": "47DEE07A1185EE12823D2A28340DE82FFB282FEE377B01F024CFDA67078B9B9F"
+  },
+  {
+    "path": "back\\app\\import_uploads\\dispatch.py",
+    "bytes": 2355,
+    "sha256": "A3B2C15ED8A0901830431CEA8D90D821E6D4F649D30444A266F9ECCAAB4173FD"
+  },
+  {
+    "path": "back\\app\\import_uploads\\errors.py",
+    "bytes": 286,
+    "sha256": "8DFDDA2215294D4DCFEC64C554EA545E07338F1F6C45ABDEFD68AC152D3F9519"
+  },
+  {
+    "path": "back\\app\\import_uploads\\manifest.py",
+    "bytes": 2064,
+    "sha256": "0B3EC4FED7681E77A378FCD25C60DD0AD7CA9317319D5E02CFA08991D2990140"
+  },
+  {
+    "path": "back\\app\\import_uploads\\models.py",
+    "bytes": 1759,
+    "sha256": "8FA846CA2213FF368F17AAEDF4E39AC523534E9ACB05612161E0FC5309052E68"
+  },
+  {
+    "path": "back\\app\\import_uploads\\paths.py",
+    "bytes": 6619,
+    "sha256": "1F7ED5792A02B7DA257EC417F42B7F966D49789EC7E70C19A9CCCA6F8F5A97B7"
+  },
+  {
+    "path": "back\\app\\import_uploads\\service.py",
+    "bytes": 12417,
+    "sha256": "2D50BDD54D0D846982DF6B38A742E2E907C487767B654525DBA89ABD72488A98"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\__init__.py",
+    "bytes": 97,
+    "sha256": "A5A274F7AF475CB736DD52D2CF1F58CA394F950C51178F0654D9E488BEFF6AC4"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\bottom_up_identification.py",
+    "bytes": 899,
+    "sha256": "E26DA6267E1D85711C22F6266D487B2579B34FD976F3D6428B0E0FD565A2DC6C"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\diaclip_fdr_result_reader.py",
+    "bytes": 13774,
+    "sha256": "E77B9BD191B6232FF8D1FC060893AEABFDBE0EAB5F39E6D8B0F0B0E976420CB3"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\diaclip_result_reader.py",
+    "bytes": 17442,
+    "sha256": "E703A8A154CA87FF851CCEA2FEE85098B41AA8CEB11F71D371C39C1B74B4DEE9"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\diaclip_source.py",
+    "bytes": 1548,
+    "sha256": "78DE633E8A442315ED3577C876A81E5D7CB60557A21CFD53F3987A1D0B36A318"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\diann_parquet_reader.py",
+    "bytes": 2906,
+    "sha256": "F9D39FC2E78F7BE1E7DDFF80B386F7044A561F5D71DCDD8A2218CCF322412E33"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\field_mapping.py",
+    "bytes": 2687,
+    "sha256": "9FF5ED9CB49DEC5336154E4DFAA3253B25AC8F1954C22D3DF50DA319FB618A41"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\protein_description_reader.py",
+    "bytes": 1214,
+    "sha256": "F4877AF915CBECD983D3E07B67D6A93E2D2ACBAE2479C8DA87F1BBCCF39E590B"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\run_discovery.py",
+    "bytes": 4646,
+    "sha256": "366E128F833090A2FF85EC2C46585D61B80085F86CBC4E5C4D6597B78FA0AABE"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\stats_reader.py",
+    "bytes": 807,
+    "sha256": "1CA60C82D1D9D6E994236999D43C72576F60AC826D258BEDE1F02569955BAEAA"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\universal_diaclip_adapter.py",
+    "bytes": 2935,
+    "sha256": "07E5BE907EFF03EEFF587214BEBB6C07EFF497D245425B7FA057FACA3A9E495E"
+  },
+  {
+    "path": "back\\app\\ingest\\bu\\universal_diann_adapter.py",
+    "bytes": 28008,
+    "sha256": "ACF25AC6A3121D514BD9657D862544F0E357CD04F984DF93EFE0C6F8D682F7D9"
+  },
+  {
+    "path": "back\\app\\ingest\\td\\__init__.py",
+    "bytes": 31,
+    "sha256": "2754A6EA380A4ABAAD0C76F2DEDC6B5F8B61F014602D0AB39469593FB6ABF79D"
+  },
+  {
+    "path": "back\\app\\ingest\\td\\toppic_native_output.py",
+    "bytes": 23495,
+    "sha256": "8E985F702300D9595465F8137EAF619CF846B3ADC98D630F07560D1E48F9C3C5"
+  },
+  {
+    "path": "back\\app\\ingest\\zp\\__init__.py",
+    "bytes": 221,
+    "sha256": "082182AFEA1449643FFBBD7DD7C87F21C6DC5A46376836073067C066237EAA44"
+  },
+  {
+    "path": "back\\app\\ingest\\zp\\semantic_projection.py",
+    "bytes": 14695,
+    "sha256": "5380C274F4108F72716733E5CFB9A2E0C2A9DD3C6D736A44B2E67CA0C5DB0AB3"
+  },
+  {
+    "path": "back\\app\\ingest\\__init__.py",
+    "bytes": 2,
+    "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+  },
+  {
+    "path": "back\\app\\ingest\\mzml_only_adapter.py",
+    "bytes": 7424,
+    "sha256": "909672001C849CAF38937E0C5D8BE99D4CD2B68DDA39E0E1A698855EAE6527E5"
+  },
+  {
+    "path": "back\\app\\ingest\\universal_prsm_js_adapter.py",
+    "bytes": 13460,
+    "sha256": "B632D99833E7FE6D13FD6BF85EB2DEF4E9025CDFA0F79E61B43F09E3625DD762"
+  },
+  {
+    "path": "back\\app\\ingest\\universal_toppic_adapter.py",
+    "bytes": 32282,
+    "sha256": "EA0D032E23C2E7A892FA27585F3C08098F5E472F05732D142DE3FFE84E505B0A"
+  },
+  {
+    "path": "back\\app\\ingest\\utils.py",
+    "bytes": 1542,
+    "sha256": "4C0DEBB0FBBE0720E35C58252F4B4CAF18D6B7C69E6E13D7867CE2668006E52B"
+  },
+  {
+    "path": "back\\app\\pfmb\\__init__.py",
+    "bytes": 588,
+    "sha256": "8DF5487B4C093636205B98BA80A7DC86987353924A28293525678AB0EB058CE7"
+  },
+  {
+    "path": "back\\app\\pfmb\\index_builder.py",
+    "bytes": 9782,
+    "sha256": "83C8858E85343A920FCD2A8D25B9CA8A5D314A799AC9D2079F6133B80D9FD8B1"
+  },
+  {
+    "path": "back\\app\\pfmb\\index_reader.py",
+    "bytes": 5517,
+    "sha256": "2A6B81E6335DB205A5EE5C23D4DB2ACA9E609586F67D978F2BCF5EA0AD13E38F"
+  },
+  {
+    "path": "back\\app\\pfmb\\locator.py",
+    "bytes": 1918,
+    "sha256": "89F51D1DA68104763BDE407BA555FA4EA609B9A60A168B0454FF1858CDE04889"
+  },
+  {
+    "path": "back\\app\\pfmb\\reader.py",
+    "bytes": 4247,
+    "sha256": "612F6111BB7FC36BDB1E86F21983878E077D79291BF52C0210ECD5993C458A5F"
+  },
+  {
+    "path": "back\\app\\pfmb\\reference_sidecar.py",
+    "bytes": 3819,
+    "sha256": "42351051A43E20225450AFD7FD5D50E5D9F29CE98390C211AB3EB85265D0686F"
+  },
+  {
+    "path": "back\\app\\pfmb\\sidecar_prepare.py",
+    "bytes": 14267,
+    "sha256": "5C4598C213EA6AA1B4238559A573A0B8FFEE6DD735BD3D2F09C6ABC5FE59DCC2"
+  },
+  {
+    "path": "back\\app\\raw_conversion\\__init__.py",
+    "bytes": 643,
+    "sha256": "BCBC6A86C095BBEEA206FD487D872425F081160FCC86DAE7145BFD33376CA171"
+  },
+  {
+    "path": "back\\app\\raw_conversion\\contracts.py",
+    "bytes": 2423,
+    "sha256": "792293A035F60342246A443540AB4F24CD1F13934A7437EC56F34CF29AB632A2"
+  },
+  {
+    "path": "back\\app\\raw_conversion\\discovery.py",
+    "bytes": 2773,
+    "sha256": "E5ED03082CA954FFEE5E04749091CA4E2C4A5E56D4908BF700982719BE8E5A00"
+  },
+  {
+    "path": "back\\app\\raw_conversion\\errors.py",
+    "bytes": 481,
+    "sha256": "D2582CF536F59B63F4F67AFE08A48FC7C2D41E1BDCDB342F65D4B6BA76DDB5E2"
+  },
+  {
+    "path": "back\\app\\raw_conversion\\service.py",
+    "bytes": 4578,
+    "sha256": "09740718062F0ABCEE359F5E628807E0A23424B740A1D5A75E7EE14E135856A7"
+  },
+  {
+    "path": "back\\app\\raw_conversion\\thermo_raw_file_parser.py",
+    "bytes": 13427,
+    "sha256": "1D93A026DBF65A31A4703915506363DD702C26B1B84E6D54BD5877C6AA644161"
+  },
+  {
+    "path": "back\\app\\raw_conversion\\tool_discovery.py",
+    "bytes": 2191,
+    "sha256": "5AAA57B9B62FF270F3CE2743B2FFEE276DB3F435969B1926CBE9D87AE9B729D5"
+  },
+  {
+    "path": "back\\app\\schemas\\__init__.py",
+    "bytes": 2827,
+    "sha256": "A3D944927038CF034753353B5522C8CCC4316B6E91080C37404F4D7930A75217"
+  },
+  {
+    "path": "back\\app\\schemas\\agent_zp.py",
+    "bytes": 2564,
+    "sha256": "666416D333A8513F043954FB45FF6B4DFDC3B92107D5BE9D779E4D644C376B85"
+  },
+  {
+    "path": "back\\app\\schemas\\bu.py",
+    "bytes": 13480,
+    "sha256": "F668A160725A13E9666CE67FB38E86818D8B9A85757921875CFAF3483AD0D26C"
+  },
+  {
+    "path": "back\\app\\schemas\\common.py",
+    "bytes": 505,
+    "sha256": "996644AE19BD593E6410EB682763D125DE17EBCC2A2FD277C2B17FDA78D6EF60"
+  },
+  {
+    "path": "back\\app\\schemas\\dataset.py",
+    "bytes": 2187,
+    "sha256": "52FDCAD38C476905AE98BBCEB57AE40CD7D8DB496C33FC1A78D4E13BE4661AE8"
+  },
+  {
+    "path": "back\\app\\schemas\\imports.py",
+    "bytes": 2230,
+    "sha256": "5ABBCBFFC1E7752DBE64B6784286CFFC5F6135112D8AC171B5D4FCD6AECA3B00"
+  },
+  {
+    "path": "back\\app\\schemas\\protein.py",
+    "bytes": 2400,
+    "sha256": "9849864BA5D26FA28A4BF3CA60C7B5C22791CFE932D042057C84269EF2BE0B36"
+  },
+  {
+    "path": "back\\app\\schemas\\zp_conversions.py",
+    "bytes": 2631,
+    "sha256": "654E7F08E360146E08A03F2E40A8D52C1D4F6146AD38248DD0F3453E0E6AA071"
+  },
+  {
+    "path": "back\\app\\services\\import_planner\\__init__.py",
+    "bytes": 403,
+    "sha256": "A1E8FC759C9A78FDB15FD1D7B0FBED37156D2A3BACB1C3DCB351C5193707FEE7"
+  },
+  {
+    "path": "back\\app\\services\\import_planner\\detectors.py",
+    "bytes": 2604,
+    "sha256": "7E02D2087B9710CCA7CC93710BC6EDD1C176BD59C1F407245D3B53FF16F884A1"
+  },
+  {
+    "path": "back\\app\\services\\import_planner\\planner.py",
+    "bytes": 5072,
+    "sha256": "C00E7783F235BC5E01F24BB1A36FE74CCF70E55F857914C507C1B469C42D0560"
+  },
+  {
+    "path": "back\\app\\services\\import_planner\\types.py",
+    "bytes": 1620,
+    "sha256": "DE1D67614497122E370BA2802CD0E4E50B9ADDEB9E3B80A46095E2EA10794B78"
+  },
+  {
+    "path": "back\\app\\services\\__init__.py",
+    "bytes": 2,
+    "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+  },
+  {
+    "path": "back\\app\\services\\derived_data_backfill.py",
+    "bytes": 10934,
+    "sha256": "E93302B3B2E02BA3F895A5F491125854C8DDED6EB90D6F02C570156536823063"
+  },
+  {
+    "path": "back\\app\\services\\import_jobs.py",
+    "bytes": 67045,
+    "sha256": "E45822DAE142544454FB0B73DA0D5B4C174FA4078F8E32FFC3022C02A83CFDBD"
+  },
+  {
+    "path": "back\\app\\services\\import_selection.py",
+    "bytes": 2908,
+    "sha256": "3636E3507BAFA47648B279A6E4FCCDA6E344B42BAF9E4983DDDE01B50B10DD16"
+  },
+  {
+    "path": "back\\app\\services\\incoming_path_relocate.py",
+    "bytes": 1865,
+    "sha256": "B39902FF12E5114C8385CD923DFC12A0E17B8DBA3677B2F864D3EB2E42C9FFE8"
+  },
+  {
+    "path": "back\\app\\services\\js_parser.py",
+    "bytes": 1421,
+    "sha256": "40E0A57476EE447C79A93EBC0C43FF4E5180A1A8DCCACF35A8010BBF54A874D5"
+  },
+  {
+    "path": "back\\app\\services\\mzml_mapping.py",
+    "bytes": 6672,
+    "sha256": "F2CA5F5FB43843CF984731F81DCB8EE299832C5C9A6E62BB86D659C2470DDFB3"
+  },
+  {
+    "path": "back\\app\\services\\mzml_scan_index.py",
+    "bytes": 21349,
+    "sha256": "62F90B5392BEF303C2010AFC1250026C1E36FCE6A0CAC0BA4A7FD25F66ABA66D"
+  },
+  {
+    "path": "back\\app\\services\\mzml_scan_reader.py",
+    "bytes": 13539,
+    "sha256": "F3BB2E4B1A6F80DDC597E540AD17CE7846888FCACC411F4F54FB70FD3158FAFE"
+  },
+  {
+    "path": "back\\app\\services\\mzml_store.py",
+    "bytes": 6707,
+    "sha256": "10726D42F20A0E855F0EA209E2163CA15B150DA00ED89D01779F6FA665D4EFDC"
+  },
+  {
+    "path": "back\\app\\services\\native_folder_dialog.py",
+    "bytes": 2919,
+    "sha256": "489CD345C23B552B77B8D2DE81996F26A6384441FB1A9193D89FBF244EEBBE61"
+  },
+  {
+    "path": "back\\app\\services\\post_import_derived_data.py",
+    "bytes": 536,
+    "sha256": "079A31A2EE230A5F216DDBA18959604DDB3162CFA976020D83E169AB3E543EC2"
+  },
+  {
+    "path": "back\\app\\services\\prsm_files.py",
+    "bytes": 5291,
+    "sha256": "FED018D96DB3A0CB779B130A36B399CBE204AD5B5379D3257D53B1315CC5EBAB"
+  },
+  {
+    "path": "back\\app\\services\\spectrum_cache.py",
+    "bytes": 2852,
+    "sha256": "4E70AD6A1A840B4E767BDDBE57305355E6D811CA82139565DA0853E3601ADD48"
+  },
+  {
+    "path": "back\\app\\services\\spectrum_memory_wiring.py",
+    "bytes": 5988,
+    "sha256": "3BD5AA957BFBDBA447A5C2B74AF13ED3F3CDC57F073C8430FE2E0AC48DF13CD0"
+  },
+  {
+    "path": "back\\app\\source_inspection\\__init__.py",
+    "bytes": 1078,
+    "sha256": "E2F5EEB9745616C9D443FD2B53188BA2BE1C701A7EA7D659D438C9E3CF47108A"
+  },
+  {
+    "path": "back\\app\\source_inspection\\budget.py",
+    "bytes": 4893,
+    "sha256": "7902DE4E2AD75CE56D49C388288A109ABD0662887F80D143118DB9D85FDE3507"
+  },
+  {
+    "path": "back\\app\\source_inspection\\contracts.py",
+    "bytes": 4677,
+    "sha256": "09E4EB5DBE31CD783404BB6F0BABFC9D8A0DFFFAFE07CCEDE8D733FA79DF2115"
+  },
+  {
+    "path": "back\\app\\source_inspection\\inspectors.py",
+    "bytes": 38386,
+    "sha256": "B55B7EC8D08EB54A2DFDEE7F40B39F689210FEA760ED85A7998F0B30DACB180B"
+  },
+  {
+    "path": "back\\app\\source_inspection\\inventory.py",
+    "bytes": 6813,
+    "sha256": "38F3E9C94C89ABCFDD9646F9B8D5FD4C735013959F1572166C2216795FFB97B2"
+  },
+  {
+    "path": "back\\app\\source_inspection\\observation.py",
+    "bytes": 3372,
+    "sha256": "0E59AC2A50D9ED1BCF878273825C9681B40ACE613080EC98364691411A232C07"
+  },
+  {
+    "path": "back\\app\\source_inspection\\paths.py",
+    "bytes": 4253,
+    "sha256": "3CD08D3B14ACE6110AD6CAF7403BED7900B90F0B3B36E24897C77A6ABB4A109B"
+  },
+  {
+    "path": "back\\app\\source_inspection\\registry.py",
+    "bytes": 5901,
+    "sha256": "CCF6E7009A7FDA59F8E0D42761EB2CDD541DA9541CEBFF630D6C4F2B12215D20"
+  },
+  {
+    "path": "back\\app\\source_inspection\\sniff.py",
+    "bytes": 10022,
+    "sha256": "DD5CFDEC1C3845ED44B874F00878ADADDBBD87A697198DB75D3430638C017774"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\__init__.py",
+    "bytes": 1494,
+    "sha256": "672D8F9AC74FEBB9A515A237C15F4108E80E91C7560204409261C5EF9724C993"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\config.py",
+    "bytes": 474,
+    "sha256": "9C59BF4AD29A95B7C42F09D3C8B66C553F71C9389490F224BB0A94F9DCC0B89E"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\contracts.py",
+    "bytes": 517,
+    "sha256": "2061CE9770B7E2A52691AB105418EF84B72B234CA49ACB337A4B03ABF116C306"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\eviction_coordinator.py",
+    "bytes": 7057,
+    "sha256": "AFBABBA3F628ACE97B546E0774AB0D651A726521D8EC250176F7EE81C17D5054"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\lru_mru_queue.py",
+    "bytes": 945,
+    "sha256": "791856DB3D698E5E180DD155EED58EA4D48CF2892345EBAE4891B76E78FB2AE0"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\mzml_dataset_bundle.py",
+    "bytes": 1587,
+    "sha256": "14FF39B2EBD5C8DEC0487A44552A11061DB5CD797DE029FFBF5DCB92B7A50DA8"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\mzml_spectrum_extract.py",
+    "bytes": 3948,
+    "sha256": "38F169F3D297622399E50C17684C6FBD5D392B3036B055A5C8986C7F95C488FD"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\size_accounting.py",
+    "bytes": 1060,
+    "sha256": "CD002962EE805205B6B5BDC99F123181532BE66DF10A63499B8DFE9B15FBAA9E"
+  },
+  {
+    "path": "back\\app\\spectrum_memory\\types.py",
+    "bytes": 582,
+    "sha256": "FC7B1B14CCC1525CC4E5786DB021772C45171EED2DA6C8C70A47A94745B3B2BC"
+  },
+  {
+    "path": "back\\app\\zp_conversion\\__init__.py",
+    "bytes": 549,
+    "sha256": "1B8D241145AFA0C96C5F5BA6C23C330E116EE76C095BECF77632338B52CF0270"
+  },
+  {
+    "path": "back\\app\\zp_conversion\\contracts.py",
+    "bytes": 3414,
+    "sha256": "EACD152CCD8E5FED9B625066C3031AD1E376039494DAF76AA840CA3A7D937650"
+  },
+  {
+    "path": "back\\app\\zp_conversion\\paths.py",
+    "bytes": 4772,
+    "sha256": "6668B415C514E2DF195147CDFC7B923F425BCBCA0A76F6F64178AA691A50E70A"
+  },
+  {
+    "path": "back\\app\\zp_conversion\\process_control.py",
+    "bytes": 2426,
+    "sha256": "A404FB8408F44D22134B51FC6007117E247E3FDAE6338AEEC745DE24E5D9F5E7"
+  },
+  {
+    "path": "back\\app\\zp_conversion\\repository.py",
+    "bytes": 19279,
+    "sha256": "C4EAF20F86EF1A777608CF76769E4D4CC83BE178455E241D116A6EB752EF199E"
+  },
+  {
+    "path": "back\\app\\zp_conversion\\service.py",
+    "bytes": 6556,
+    "sha256": "A56F25CF8613ABEA841BE65A38C8F4D35447172F197F780648FD899AC210E76C"
+  },
+  {
+    "path": "back\\app\\zp_conversion\\worker_runner.py",
+    "bytes": 9252,
+    "sha256": "333A63D033A49FB3170CDF961AF33B1C4D3F442AAEEFB9336A10DAC75AF45F0B"
+  },
+  {
+    "path": "back\\app\\zp_runtime\\__init__.py",
+    "bytes": 2328,
+    "sha256": "5698A50ED86BBD760EFFF5A840736673523E0BDC999BCAA2E5B93BD50F576A81"
+  },
+  {
+    "path": "back\\app\\zp_runtime\\assets.py",
+    "bytes": 2851,
+    "sha256": "40461B26A20F0C9F6214CA6C301E6114F5C7559FD24845C1D98749B59E758E3D"
+  },
+  {
+    "path": "back\\app\\zp_runtime\\core.py",
+    "bytes": 25063,
+    "sha256": "0FD13C3F80104DE6CD30B7C88517B95DD47DF076F15A23BE0EB64031C3112351"
+  },
+  {
+    "path": "back\\app\\zp_runtime\\identifications.py",
+    "bytes": 29040,
+    "sha256": "7337E8CCFFE3D229D939889D2CB1D92F006CA73C75831530929870A44DDBB3FE"
+  },
+  {
+    "path": "back\\app\\zp_runtime\\package.py",
+    "bytes": 1990,
+    "sha256": "397184A34BF1B0E79A5C08C850568B3853C87644EC12778E0325A63173D5C916"
+  },
+  {
+    "path": "back\\app\\zp_runtime\\reader_cache.py",
+    "bytes": 1588,
+    "sha256": "07E3F76A305F45A1BA55B87DDC0888BAD309E62D3A3C0CC73749BBEEF1FD2AAE"
+  },
+  {
+    "path": "back\\app\\__init__.py",
+    "bytes": 2,
+    "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+  },
+  {
+    "path": "back\\app\\import_types.py",
+    "bytes": 636,
+    "sha256": "7E2454860D819B13BB58D5996411E44BC6C46EA43DF6911CC6199092460EE331"
+  },
+  {
+    "path": "back\\app\\main.py",
+    "bytes": 1859,
+    "sha256": "3DE693F328CC7399132AE6E58EFB7DCB744932B64B0B15BB1E64A52EBF050F17"
+  },
+  {
+    "path": "back\\migrations\\20260522_bu_identification_match_indexes.sql",
+    "bytes": 383,
+    "sha256": "1610291AE8EC5420AA3A011F3561D7480CF938EAA50BA14DF74042206E9E00D2"
+  },
+  {
+    "path": "back\\migrations\\README.md",
+    "bytes": 267,
+    "sha256": "CAF4BC342F15E0C32D27D602195B1905E7A4B544F524A139BA80CF58D1981C43"
+  },
+  {
+    "path": "back\\scripts\\backfill_bu_chromatograms.py",
+    "bytes": 3659,
+    "sha256": "1EEA46FB645C63F3D449A29A6D6852FAF7F75F4BDEB0141F11B2104C54F75855"
+  },
+  {
+    "path": "back\\scripts\\backfill_bu_protein_sequences.py",
+    "bytes": 2235,
+    "sha256": "17EA78E1B4BEA5AA943307F69B05B122D9095AF179404DF6E2DA4EA7DD375C7B"
+  },
+  {
+    "path": "back\\scripts\\backfill_dataset_derived_data.py",
+    "bytes": 2081,
+    "sha256": "71669CAF2834B144CA43FF3DE0E0572AEE58415034A72C6B1413B431FBC7D6A8"
+  },
+  {
+    "path": "back\\scripts\\backfill_mzml_scan_indexes.py",
+    "bytes": 4107,
+    "sha256": "7199765CAAD435DC1E336A620DCBA6756019525F32E0EF086D90CD07C6BE1C88"
+  },
+  {
+    "path": "back\\scripts\\run_native_postgres_tests.sh",
+    "bytes": 41728,
+    "sha256": "0689B97736A683C8FE8215033E847C70729177D7735CFDE3766954F3B2ADA725"
+  },
+  {
+    "path": "back\\tests\\conftest.py",
+    "bytes": 3983,
+    "sha256": "FFC0B388941452B5C21ACF0A0108FEB06359E9C4585411C485E0C81E84877941"
+  },
+  {
+    "path": "back\\tests\\postgres_support.py",
+    "bytes": 10060,
+    "sha256": "EEF80847682F6D014287D5723C50BFF2BA5B6CB19677F4B462D7554AAD5CE704"
+  },
+  {
+    "path": "back\\tests\\test_agent_failure_policy.py",
+    "bytes": 4190,
+    "sha256": "DE9531FBC9124E0E72D63D97483320FE7FBE1CE0DDE1DA66D9C76FB827FEBB81"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_admission.py",
+    "bytes": 1007,
+    "sha256": "E8797B59D3DCE7B257F657336D40609EEA476BA9D271C087763920247937002A"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_api_contract.py",
+    "bytes": 1705,
+    "sha256": "D56879104E9D536D56E4464328D66C59F7E7ABEE8CC9040FA6608C36EB577020"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_binary_executor.py",
+    "bytes": 6981,
+    "sha256": "5C03C2E46106B2B0FA5A191494D1B99FE0745C7E31C24028222CD68E6171EFA6"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_case_service_zp.py",
+    "bytes": 4310,
+    "sha256": "FF3B10C5704C13BF7818B26F19ADF1A04F3C49946A6C5E0B26F3859A8D06706F"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_contracts.py",
+    "bytes": 4800,
+    "sha256": "853F9F20E87D213B508BC767B51478DCF79B0675E36F5DD749C42551C9FAC606"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_custom_analysis_category.py",
+    "bytes": 2526,
+    "sha256": "F6ED03FB96D986CE187ED895361415A49FE9A52FA7983E2B67FDE26A98CA9193"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_graph.py",
+    "bytes": 5882,
+    "sha256": "6A815937122B32F4909176AAB476BA4720607C5FDBDD078720243C541502E396"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_migrations.py",
+    "bytes": 1760,
+    "sha256": "CEDED7679493AFB7A15269F81C7288089A73000499E78310B7A053B78881987D"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_source_sampling.py",
+    "bytes": 1428,
+    "sha256": "6271216A18F91EFD5C962D0E1F1927EE223DEFA2663ABB80F5975BCF942EFD5B"
+  },
+  {
+    "path": "back\\tests\\test_agent_import_workflow.py",
+    "bytes": 7225,
+    "sha256": "AB5EA6CE24F340B739B0AA31F6446DED9EE6A40A3C10866AC76C3A043793138C"
+  },
+  {
+    "path": "back\\tests\\test_agent_model_diagnostics.py",
+    "bytes": 3526,
+    "sha256": "6C07FB475FE4BEB1F83401BAF7889E3C7B5FE7EACA1EB53B02A5730AA218123A"
+  },
+  {
+    "path": "back\\tests\\test_agent_model_provider_repair.py",
+    "bytes": 5883,
+    "sha256": "E7BEABFB5FB72E6D10B06C8007427F1E12323DE8D2CC5B08D470995D8BCF5757"
+  },
+  {
+    "path": "back\\tests\\test_agent_research_tools.py",
+    "bytes": 6468,
+    "sha256": "A1ACEF06C313EDCD7104961FDFE9DF52AD5622E783B52AF2B5D10843E9CAA5C3"
+  },
+  {
+    "path": "back\\tests\\test_agent_zp_import.py",
+    "bytes": 22922,
+    "sha256": "E430E17320688597C110FBBADDFD8EA1DB9DB3AE2AFCF9603EBA4EAF89E0A3F4"
+  },
+  {
+    "path": "back\\tests\\test_backfill_dataset_derived_data.py",
+    "bytes": 16021,
+    "sha256": "8CEDBF4E068DB147BD7726BBB4F0E41400EAECFE747A4B7F206B9A691764B7B2"
+  },
+  {
+    "path": "back\\tests\\test_bu_bottom_up_source_contract.py",
+    "bytes": 3318,
+    "sha256": "BD5C45CB9A654C7A69FA9CD70E2B2504AED4433D345F064EAE7B48613A5A32B2"
+  },
+  {
+    "path": "back\\tests\\test_bu_chromatogram_summary.py",
+    "bytes": 11058,
+    "sha256": "8EEB87BD55387398248EA7842975AB0927E9EBF71F3E35EA2A126F8498EE498E"
+  },
+  {
+    "path": "back\\tests\\test_bu_diaclip_adapter.py",
+    "bytes": 2809,
+    "sha256": "CBD3FE1DFA6C4DA38F9ADFDDB9914EC3F84B144273BF84759E4803D952CA05BB"
+  },
+  {
+    "path": "back\\tests\\test_bu_diaclip_result_reader.py",
+    "bytes": 11147,
+    "sha256": "7C8F1AADD38C424EAC207E04950993EA542BEC758BB9BED1D5BE5DB0E4B9B5D3"
+  },
+  {
+    "path": "back\\tests\\test_bu_diann_parquet_reader.py",
+    "bytes": 1048,
+    "sha256": "A9151986D47414962675D402369307CE97FCDBA4DC47EEC396E314FF2D57E7F6"
+  },
+  {
+    "path": "back\\tests\\test_bu_fasta_index.py",
+    "bytes": 2731,
+    "sha256": "4C77AE4B2B531F4DF0E59E47CC61CDA2805E7731C57FBA29B8A9A6BB0C5B52CB"
+  },
+  {
+    "path": "back\\tests\\test_bu_field_mapping.py",
+    "bytes": 743,
+    "sha256": "FD00ACDDD02AD63AAC42F5DF8B5A5C71DCAAEA877CDEF90EE9B3A6EB9E03B708"
+  },
+  {
+    "path": "back\\tests\\test_bu_match_detail_display_fields.py",
+    "bytes": 6491,
+    "sha256": "55DFD6871467742D7C974FE7EF898CB8923A0AFD019C384A2F5771FDD60B1AC2"
+  },
+  {
+    "path": "back\\tests\\test_bu_ms2_annotation.py",
+    "bytes": 4515,
+    "sha256": "3125320E16C5D2077491A4E7B8D3BC383C0412742A85D058D4076DC6F112AF4B"
+  },
+  {
+    "path": "back\\tests\\test_bu_overview_modes.py",
+    "bytes": 1894,
+    "sha256": "5E72B60458D0D28771452A32C1581A6D8C423C8E9D21B6B03B180251F9E5B3B5"
+  },
+  {
+    "path": "back\\tests\\test_bu_peptide_mapper.py",
+    "bytes": 1202,
+    "sha256": "8919621D9B946C88C92DD8EE5DB6D947EC3B6F991389073870729F6D85DAB03F"
+  },
+  {
+    "path": "back\\tests\\test_bu_product_xic_indexed.py",
+    "bytes": 7517,
+    "sha256": "C1E5F0F2D05D45E9F50D0F67B42C000BF595817597210A8DA1C02AEE173A6E4C"
+  },
+  {
+    "path": "back\\tests\\test_bu_protein_detail_decoy.py",
+    "bytes": 722,
+    "sha256": "8C753565047D45D1C4C25000D9DED7EEB1D2B5FD3A5DB2B74205938E2B362CA4"
+  },
+  {
+    "path": "back\\tests\\test_bu_protein_sequence_backfill.py",
+    "bytes": 4984,
+    "sha256": "7D8D68CCBB0C6C826C73B2F47AA25FF92CD77B691F3A359A4861739AC70B9D28"
+  },
+  {
+    "path": "back\\tests\\test_bu_protein_sequence_resolver.py",
+    "bytes": 4470,
+    "sha256": "3324623FBC94068D305F0C71C8D9B85C5F0BA534A8D8E5DF17F57DB342745769"
+  },
+  {
+    "path": "back\\tests\\test_bu_q_value_filter.py",
+    "bytes": 1465,
+    "sha256": "B766245D1DE1BC325281327B494E3635F90F12A8517C64EAE71DDD0B239C4309"
+  },
+  {
+    "path": "back\\tests\\test_bu_rt_mz_api.py",
+    "bytes": 9025,
+    "sha256": "2E9BC54590587644FA5F67CD34C47B4F0D84E3085CFDC1F7CF6ED28933CEB56D"
+  },
+  {
+    "path": "back\\tests\\test_bu_run_discovery.py",
+    "bytes": 1827,
+    "sha256": "638CF18FE8F8C53C0E3760DBC5D21840B72BF5FFF6C2C06FF5116F92A5FAB295"
+  },
+  {
+    "path": "back\\tests\\test_bu_runtime_api.py",
+    "bytes": 1224,
+    "sha256": "A6B55069615BDC74ED1478DF2D43C0A7AD08A557935DD0B452FF6A00B875F630"
+  },
+  {
+    "path": "back\\tests\\test_bu_scan_resolver.py",
+    "bytes": 472,
+    "sha256": "79B4D4F6D33BB18EFBD56D4039E5F0213541B33695619C99FE81C7F2DFBD8575"
+  },
+  {
+    "path": "back\\tests\\test_bu_spectrum_api.py",
+    "bytes": 30669,
+    "sha256": "0B3D6294228BBDB2E5E7C95391492611A0280C7D23476B007931F7EFEEA009AE"
+  },
+  {
+    "path": "back\\tests\\test_bu_tdf_reader.py",
+    "bytes": 2286,
+    "sha256": "6AE48133C9A3CD5B0BC446EF51183644F02AE4849C1C23143AA1E02079B63CBE"
+  },
+  {
+    "path": "back\\tests\\test_bu_theoretical_fragments.py",
+    "bytes": 7156,
+    "sha256": "5EA1E7B73C09CB8D65930BD1FFEC91C4E05B21B7FD135EA24FE757EF5B325081"
+  },
+  {
+    "path": "back\\tests\\test_bu_xic_isotopes.py",
+    "bytes": 9267,
+    "sha256": "67EFEC0879F20EE7710167FB8E9E56791E2CC52281B7AB6D560D654543989098"
+  },
+  {
+    "path": "back\\tests\\test_chromatogram_route_matching.py",
+    "bytes": 3767,
+    "sha256": "CB57704CF6C02401BEE32800F4EF9983A43A983055A5A2E38D6A70DA48EF232C"
+  },
+  {
+    "path": "back\\tests\\test_database_engine_factory.py",
+    "bytes": 1620,
+    "sha256": "E21E30A6B8E97D217DA9E673ECB86E907D115675AAB584BED94B87B6878E35C1"
+  },
+  {
+    "path": "back\\tests\\test_dataset_capability_report.py",
+    "bytes": 20353,
+    "sha256": "A48071A88D95FE218C62AAC8148A9A969062D5A7D14E2F1301A1FB42D6900472"
+  },
+  {
+    "path": "back\\tests\\test_dataset_delete_cancel_import.py",
+    "bytes": 2699,
+    "sha256": "A2693060BC90B6A32CF9C3D96EE61658A362235B8C875E276B2B91816B4B9A1A"
+  },
+  {
+    "path": "back\\tests\\test_dataset_ingest_root.py",
+    "bytes": 3904,
+    "sha256": "6B29CADE371E66AA7C68F8FB43E97414829C86BBE729B5EDC01F7DF1DD5F20BA"
+  },
+  {
+    "path": "back\\tests\\test_dataset_metadata_fingerprint.py",
+    "bytes": 2262,
+    "sha256": "2FD34F4A9F35F1B6ABBF681AF83AE898CFC05553B5C6863C6A0A19CDE1D19E28"
+  },
+  {
+    "path": "back\\tests\\test_datasets_api_modes.py",
+    "bytes": 8312,
+    "sha256": "A3ABDBAE4AC1D66C6C3A0A0A84BDECAEAF589D107A1F17EF10FA171B241B111B"
+  },
+  {
+    "path": "back\\tests\\test_declarative_ingest_contract.py",
+    "bytes": 29118,
+    "sha256": "FCDEFACB4FF1BAA42C516307B82F235A249BC2E8E51B89B01D9E4DBD1301C0C6"
+  },
+  {
+    "path": "back\\tests\\test_declarative_ingest_evidence.py",
+    "bytes": 8760,
+    "sha256": "E334224BE21604B31165E9504F73471716A4B3423EC84D8CD78608A05AFD8BF3"
+  },
+  {
+    "path": "back\\tests\\test_import_jobs_derived_data.py",
+    "bytes": 2873,
+    "sha256": "3E60DDCEE8744960288D4E167F37701398C8AC52700FA631C2B07998BF81C4C8"
+  },
+  {
+    "path": "back\\tests\\test_import_jobs_layout.py",
+    "bytes": 1745,
+    "sha256": "12C174482EA3068B03D2D754B3449492705369549F35538C6F9FC0CFC72C89DB"
+  },
+  {
+    "path": "back\\tests\\test_import_jobs_raw_conversion.py",
+    "bytes": 27706,
+    "sha256": "1FF03266DCAC4EC002CDFABDA6BC2352A669B889451B907BA9BA179FCF6C3A46"
+  },
+  {
+    "path": "back\\tests\\test_import_planner_raw.py",
+    "bytes": 2632,
+    "sha256": "006E6BA87558FB4B8541ED047C4B6C827957183B650AE4D56B400C6748322BB3"
+  },
+  {
+    "path": "back\\tests\\test_import_planner.py",
+    "bytes": 8631,
+    "sha256": "AD980FCCC4A3B03012EB800C78514D7EFF963D5E4C2B5006A466896AE919E9AE"
+  },
+  {
+    "path": "back\\tests\\test_import_selection.py",
+    "bytes": 2552,
+    "sha256": "F54B73773D2B3571E740475EE4CA53302559C11E37EF9FBF5040E98254C221E7"
+  },
+  {
+    "path": "back\\tests\\test_import_uploads.py",
+    "bytes": 26605,
+    "sha256": "9DAB3A408BEC24B1F7E2C00274440D18C1100B656BF9716E247A60B3878B042B"
+  },
+  {
+    "path": "back\\tests\\test_incoming_path_relocate.py",
+    "bytes": 1082,
+    "sha256": "0B12F6392654B70A576C4641031E164012230725C457F00D9CA7B3535B968BD1"
+  },
+  {
+    "path": "back\\tests\\test_kimi_research_runtime.py",
+    "bytes": 17627,
+    "sha256": "72404ECE6A0A6F7493FC0B63D1A0EB426B452865E8BE625FF8ECCFBDF9D88CC5"
+  },
+  {
+    "path": "back\\tests\\test_mzml_only_adapter.py",
+    "bytes": 5080,
+    "sha256": "B955518B00EDF831CFAA5AAE72337A13787FB8A22A1143F0137F6A1DE9CD7334"
+  },
+  {
+    "path": "back\\tests\\test_mzml_scan_index.py",
+    "bytes": 27205,
+    "sha256": "FAAFE9B16CBAADDB456E0E55BB06111573311CC5A9D1EF9404EA3A6EFDAA566C"
+  },
+  {
+    "path": "back\\tests\\test_mzml_scan_reader.py",
+    "bytes": 7469,
+    "sha256": "500500B7CA9BA0C60A931885427F6097D09F75956C307988E3A60C6A8B4FC57E"
+  },
+  {
+    "path": "back\\tests\\test_mzml_spectra_api.py",
+    "bytes": 8029,
+    "sha256": "7E79D376E4750553948D1DED8CC508ACCC8FD96785B5BD1601DC0797EB4834D7"
+  },
+  {
+    "path": "back\\tests\\test_native_postgres_runner_contract.py",
+    "bytes": 19477,
+    "sha256": "BB5D105171223C7585EAC6D010593557A22B1964ACFA4470D3B929E4C2D63814"
+  },
+  {
+    "path": "back\\tests\\test_pfmb_sidecar_prepare.py",
+    "bytes": 9536,
+    "sha256": "74FBFC42BA0BD4E72576D86E4003912FD3C90C86FA8449AA5F2362491B5A7C28"
+  },
+  {
+    "path": "back\\tests\\test_pfmb_v2_reference.py",
+    "bytes": 1083,
+    "sha256": "95AC2BFA7D7571493C2AE8EFB9B9986BC247EC00A6AA691262F9C8B753825258"
+  },
+  {
+    "path": "back\\tests\\test_postgres_environment_safety.py",
+    "bytes": 11850,
+    "sha256": "9840A9591DC2BBBE424FBA7A8A3191039B1B51F363D66BF6694E9A7F50D4488A"
+  },
+  {
+    "path": "back\\tests\\test_postgres_foundation.py",
+    "bytes": 6750,
+    "sha256": "44FBF29CB15C15F47FE4B128A8EDA19CE81D6B52FB45BF6D7CD1F3E5F661DF4A"
+  },
+  {
+    "path": "back\\tests\\test_prsm_files.py",
+    "bytes": 2019,
+    "sha256": "B1CDB2EC154CA7A3F800C53CD7792F6361A784DE05F9602D52F1176F38BC5ADE"
+  },
+  {
+    "path": "back\\tests\\test_raw_conversion_discovery.py",
+    "bytes": 5930,
+    "sha256": "9A04D46AC06C43DDCEE2F71A3EE7A92B59CF266247A53A4F684C9E53C93485BD"
+  },
+  {
+    "path": "back\\tests\\test_raw_conversion_thermo.py",
+    "bytes": 12235,
+    "sha256": "6FE5283BEBFEE0B60B6CB3CC0F7BBF998A55F461360C2A6CD2FD0A846B234BE4"
+  },
+  {
+    "path": "back\\tests\\test_raw_converter_discovery.py",
+    "bytes": 5152,
+    "sha256": "7002059C62D9E339BCCFB7C544F9815EFCCD771A5267D8A1E25C7707BAAD9FA1"
+  },
+  {
+    "path": "back\\tests\\test_raw_mzml_mapping.py",
+    "bytes": 1256,
+    "sha256": "E9D48AD2DE97D6573DD8CF2E4E9D87ABEB4C76ECFC92D0588FABAD7E2A46A75D"
+  },
+  {
+    "path": "back\\tests\\test_semantic_zp_projection.py",
+    "bytes": 8210,
+    "sha256": "38930D130DF4FA366A4D3EF003F125DDCDDBBD7E7531E19E32A8774A3E512D60"
+  },
+  {
+    "path": "back\\tests\\test_source_inspection.py",
+    "bytes": 10300,
+    "sha256": "23AAE31DF696D560D823A3EB0DE8D79DA3EC659A7D2B69BB27F3C580CB06651A"
+  },
+  {
+    "path": "back\\tests\\test_spectrum_memory.py",
+    "bytes": 12511,
+    "sha256": "96DA4D7A52B53737795969AA09F48AFED5BC7187C70706B361A16965479E7D75"
+  },
+  {
+    "path": "back\\tests\\test_test_environment_safety.py",
+    "bytes": 5394,
+    "sha256": "04B9060EB20CD816C5AF941664DF60CCC6BBBBD21C4C9C30411670660F542AEB"
+  },
+  {
+    "path": "back\\tests\\test_top_down_binary_fallback.py",
+    "bytes": 1595,
+    "sha256": "7D113228DB3B2AC7FD0150D0D532375B6CC28EDBAF6CCE72DF8663D72E90C9E7"
+  },
+  {
+    "path": "back\\tests\\test_toppic_native_output.py",
+    "bytes": 3183,
+    "sha256": "9472E116F5415ACE220FFC40FB3E8BFF5A95005014DD2D69E0B6371087E38518"
+  },
+  {
+    "path": "back\\tests\\test_zp_composite_bottom_up.py",
+    "bytes": 12598,
+    "sha256": "E63A091367D5DC25AC7291330FD1BCDEC0438A5405D4C02E5D1B753604939352"
+  },
+  {
+    "path": "back\\tests\\test_zp_conversion_worker.py",
+    "bytes": 13807,
+    "sha256": "F930F758766FE2B15B3EEA04A0B37B0DC4BA29DA21C596929EEA9375CBC44E90"
+  },
+  {
+    "path": "back\\tests\\test_zp_dia_spectrum_association.py",
+    "bytes": 1400,
+    "sha256": "751167840743C4870BF65FE4ACA270650B4A13F50492D58B0091CB49368BA89B"
+  },
+  {
+    "path": "back\\tests\\test_zp_runtime_core.py",
+    "bytes": 46798,
+    "sha256": "1C619AB213730976712A2012BE5BC3931C669051A8976ACD1891E71B2CD0B2B5"
+  },
+  {
+    "path": "back\\tests\\test_zp_topfd_js_conversion.py",
+    "bytes": 2660,
+    "sha256": "F63B78ED12F495DFD81FD7047649CCB989890CB7D9B6D151F1ED68C33FB58FD1"
+  },
+  {
+    "path": "back\\third_party\\unimod\\unimod.xml",
+    "bytes": 2506678,
+    "sha256": "AA50802955726F15312773575C36324FD13EF82A1B0F9AA0E47015A4005C4E8D"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\__init__.py",
+    "bytes": 948,
+    "sha256": "79422DAE7B73A5BE32FF927937D0FD504DE07F139AC33835B21BD7E1724AC7FC"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\base.py",
+    "bytes": 2305,
+    "sha256": "1F7F65AD42848C2F655880E3EDFD35AFBA8CA801101D1A7AE0ADB96F935805A6"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\common.py",
+    "bytes": 11959,
+    "sha256": "8BDF15B3216A9840700EA3F2B6CB5D609B3B9D3745E56EF770D6AEB2F626EA39"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\mzml_mock.py",
+    "bytes": 2722,
+    "sha256": "FDF7855D21936648C2F4D8E4FC1424B56C1A37B64B4F53DCE3D4FBD3400E6A12"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\raw_mock.py",
+    "bytes": 475,
+    "sha256": "BAB479295EF42A2C6EAA25D9228D7A3AD256C929CBF72F8B81F224190FE9E521"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\real_composite_bottom_up.py",
+    "bytes": 11104,
+    "sha256": "237DC6F943922D3B63799108415FFE8D586971516890E589DF0F2A967351236D"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\real_dia_result.py",
+    "bytes": 8903,
+    "sha256": "A26EDC517D16248FE6C690FFB46D8718ACC5C26CF0FD1976C86F14AFC2C443D5"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\real_mzml.py",
+    "bytes": 27312,
+    "sha256": "EFAE8952107BB53BF8F000106FD369357BE0D32F87D6A165B71687CC6C4E9A3E"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\real_thermo_raw.py",
+    "bytes": 9254,
+    "sha256": "D790B79FB9D4E092FF774D8ACEEE86277968F8EFBFBDCA5F91CB40FB4E9D7369"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\real_top_down_intermediate.py",
+    "bytes": 10422,
+    "sha256": "41A1F970D48F1DE077531391FDF811119CE5D47B785F67F0D41A5E0E009D761B"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\real_top_down.py",
+    "bytes": 13117,
+    "sha256": "C0918E64376A299BAA2BACCE8FD5AA9EC2DB62E0DA93468259D6B0BBBD0AD59F"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\tools\\real_topfd_js.py",
+    "bytes": 14305,
+    "sha256": "921E96F9F1BBB7B7AA6B705A8248F6D93A3D9DC815C84DC74CB9B621C2D33679"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\__init__.py",
+    "bytes": 6072,
+    "sha256": "AFDFE0D9EBF22EFFD02DA9FA2B8301AB8A0A91EBE84DADC720FEAD4C2B1178F4"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\blocks.py",
+    "bytes": 3736,
+    "sha256": "ADB57666AC5090090DA7D4D61050927E163623DFAC84922383CB3451EE6784E7"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\bottom_up_exceptions.py",
+    "bytes": 551,
+    "sha256": "313FCA2924019E61A0707C4BE5335DB0049B003F1F6F277EC54238EC1B25624D"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\bottom_up_reader.py",
+    "bytes": 7448,
+    "sha256": "32E7F91CEAA386ABB534C5CE30EA65FA4D329DC8CBF1289213F17CC7B51EC80B"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\bottom_up_schema.py",
+    "bytes": 14003,
+    "sha256": "ECDE23D07C9D1AD0859F3F6BF9CB9681D7BE52826C22B43494C880556928AF2F"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\bottom_up_validator.py",
+    "bytes": 29843,
+    "sha256": "8FFB01E4ECB2FC35DA3A8629107A4E71B3F3AB46B31A0461D66E4488E38B97E4"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\composite_bottom_up_adapter.py",
+    "bytes": 35711,
+    "sha256": "B7791E066183B4893599A0B4754D08BD345147B978F895A7D2287BD92687EA16"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\composite_bottom_up_bundle.py",
+    "bytes": 14836,
+    "sha256": "9E2A21C76F2CBA667DD8F20946BB1703D3A3BC84DC0755A0CD8339368CA33061"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\composite_bottom_up_exceptions.py",
+    "bytes": 405,
+    "sha256": "4186956F68B3149EE7F1FE6A457BC25BE06841BF8CC8DDCA03E1F3F4AEDEBFC8"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\constants.py",
+    "bytes": 1035,
+    "sha256": "9327BA9B45F34D98381A3DD8D8A50FEE6BF167A89AAA6B2BAE3BC8947FE6BFBE"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\conversion_exceptions.py",
+    "bytes": 1003,
+    "sha256": "18FC99919CB19BC2B1CF663DC836D79946362AEE94DC4FA8D372C364EC46543E"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\dia_resource_limits.py",
+    "bytes": 1472,
+    "sha256": "E59D4C4E89A1E7FAC617814547F747BA6AFD964F3847C071129F0878CCEA6CC8"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\dia_result_adapter.py",
+    "bytes": 41365,
+    "sha256": "E7681B7803E1710ACD014EF173604F3E7FB85FA12AA12CC46F632042F478223F"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\dia_result_bundle.py",
+    "bytes": 9446,
+    "sha256": "AD0E307E84107CA9A2156EB00D4FB94116C6203763E479681F21A14DC353133D"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\dia_spectrum_association.py",
+    "bytes": 5751,
+    "sha256": "9EE869317F5643F5B1593249B808180BDDC5CA210B2AC4D710E9A34E47B7575B"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\exceptions.py",
+    "bytes": 3468,
+    "sha256": "43C7B1B2A70602724E016EA3EE858C8A3B44E76EDD48CF5CCEBD7AC91FEF1894"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\inspector.py",
+    "bytes": 11518,
+    "sha256": "46E088C31AB9B5A4DDE940D4B4B8EC7F3C84041461782A976E348F5A40E8E9DF"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\logical_comparison.py",
+    "bytes": 1194,
+    "sha256": "8E235D4714E258DCD0DB44DA9FEF48E45AF39F13F525FC48E2CCFE655E511515"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\logical_fingerprint.py",
+    "bytes": 2602,
+    "sha256": "1B0FBDFF73CA411C86D130E1EF0F07ACD64EE7CC71973B4DA5D984A58A3821F6"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\migration.py",
+    "bytes": 36237,
+    "sha256": "E78D28E4607618E6DFC0780FB7E42699AE3C8C7AB53F68B1259259AE0B51D155"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\models.py",
+    "bytes": 7825,
+    "sha256": "89746B44BA252309A042DA9849F56DB93F23731377CE0534268AA059EC2E4C35"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\mzml_adapter.py",
+    "bytes": 91436,
+    "sha256": "A7B51A840FECB4472492700ECD0493F068BC60F28D431D41478A4236FC881A20"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\mzml_admission.py",
+    "bytes": 16933,
+    "sha256": "29DE91F6BF5745B244D3AD4017F70DC0850DCCB99F9FE38258C9A38D82082D20"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\mzml_schema.py",
+    "bytes": 28603,
+    "sha256": "AE156599D5C31F7A06FEC64FE79505602AC59DB3A5DC5074F0C67CF33A0D22FA"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\native_mzml.py",
+    "bytes": 18733,
+    "sha256": "F9B249EA1BFFF2E8B3D366A717A892F51E981B4A3BA0FD4CE867F3A3BD135D39"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\plan.py",
+    "bytes": 677,
+    "sha256": "D71616281E9FD957D2FA81C16F9504358C9AFF0F8EC7C137C190249F4D18D11C"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\precursor_contract.py",
+    "bytes": 4572,
+    "sha256": "52964BD376600E4C763CA2F66C3A77EE617A02FC9EA8A283BC78EDC8D426E56E"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\quick_validator.py",
+    "bytes": 21735,
+    "sha256": "6015D983891BE9E241A7E54D629E197ECA576EBF339CE1CA03AB948E255F9D36"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\reader.py",
+    "bytes": 32472,
+    "sha256": "D47D316E1B026E7E870142F62FB8CA1129D75F9143D35F54F3FA83865D4F3BDF"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\registry.py",
+    "bytes": 2060,
+    "sha256": "8D1ACB2DD3CB8A84AB51B08BA77E3F9C0D2216ACF50D09CD3E5DEDEBCACBFC69"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\runner.py",
+    "bytes": 1084,
+    "sha256": "8E4F1175F0DDC4CC62F45D6AAAF1578B31C4713658741A3B7C56116624890B99"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\serialization.py",
+    "bytes": 3682,
+    "sha256": "8FBD7F4BA9AE7BD62AFDEE906FA116F5383DF4989E5E4EDF0FBD22019B6A6230"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\service.py",
+    "bytes": 25881,
+    "sha256": "45ABE473DD47C8E78664BB667B336E38D427F795D7EA1FC4D7396185A70C632D"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\source_adapters.py",
+    "bytes": 5372,
+    "sha256": "D23AE98D05D360DA8E0AF52369D92FA34A7157D84E9E9674D3E5F16C1CEFC26B"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\thermo_raw_adapter.py",
+    "bytes": 12789,
+    "sha256": "27E8614F9215A57F0405D165332856A77A647A32549F290A23DC763FB6A3AC87"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\thermo_raw_schema.py",
+    "bytes": 3202,
+    "sha256": "1A521610EF9C434F8F25568FA9C6C75C8E5FB9FDD459183AC6506771E851AE8A"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\top_down_adapter.py",
+    "bytes": 47635,
+    "sha256": "46EF839CA02FC4E8DFBD2D8D192A9556EDDD020A77D05001FBA9880DD58D3CE5"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\top_down_interpretation_adapter.py",
+    "bytes": 23736,
+    "sha256": "DB6C97ABF6D7E3F7C6D99D6B28E5E5DB266A87B9C30369C649358E20EF8B2D1D"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\top_down_interpretation_schema.py",
+    "bytes": 6053,
+    "sha256": "E6D83F61E75E186EF1BD26F2F8F762220A01341278C8B50649EC97FDA6EDA29D"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\top_down_reader.py",
+    "bytes": 5090,
+    "sha256": "F7C4B651E6473AD69371024BF47AE594F8AADDCF44909CF7A140CB0C7B3BC6A6"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\top_down_schema.py",
+    "bytes": 5743,
+    "sha256": "D88DF3B2D3EB9ACC8BE22E883EB776AC5A5DB9DD38D26A5C7AA1CDCB9A523910"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\top_down_validator.py",
+    "bytes": 29249,
+    "sha256": "8CFF049AB2039AAAEB6B4FAABA3E3A6B7D9C7E480C4FDA2D5271AEFF29D2CAF2"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\v1_arrays_stream_reader.py",
+    "bytes": 11662,
+    "sha256": "425FEA73270625E1322C4D9F88E4CA7A0298DEA0FD2D54FC34A7618A1C9C383B"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\v2_arrays_migration_writer.py",
+    "bytes": 7982,
+    "sha256": "94BEE5C0A8DAD5AF7693C46827C9B307A850EC785529DDE4529AD8EAE76E8153"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\v2_arrays_reader.py",
+    "bytes": 23784,
+    "sha256": "CF19D648AD0B9AB4FE787A01F06B7D7997809476FE5614A0C0ED0DB969EF5861"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\v2_arrays_writer.py",
+    "bytes": 14521,
+    "sha256": "3E55DFEADFCA657D8C36D735ED95ACD999334AD4028AE9ADE876AB30C8BA0CCB"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\v2_validator.py",
+    "bytes": 67460,
+    "sha256": "6F06D4D5BA910704E6BD1450B15B9DB36009CC9E06B03A2B27562B2A43AAE8C4"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\v3_arrays.py",
+    "bytes": 22993,
+    "sha256": "F1FEB7D97952F6D68B95F8E2A985F01130B97A5795C897D370D5ED689472D36F"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\v3_extensions.py",
+    "bytes": 19753,
+    "sha256": "FCE0F4378F0E869F2AE61CBFDDC1A39F2654BC943C69BFC6F7AC253C1B439C91"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\v3_limits.py",
+    "bytes": 1153,
+    "sha256": "F13220B936C87F0808F0F2181B901D7903E726FC6E35934C799C08C96A64DAC1"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\validator.py",
+    "bytes": 39174,
+    "sha256": "416ECC349169B10B9270B4D23CAD00D8D0086D7E4E8560B439F4367726D979D9"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\binary_layer\\writer.py",
+    "bytes": 25084,
+    "sha256": "4BE04FAB261FF7FFB182100488C7F6B65C46D39BEBD0DB77EC91C554F47642FC"
+  },
+  {
+    "path": "back\\vendor\\zp_engine\\native\\mzml_pipeline.cpp",
+    "bytes": 68362,
+    "sha256": "B5D34A3B58270B5014F93A6C5B4148848A9FCA8DA56D59D156147BCD353ED6F9"
+  },
+  {
+    "path": "back\\.env",
+    "bytes": 799,
+    "sha256": "89DD0C46AAD0C0CEC91CCF66EE696B31D12000BF30E3901BB632E65E9425B948"
+  },
+  {
+    "path": "back\\.env.example",
+    "bytes": 3860,
+    "sha256": "43B895CD1E3C24E86525E4B02FD788010EFD52123A61CD4D5333A8A1E6B0B288"
+  },
+  {
+    "path": "back\\.gitignore",
+    "bytes": 92,
+    "sha256": "9269791B13B5CB2BAE916B6A0108488FB99F5B9ACE46AFB313A2083584DA584C"
+  },
+  {
+    "path": "back\\pyproject.toml",
+    "bytes": 933,
+    "sha256": "B181D96634F1DE7218E405E0C195575AD1D907BB45768EDB1E387E667ED9B01F"
+  },
+  {
+    "path": "back\\README.md",
+    "bytes": 3839,
+    "sha256": "E4204D7F6E2BD0C1D04D7AA1182367434C5D8803AEAFB806498AA2AB5CC5F786"
+  },
+  {
+    "path": "back\\README.zh-CN.md",
+    "bytes": 1720,
+    "sha256": "8003FD7B60F61967241B9EFE4EE1E5131983FAC71669CF5033C8F162FAED8980"
+  },
+  {
+    "path": "back\\uv.lock",
+    "bytes": 375658,
+    "sha256": "1CA681186337E4B2A754169ECE27070B2944F86F50D32DFC279267DBC7DFF44C"
+  },
+  {
+    "path": "BU- Fragment Match\\.gitignore",
+    "bytes": 16,
+    "sha256": "4BB38BE6D6D9EF0D2F9BCC339850FF48D821ECCFA739369402B354C9BA946EA2"
+  },
+  {
+    "path": "budocs\\决策登记表.md",
+    "bytes": 5308,
+    "sha256": "AB38EB8988D6485A9A5092A3E848CCB4833A45409799AACA5D2A93D83B8181D7"
+  },
+  {
+    "path": "budocs\\谱图查看说明.md",
+    "bytes": 21192,
+    "sha256": "DFB8E228E1D89CAE7B05DD329F52892EED5699B829633EF5CDDA17D43E81D6EA"
+  },
+  {
+    "path": "budocs\\验收测试矩阵.md",
+    "bytes": 4741,
+    "sha256": "0562A0928225DFEA9474890EF3778463016F3254BE6AA402574C5C582EFF49B5"
+  },
+  {
+    "path": "budocs\\Bottom-Up数据导入规划.md",
+    "bytes": 27975,
+    "sha256": "7E8C43E88551259A318E32699BC1F50921C86E40B57973A0919D187814D4B7AD"
+  },
+  {
+    "path": "budocs\\BU列表与数据集API规范.md",
+    "bytes": 35835,
+    "sha256": "54D8D07CDA54FBA60AEC37A3BE4BFBDE056740F4CEA0E64109D918F6D9206F8E"
+  },
+  {
+    "path": "budocs\\BU前端接入规划.md",
+    "bytes": 35064,
+    "sha256": "3FF16381CCF3F8194F95F2A362A2630687E277A4195A4CD8F13E05FF06541C9C"
+  },
+  {
+    "path": "budocs\\BU运行时后端模块规划.md",
+    "bytes": 22274,
+    "sha256": "C44DB58278655ADF92E9FD41AB17FB529FD4B39787E3A1D5885C3F3519F368A3"
+  },
+  {
+    "path": "budocs\\P0-Viewer代码改造规划.md",
+    "bytes": 20830,
+    "sha256": "F22B21B10C6116330A6FBE4674F349ACBE315667A8ABD83A92B7A39E69A14976"
+  },
+  {
+    "path": "budocs\\Sequence-Coverage数据方案.md",
+    "bytes": 17010,
+    "sha256": "0715267E3D7A0A890539856B5327D37AE97D8C6358438E28C3E0A009EC009CB9"
+  },
+  {
+    "path": "budocs\\Viewer接入规划-完整版.md",
+    "bytes": 20296,
+    "sha256": "6E29C08B9DFE71483A129EE3AB11B2911165F47861D511144C2D932C3046BD31"
+  },
+  {
+    "path": "cs\\模块边界与实施顺序.md",
+    "bytes": 1112,
+    "sha256": "9DCECA1617AD025DE563A1C804EF60226BC8ABE620E0D344BD31D2B55504330D"
+  },
+  {
+    "path": "cs\\目录说明.md",
+    "bytes": 447,
+    "sha256": "823F0A012CE6A585F18F79BEC37EAF5C933E1FA6CDF8C8FEEF69367D8DB38621"
+  },
+  {
+    "path": "cs\\双Agent真实联调输入输出记录.md",
+    "bytes": 82151,
+    "sha256": "D5D66AAB8EF6ACBD8F07C37544A4E3DCE56A2E0FAD61ABA79712FD182456CC01"
+  },
+  {
+    "path": "cs\\未知格式智能导入验收说明.md",
+    "bytes": 3992,
+    "sha256": "842B45BBE5D402AB2092E909563BA3F072D42FBEF7590DAA2B31B1856D63D3FD"
+  },
+  {
+    "path": "cs\\性能测验约定.md",
+    "bytes": 1754,
+    "sha256": "53F92690B0010E334E29EE188EA8076FA8B365F4314BE0FA834F3A1A686D1A6A"
+  },
+  {
+    "path": "cs\\支持格式上传验收.py",
+    "bytes": 26637,
+    "sha256": "F656F4D2DABBDD0019F7ED4565D5E68B9251A57096AC5C22D0D763FC1183D4F7"
+  },
+  {
+    "path": "cs\\指纹性能测验.py",
+    "bytes": 3240,
+    "sha256": "B8AAFE3D6B3B0A2702591572A5BBAFFD1C5E4EECFD2F854B6DFD1ACF56E176A8"
+  },
+  {
+    "path": "cs\\重复导入与重复数据检查报告_20260909.md",
+    "bytes": 15388,
+    "sha256": "1C83D4CA040848405E5F8A915D5707D8A6F1F38CFF94B80AAD535FA0A6F95642"
+  },
+  {
+    "path": "cs\\Agent2候选诊断.py",
+    "bytes": 4423,
+    "sha256": "F949C5EE7319A74321ABCA5908DAABBD9DE808B0E4288BF3DC53C2BD9BCEE97F"
+  },
+  {
+    "path": "cs\\Agent2候选诊断说明.md",
+    "bytes": 2691,
+    "sha256": "4916F3B7F9FC12629B79D61D19936F5DA9FC27CB14B288733424AEDA6C992690"
+  },
+  {
+    "path": "cs\\Agent导入流程总览_仓库核验修订版_20260908.png",
+    "bytes": 1614464,
+    "sha256": "9B12A5C139CCCBA94F13FDD088738C815F7C0FE19396C69C85C9D69B63CC24C2"
+  },
+  {
+    "path": "cs\\Agent二进制接入说明.md",
+    "bytes": 14134,
+    "sha256": "AAB0454EAFB212A42F3390F6111812C9885F8375267663BE758E531366E2F377"
+  },
+  {
+    "path": "cs\\DeepSeek实施Agent真实验收.py",
+    "bytes": 6475,
+    "sha256": "CFB6E373B1FAF81617BACA2656D2A0C2AA4A97433CEB5CABC923EAB7F2468806"
+  },
+  {
+    "path": "cs\\DIA-CLIP_FDR导入验收.py",
+    "bytes": 2878,
+    "sha256": "C893157DB4E7530248D492DB1C5117DE578FCAD015D0ADF3F3637EF528158BF5"
+  },
+  {
+    "path": "cs\\DIA-CLIP_FDR导入验收说明.md",
+    "bytes": 1229,
+    "sha256": "4487E936F8AFC5A4A9B5C922DA406482ED81477A4B7359D4AC373C112C94D4FF"
+  },
+  {
+    "path": "cs\\DIA-CLIP导入验收.py",
+    "bytes": 3142,
+    "sha256": "32933B7AAB7A494FC96374062223DA1874D562900FF4A014E1D8EF33E9DAA011"
+  },
+  {
+    "path": "cs\\DIA-CLIP导入验收说明.md",
+    "bytes": 4473,
+    "sha256": "6384A0973C2F8182A36D1DE24133960B0B195D3F96F03917E26706839BFEC2DE"
+  },
+  {
+    "path": "cs\\Kimi复核Agent2真实验收.py",
+    "bytes": 3855,
+    "sha256": "C93841C9542E5B6BA7ACB94E21BD24087C68FEFDA25CF8855602EB71F2FA9E25"
+  },
+  {
+    "path": "cs\\Kimi研究Agent真实验收.py",
+    "bytes": 6098,
+    "sha256": "D9A444DB19D4807C7C14304A15281C4ACFDF8FFC497047FBBA0F2B7F526DF4AE"
+  },
+  {
+    "path": "cs\\LCMS三维验收说明.md",
+    "bytes": 1812,
+    "sha256": "FCDA6520016B38EC92880A66A70C661A2CF6581BAE021059734758DFB9A24E01"
+  },
+  {
+    "path": "cs\\MaxQuant复合二进制验收.py",
+    "bytes": 6102,
+    "sha256": "5229B255E830A7F91B99BEFA6E24DBB790081D948AC70EC4309F7779A5DE2D55"
+  },
+  {
+    "path": "cs\\MaxQuant通用机制验收.py",
+    "bytes": 11226,
+    "sha256": "81442C454739F8F46B9DB9AF1716DCE10351AED069782BF854BB5AC067E188C0"
+  },
+  {
+    "path": "cs\\PFMB接口性能测验.py",
+    "bytes": 5976,
+    "sha256": "03723DE8B84BB7107DE481FC940E5B4944469CF88C921BFF1643E7C3880D7C6C"
+  },
+  {
+    "path": "cs\\PFMB矩阵接口验证.py",
+    "bytes": 7135,
+    "sha256": "2D3E32358BCDB368252B213F33EEE3C8847B1665D6B36AD033B674AD8116E8B2"
+  },
+  {
+    "path": "cs\\PFMB字段语义说明.md",
+    "bytes": 5517,
+    "sha256": "7ABB8371678090E829371DC879F54D15E7D95826B32D58A8A1131C70112F874E"
+  },
+  {
+    "path": "cs\\PFMB字段语义验证.py",
+    "bytes": 12228,
+    "sha256": "170A94E7073E03DE1B42BA7A7324D9665FD33295BFD1476C8A1E806098432D55"
+  },
+  {
+    "path": "cs\\step1_verify_mapping.py",
+    "bytes": 7546,
+    "sha256": "5A0597F46005617017B65D3A5AD27360CA13A562F1BEA77403101151C9CA8830"
+  },
+  {
+    "path": "cs\\step1b_find_extra_rows.py",
+    "bytes": 6150,
+    "sha256": "7E54E584E0F901F10C9B1C0A6B6589D871F48A7A00D75EB36EAF7C04CB7801AC"
+  },
+  {
+    "path": "cs\\test_index_reader.py",
+    "bytes": 4981,
+    "sha256": "6C05FF18342E2CBEA3207E50CAB87F773E930E4CC5B27F6B8113709ED26B8121"
+  },
+  {
+    "path": "cs\\test_ms2_annotation.py",
+    "bytes": 5141,
+    "sha256": "C078CAF866F820DAA7C2084B209870A975E6919819113FC35899DDD2312D2919"
+  },
+  {
+    "path": "cs\\test_pfmb_reader.py",
+    "bytes": 3622,
+    "sha256": "67D082D0F84C907C54A8F0F41D21A7FAAB9C7ADAB57C9A0CCE3867E4BA4A506C"
+  },
+  {
+    "path": "cs\\ZP独立Worker与访问层接入设计.md",
+    "bytes": 9809,
+    "sha256": "B028D059A470E9033852CBE913FDE0F77B69620DC2F4E4ECF8304B341D4EA43E"
+  },
+  {
+    "path": "dia-ms2-pipei\\Hela_DIA_v2_for_frontend\\pfm.py",
+    "bytes": 28545,
+    "sha256": "4090B5329DE0CF58F3B8B42D68E5AC68D629FD49BD823508719A19162D1058CD"
+  },
+  {
+    "path": "dia-ms2-pipei\\Hela_DIA_v2_for_frontend\\pfmb_io.py",
+    "bytes": 3736,
+    "sha256": "D48BC0AB2C20FF917D30EDC5945965572B83EFB6B27E320E714F33A5942A110C"
+  },
+  {
+    "path": "dia-ms2-pipei\\Hela_DIA_v2_for_frontend\\README.md",
+    "bytes": 2953,
+    "sha256": "A3E1D3C2D449AD7D8CE6E87ECEB3E6FED15B1CB1B5BDBD874AE3E120A44398E3"
+  },
+  {
+    "path": "dia-ms2-pipei\\接入规划总览.html",
+    "bytes": 29315,
+    "sha256": "55742890C1D85CD717AE21655AFE4A5A25488462EFAE7D54C60B1AD77BD38621"
+  },
+  {
+    "path": "docs\\说明文档\\项目文件结构说明.html",
+    "bytes": 129244,
+    "sha256": "E870968B84F9FE2B35D07E62D9EC91D983EECAC482A5EB15FCD389D76DD4C8AD"
+  },
+  {
+    "path": "docs\\说明文档\\项目文件结构说明.md",
+    "bytes": 79831,
+    "sha256": "C16232447339CDAB623EFD17025A0B528C69DB0AA77848DE6B8335799F381B5B"
+  },
+  {
+    "path": "docs\\新增项目\\viewer-dual-import-rework-plan.md",
+    "bytes": 37524,
+    "sha256": "A1372DF39409FBBA92088B568C672A1CC49907C8F7B054E8DAC80832CD835BE5"
+  },
+  {
+    "path": "docs\\agent\\产品需求文档PRD.md",
+    "bytes": 36074,
+    "sha256": "3CF3916E50D2D0DB716E9B2105E7BC365A42CDBC0342FA3E83820D7664445E4F"
+  },
+  {
+    "path": "docs\\agent\\陌生谱图Agent交互原型.html",
+    "bytes": 48481,
+    "sha256": "D80F9F287D4F7491EACB66F293DF787AAB39E518213F9243878E5E74F1E4900A"
+  },
+  {
+    "path": "docs\\agent\\陌生谱图Agent总体设计.md",
+    "bytes": 16446,
+    "sha256": "3398BD872B5CC7678BBB9A0E8CD2630F5428FA9ADD30C1301F1841ECC759BB4C"
+  },
+  {
+    "path": "docs\\agent\\未知格式通用执行与能力报告.md",
+    "bytes": 4156,
+    "sha256": "F9028CB81E6C4C2FAC335BE1F3E7EBAAAE24EA64092C5324F03AB9129778DC98"
+  },
+  {
+    "path": "docs\\agent\\项目开发计划.md",
+    "bytes": 22804,
+    "sha256": "B06A310AB92FD4F62725ED6424AD361CF07FCBE2AFBDE4F7D3F98A7B1A73D9C9"
+  },
+  {
+    "path": "docs\\agent\\需求规格说明书SRS.md",
+    "bytes": 69231,
+    "sha256": "907F2156867299236E8C4925A70E8B5F05D174FDAAEFA46C178E4FF449848C20"
+  },
+  {
+    "path": "docs\\agent\\Agent到ZP正式收口规划.md",
+    "bytes": 17771,
+    "sha256": "27074211A0B3584AEA7E8D7EB0645C7FF6089403C9574DAE166E859C0260C9A5"
+  },
+  {
+    "path": "docs\\agent\\Agent状态机与上下文设计.md",
+    "bytes": 19023,
+    "sha256": "B5CB1F0870920346E5C051810D97A78CE35631DEC161EED4B5259759C16FAEF0"
+  },
+  {
+    "path": "docs\\agent\\ZP转换接入与安全边界.md",
+    "bytes": 16700,
+    "sha256": "2F3EC151D153E3BEACDAADFEEBE904CDF6383D3B29B6E163C683C99FBC9EF28E"
+  },
+  {
+    "path": "docs\\developer\\测试模块.md",
+    "bytes": 16057,
+    "sha256": "2E542D85E96FCA494351D58405D0070046D1F2F3035E39C07CCFC9A499EDC4DB"
+  },
+  {
+    "path": "docs\\developer\\导入中间层.md",
+    "bytes": 13598,
+    "sha256": "AB84BFFA862ECF9CAE017DD280125A41FFC5C0951FA53DC8C388A373124522F5"
+  },
+  {
+    "path": "docs\\developer\\二进制与侧车格式.md",
+    "bytes": 14397,
+    "sha256": "3110BDDC45BD140F49CC92DB43E3768377B03FCB0CBDEDCAD8482A21EE0B0E39"
+  },
+  {
+    "path": "docs\\developer\\后端API模块.md",
+    "bytes": 17096,
+    "sha256": "EE310337E20653C09C1C35719CBD1F5BD955B034E04932F86551CE69677D858F"
+  },
+  {
+    "path": "docs\\developer\\开发者文档索引.md",
+    "bytes": 5908,
+    "sha256": "43875E1D5ABFAE9AB433F207EB7F0D73B6DA10CE6F7C547E9A8F6C50A609738D"
+  },
+  {
+    "path": "docs\\developer\\可视化模块.md",
+    "bytes": 12542,
+    "sha256": "D5EA23C4146E2BCD47D43FDD723F3B9D7BF4A08D6FCEF77AFB5EF3CBD9354AF4"
+  },
+  {
+    "path": "docs\\developer\\派生数据与索引.md",
+    "bytes": 10562,
+    "sha256": "8E277E3F753DC4EFF4195D8A00BA9B0A61D04B494EE5FB382B6676AA282CCF23"
+  },
+  {
+    "path": "docs\\developer\\配置、启动与部署.md",
+    "bytes": 13787,
+    "sha256": "603E8717B3BE0CB9E46D4C17CD25B1C1271E87FE4E64BCFA8C7BC19FAEEC1628"
+  },
+  {
+    "path": "docs\\developer\\谱图数据访问.md",
+    "bytes": 14037,
+    "sha256": "E860A5D6FF2155716F1745BBAB60ADD36745E472B57C0095637A3AB82EB07C10"
+  },
+  {
+    "path": "docs\\developer\\数据导入模块.md",
+    "bytes": 13434,
+    "sha256": "C38A9ECC7DE7DAC4EEEBCA6079E988D45C16234C6B044C83CF211D7180110A5A"
+  },
+  {
+    "path": "docs\\developer\\数据模型与存储.md",
+    "bytes": 13653,
+    "sha256": "7BFB2496A2C949B6DA5833C77B60B26ED2A6F20F448477E345DF1822FCB685D9"
+  },
+  {
+    "path": "docs\\developer\\项目总览.md",
+    "bytes": 4851,
+    "sha256": "05F371667E1750083C437878A396FE4EA8A916DFBD9119D62A6FBBF57BDA9315"
+  },
+  {
+    "path": "docs\\developer\\用户界面模块.md",
+    "bytes": 12148,
+    "sha256": "B82B6F3A76B729582ECCE5BCA78DE73014D34D6DBED93913C1F01418711B8D3C"
+  },
+  {
+    "path": "docs\\developer\\Bottom-Up模块.md",
+    "bytes": 15401,
+    "sha256": "1827884F21A5A286DE9522CEDA2E7E0D2F8FB842E9A32E99FCE71E82CC0C5E28"
+  },
+  {
+    "path": "docs\\developer\\DIA-CLIP导入与维护.md",
+    "bytes": 19952,
+    "sha256": "5B74D96EB0FFEAE160E03BA442361EC7037DF34219EA684AE4DAC010104959C3"
+  },
+  {
+    "path": "docs\\developer\\RAW原始文件模块.md",
+    "bytes": 10839,
+    "sha256": "549B538B50CF9CF91B38D70CCC221085C479C3CA7845C3DB8379F459FA579956"
+  },
+  {
+    "path": "docs\\developer\\Top-Down模块.md",
+    "bytes": 16228,
+    "sha256": "D0DA1D4DAD8B70BA517845BB5430DA894C187E598BA90BA7675005E15E266EFE"
+  },
+  {
+    "path": "docs\\developer\\Viewer开发者文档导航.html",
+    "bytes": 20017,
+    "sha256": "3892C7A8B1D67B65957142A76ED957F978E8BAE52C9BC9D06F0148187C01DF11"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\bu-match-detail.png",
+    "bytes": 211214,
+    "sha256": "9D15D845498B7918B81F71E6191BC97F02B43DF3E8F904C98D51EF55B151B210"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\bu-overview.png",
+    "bytes": 222967,
+    "sha256": "32488438647E4B7179FCF89C274E02469F14B2542E860B08A83CA876243E4B89"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\bu-protein-or-peptide-list.png",
+    "bytes": 231216,
+    "sha256": "98AD8F0C36CFC85137FC9AD2D92D8742996A484F50887C15246F069E48837F77"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\chromatogram-page.png",
+    "bytes": 271557,
+    "sha256": "52897A9217EEFB32A5DD67BB4CF1015375AC32F33A34B4CC2A7C72752C302E42"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\dataset-detail.png",
+    "bytes": 271557,
+    "sha256": "52897A9217EEFB32A5DD67BB4CF1015375AC32F33A34B4CC2A7C72752C302E42"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\evidence-summary.png",
+    "bytes": 40899,
+    "sha256": "EF756E1AD60BF4561CB3293A8B91AA3E2E3D29CC72DE9847C0FE3A46CD09BB78"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\fragment-table.png",
+    "bytes": 43132,
+    "sha256": "9922A777781E1AE6F5188F597769CDB69C701B9D48F86357968B92EB310C53B9"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\home-or-dataset-list.png",
+    "bytes": 221242,
+    "sha256": "5B9D64E0FFB3A60A1CB3E593BF71F201DBA97C13B60FB7611D93DB2AC0A3C381"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\ms1-spectrum.png",
+    "bytes": 19657,
+    "sha256": "18ED1F2068FB6AB86404E466B1EB62872A541EE66AB4D9606BA1B7B98A0E7F83"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\ms2-fragment-evidence.png",
+    "bytes": 107334,
+    "sha256": "9D7607FE95610E4A902AE8625B7929CAD1974B116145F6D28C3F60E04A912765"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\ms2-spectrum.png",
+    "bytes": 28465,
+    "sha256": "08921FAFB7AF751EC87A949F553EA963EAEEF67CBFB1D9127A6EDEC6AE3075A1"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\pfmb-heatmap.png",
+    "bytes": 157092,
+    "sha256": "975A2212AF3268AB23317C05C43A436A525792AD5BEA698D53518EE9286747B5"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\precursor-xic.png",
+    "bytes": 211214,
+    "sha256": "9D15D845498B7918B81F71E6191BC97F02B43DF3E8F904C98D51EF55B151B210"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\product-ion-xic.png",
+    "bytes": 19453,
+    "sha256": "58396305CA987562EE7E8131E41AFC82F38C618C5E480D44CEF624579D669AF5"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\raw-or-mzml-import.png",
+    "bytes": 118420,
+    "sha256": "9DB8F2C7CA29E2D7E7EFA79182A27E99E819F3F47CF073C153B12C4F291A2A36"
+  },
+  {
+    "path": "docs\\internal\\assets\\screenshots\\spectra-only-page.png",
+    "bytes": 271552,
+    "sha256": "006E0C2A82BB1D6D3E5DE5426175503BE4906CDA9FB84DC2648FAA22152E2BB8"
+  },
+  {
+    "path": "docs\\internal\\scripts\\build-private-guide.mjs",
+    "bytes": 35448,
+    "sha256": "9E37882682D551C91E675D3231749A042A6BC71492B242B4250326802F0EC791"
+  },
+  {
+    "path": "docs\\internal\\scripts\\capture-internal-screenshots.mjs",
+    "bytes": 14006,
+    "sha256": "20C4DF8374306C8B95867E0BB1BA2D618DFB314A1F7B4779074A14B8F7AFC76E"
+  },
+  {
+    "path": "docs\\internal\\project-private-guide.docx",
+    "bytes": 2406308,
+    "sha256": "A6E94F5F072B87A127805D5261F649B26EF691BD0A3637789C9AD79AEE2E614E"
+  },
+  {
+    "path": "docs\\internal\\project-private-guide.html",
+    "bytes": 32453,
+    "sha256": "37ED7AE95ED0CF8EA675E5A7CBDE938F7D65C1283A2B1659EB479CC251F04800"
+  },
+  {
+    "path": "docs\\internal\\project-private-guide.md",
+    "bytes": 23023,
+    "sha256": "30E38EC0B2A887B46D70F86FD5263CDDC0DEB8B3B34B8760C6A120224DBEDAAB"
+  },
+  {
+    "path": "docs\\internal\\screenshot-manifest.json",
+    "bytes": 4327,
+    "sha256": "1BA416CA9E047345D79BD47FEE7999FCFD5B1A597E2514DCC3494760335C3545"
+  },
+  {
+    "path": "docs\\universal_schema.sql",
+    "bytes": 36977,
+    "sha256": "1B5B6F6C5419B99816577FDB9FBDDB30DDFA7897E61BD6AC57E232CDBB1C761E"
+  },
+  {
+    "path": "explain\\back\\app\\api\\v1\\__init__.py.md",
+    "bytes": 1259,
+    "sha256": "2942F4C58B19B70C15B3D67E83D3BC8BB5F302745C5CBFBCE75CD5F149069995"
+  },
+  {
+    "path": "explain\\back\\app\\api\\v1\\datasets.py.md",
+    "bytes": 3009,
+    "sha256": "49A4D42430BFB85855C1295F0A0E1C2522CCA25230F8ADDEFBD2FCB518B74134"
+  },
+  {
+    "path": "explain\\back\\app\\api\\v1\\imports.py.md",
+    "bytes": 1732,
+    "sha256": "E1EC4423238E46363F8F74C1BA0B207AC0588BAE10ABB95DA5651AB38C8FF165"
+  },
+  {
+    "path": "explain\\back\\app\\api\\v1\\mzml_spectra.py.md",
+    "bytes": 1565,
+    "sha256": "B2F4667802354BD799C7DCE0E478A9DBF3CA9629ED9228AAF321BE5428DD943E"
+  },
+  {
+    "path": "explain\\back\\app\\api\\v1\\proteins.py.md",
+    "bytes": 5950,
+    "sha256": "B207F7A778B36251B766A26892A18C80CAABC0ABB57B5C74D42CB25489330B16"
+  },
+  {
+    "path": "explain\\back\\app\\api\\v1\\proteoforms.py.md",
+    "bytes": 4590,
+    "sha256": "768978AA398B75813A1B9574E2E04039BE3ECC57AB2806133AB65B1321377289"
+  },
+  {
+    "path": "explain\\back\\app\\api\\v1\\prsms.py.md",
+    "bytes": 5256,
+    "sha256": "775AB603EF72142C7CA9F7FF2A32D42F520E83735FAA79A2785A727E842985FA"
+  },
+  {
+    "path": "explain\\back\\app\\api\\v1\\spectra.py.md",
+    "bytes": 2410,
+    "sha256": "5DA9DBF877E0893207A876D7BC024298D2756E88A3A56E13210535A087EFEEBD"
+  },
+  {
+    "path": "explain\\back\\app\\api\\v1\\universal_compat.py.md",
+    "bytes": 2997,
+    "sha256": "DFCE274C25447F796854C941E946775E9AB6525417C6909DC880DC5442D580C5"
+  },
+  {
+    "path": "explain\\back\\app\\api\\deps.py.md",
+    "bytes": 778,
+    "sha256": "DF46060AABA5D02DC370B569483DEE9E15BD61ED1FF343B5F7439A25EF673E20"
+  },
+  {
+    "path": "explain\\back\\app\\core\\config.py.md",
+    "bytes": 2005,
+    "sha256": "D6BD9CEF6FAF89D087C4D793923F51227ABCF9C58A1D85DB40C54916F2A01639"
+  },
+  {
+    "path": "explain\\back\\app\\core\\db.py.md",
+    "bytes": 1458,
+    "sha256": "F188429C269B680D73C9885939AB18470B0E780C6CA56413DBC117F237D380BB"
+  },
+  {
+    "path": "explain\\back\\app\\core\\logging.py.md",
+    "bytes": 951,
+    "sha256": "F83110D2BCBD98970240FC81FE2303A1FDFA3297651FF3677BCBC13AC55A80ED"
+  },
+  {
+    "path": "explain\\back\\app\\dataset_ingest_root\\__init__.py.md",
+    "bytes": 733,
+    "sha256": "14F2122EF92AEA21336C3F0263E48933CFAA7AF80BB11F84C6B8302FEE04F1A9"
+  },
+  {
+    "path": "explain\\back\\app\\dataset_ingest_root\\resolver.py.md",
+    "bytes": 1152,
+    "sha256": "4D5FF33203E3435CBA84AC5397F67CC7E0B90DA82E40619760533A3BED17E3B4"
+  },
+  {
+    "path": "explain\\back\\app\\fingerprint\\__init__.py.md",
+    "bytes": 1098,
+    "sha256": "C80EF0AA1F5A57607F671C0201EE2587B759D92BBC432FEE16E3DF285847D8C4"
+  },
+  {
+    "path": "explain\\back\\app\\fingerprint\\dataset_metadata_fingerprint.py.md",
+    "bytes": 1551,
+    "sha256": "1C5AE4825F1F5EE54C29F908D4CE6ABD76F87D7408BCBD20F7C4C74F8F73A9EE"
+  },
+  {
+    "path": "explain\\back\\app\\ingest\\universal_prsm_js_adapter.py.md",
+    "bytes": 4310,
+    "sha256": "6BB0F4202742D0A241A14EBB6784A43C4163521C3FDE6ED7825B84D25F39A639"
+  },
+  {
+    "path": "explain\\back\\app\\ingest\\universal_toppic_adapter.py.md",
+    "bytes": 6563,
+    "sha256": "D81F1993E6698C54BFE871C512709787D8182612327F80B36191246916BCCD2B"
+  },
+  {
+    "path": "explain\\back\\app\\ingest\\utils.py.md",
+    "bytes": 1249,
+    "sha256": "2BAB405DE7314754385BA86CD29713AC9C4749DE7C8059FA76FB87CE8C473741"
+  },
+  {
+    "path": "explain\\back\\app\\schemas\\__init__.py.md",
+    "bytes": 646,
+    "sha256": "824A0F727AA5B9B82F57EA167D580D0124EBD654F9B7CAEDAF0544046EF9DAD4"
+  },
+  {
+    "path": "explain\\back\\app\\schemas\\common.py.md",
+    "bytes": 682,
+    "sha256": "22E1644492D58044BDF8BEBE206D32ACA4826D8715F34FAE17BBC90E3684FC5E"
+  },
+  {
+    "path": "explain\\back\\app\\schemas\\dataset.py.md",
+    "bytes": 1128,
+    "sha256": "9C8A615D9C292A612AE4BE198AC5CF9346FEDFA1515E9CB4E8610B26345B655C"
+  },
+  {
+    "path": "explain\\back\\app\\schemas\\imports.py.md",
+    "bytes": 1101,
+    "sha256": "6907314A878611227CCA5246A4E85D801F423AE0197AC3102EE3C3EC6EEB7310"
+  },
+  {
+    "path": "explain\\back\\app\\schemas\\protein.py.md",
+    "bytes": 2521,
+    "sha256": "89260A2A8175ED9F4360D81B0F553F4A85D5C05287936BF1BFB1B2E4FF2AB09E"
+  },
+  {
+    "path": "explain\\back\\app\\services\\import_planner\\__init__.py.md",
+    "bytes": 820,
+    "sha256": "54DCC5944E79E1B8CA28E147B38B3CF51E4E4D76D586EDE47F8A32702EB7265F"
+  },
+  {
+    "path": "explain\\back\\app\\services\\import_planner\\detectors.py.md",
+    "bytes": 937,
+    "sha256": "754C363343A6F7D3EA45BE6973EAA9EF417987529C26B4C8E6EB3670E57A2D72"
+  },
+  {
+    "path": "explain\\back\\app\\services\\import_planner\\planner.py.md",
+    "bytes": 2104,
+    "sha256": "5E1DDD67E9EB766F4F879FFCAAD1516BB2A0371A5DE578B38EE6ED7D68890CAA"
+  },
+  {
+    "path": "explain\\back\\app\\services\\import_planner\\types.py.md",
+    "bytes": 1361,
+    "sha256": "1FB562D4C4E8BF2A3B7BA1B44820566C0B4D90F2843823A93AA1CBE4F7FE0A8C"
+  },
+  {
+    "path": "explain\\back\\app\\services\\import_jobs.py.md",
+    "bytes": 2768,
+    "sha256": "042B0E31B5191500E48DEFF4CCACC1A22FECBA409F28622C9CB07B7ABCB586E4"
+  },
+  {
+    "path": "explain\\back\\app\\services\\incoming_path_relocate.py.md",
+    "bytes": 1156,
+    "sha256": "0C503CDEB04F3A947190CC565C639D64BC00504F620417945390D39A4D32158D"
+  },
+  {
+    "path": "explain\\back\\app\\services\\js_parser.py.md",
+    "bytes": 1444,
+    "sha256": "0B516B2414256905FB2577186DB757613FFB8A0E75F818B3DF914BE6DEC81248"
+  },
+  {
+    "path": "explain\\back\\app\\services\\mzml_mapping.py.md",
+    "bytes": 3994,
+    "sha256": "5F192462445C17492E28EBD78F67D259DE34E0E045E571B331B54A16D175AF8F"
+  },
+  {
+    "path": "explain\\back\\app\\services\\mzml_store.py.md",
+    "bytes": 3756,
+    "sha256": "ABD58F552AF742EF5F9D86D48420733CCBDE54EDE83579C7E86FDF0562271493"
+  },
+  {
+    "path": "explain\\back\\app\\services\\native_folder_dialog.py.md",
+    "bytes": 1152,
+    "sha256": "F77175C7AB0C7DA6E5D5BC471789E1BEC4771FFEC823A37D48E4838DAC6EC26E"
+  },
+  {
+    "path": "explain\\back\\app\\services\\prsm_files.py.md",
+    "bytes": 5547,
+    "sha256": "5FCB1FB7E6EBA5D8A1001BE983103B1B041AB7B4B576987D055E9BE47A61F73E"
+  },
+  {
+    "path": "explain\\back\\app\\services\\spectrum_cache.py.md",
+    "bytes": 2505,
+    "sha256": "8E4EAE1DCE1B359CEB6966A09E0927782EDEC174D5C4BEC16A91CBC67A63DEBA"
+  },
+  {
+    "path": "explain\\back\\app\\services\\spectrum_memory_wiring.py.md",
+    "bytes": 1459,
+    "sha256": "B88FE2D4DD4DBF43EDF0CC983B7E620205C596F2CD2AFDD4D18CA063A4FE2D66"
+  },
+  {
+    "path": "explain\\back\\app\\spectrum_memory\\__init__.py.md",
+    "bytes": 1052,
+    "sha256": "32586759429B926B239C8F3F0EE3601A20D7DCC60CA0358B9B83326F3D2704C0"
+  },
+  {
+    "path": "explain\\back\\app\\spectrum_memory\\config.py.md",
+    "bytes": 545,
+    "sha256": "CF2630FAD089AA1E24FCAE58F2D7C5A824F251EE2A9FDADF17E5939674A5A585"
+  },
+  {
+    "path": "explain\\back\\app\\spectrum_memory\\contracts.py.md",
+    "bytes": 647,
+    "sha256": "69C9EEE21FF8EF39E9F7792487B8529DE17D0BE97D8CF021117CF421B7759566"
+  },
+  {
+    "path": "explain\\back\\app\\spectrum_memory\\eviction_coordinator.py.md",
+    "bytes": 1419,
+    "sha256": "F086006B846E19AA689CE133E8BDCBC9F533658E393FCDC3C1F6379F6AC4F4BB"
+  },
+  {
+    "path": "explain\\back\\app\\spectrum_memory\\lru_mru_queue.py.md",
+    "bytes": 657,
+    "sha256": "3D41E866334F088726B5348F1ECDDC28CE79FB511F7D659A4FC43C3269429A25"
+  },
+  {
+    "path": "explain\\back\\app\\spectrum_memory\\mzml_dataset_bundle.py.md",
+    "bytes": 1143,
+    "sha256": "578F6F8CA55AABF86E9198244E8716C5841E68A2125229D82D1AF13BADD51271"
+  },
+  {
+    "path": "explain\\back\\app\\spectrum_memory\\mzml_spectrum_extract.py.md",
+    "bytes": 1289,
+    "sha256": "D1E21A44E1036898D8B9319D832252D1CAD58F65D5F9E38A3DCE55CEB604A92F"
+  },
+  {
+    "path": "explain\\back\\app\\spectrum_memory\\size_accounting.py.md",
+    "bytes": 813,
+    "sha256": "2FC6B5B154BC33C54808C8D2B16E62F79DD5FFFC9D5A6C1FB0FBFF3F9B97C4F4"
+  },
+  {
+    "path": "explain\\back\\app\\spectrum_memory\\types.py.md",
+    "bytes": 702,
+    "sha256": "82A7AFD64C1545958A1E984FBB29ADE638280890DABD8C5277B6AFCC8C17A0B3"
+  },
+  {
+    "path": "explain\\back\\app\\main.py.md",
+    "bytes": 2263,
+    "sha256": "31228CAE75BCA5ECCA439D9AA2989D92316C08575F6A56CD10461B848F09DEF9"
+  },
+  {
+    "path": "explain\\back\\tests\\test_dataset_ingest_root.py.md",
+    "bytes": 777,
+    "sha256": "925BE5D7C6516604AC4124C947265987AA64EE11E562813EB6F6A88ADCCCBA84"
+  },
+  {
+    "path": "explain\\back\\tests\\test_dataset_metadata_fingerprint.py.md",
+    "bytes": 844,
+    "sha256": "C7696265F2EA4CD9BA4025BA481A035E76A17A92E112048DBC734E8A57181C03"
+  },
+  {
+    "path": "explain\\back\\tests\\test_import_jobs_layout.py.md",
+    "bytes": 1462,
+    "sha256": "B95993856A1798B36FD1D83651F9408381C1E2C9BC3D3E659FD46CF078059D4F"
+  },
+  {
+    "path": "explain\\back\\tests\\test_import_planner.py.md",
+    "bytes": 1471,
+    "sha256": "4CC5AE40BAA8FCF509336B14AB15C3D31CAFDC849B8EA4D5C7E2091433AA70DA"
+  },
+  {
+    "path": "explain\\back\\tests\\test_incoming_path_relocate.py.md",
+    "bytes": 700,
+    "sha256": "9946DCAAD92387EB1B9832EC767036F3E669DE67E556B357BD38F184FC989FE7"
+  },
+  {
+    "path": "explain\\back\\tests\\test_prsm_files.py.md",
+    "bytes": 1211,
+    "sha256": "D00BD0CACFCFF5AF765E3A85EB03567F8809EC097130F4B9B81109E12FC40163"
+  },
+  {
+    "path": "explain\\back\\tests\\test_spectrum_memory.py.md",
+    "bytes": 1191,
+    "sha256": "B11AE8460052D7D8938C9EA7FB246F054037BAB7F832C4EF4FA39D8FA0BB1E5B"
+  },
+  {
+    "path": "explain\\front\\src\\api\\client.ts.md",
+    "bytes": 6072,
+    "sha256": "BEF622476D85B45ADD7EC2D0EC5A3AC1E359F4060E223D23484AB7C6552DBA4F"
+  },
+  {
+    "path": "explain\\front\\src\\api\\types.ts.md",
+    "bytes": 6378,
+    "sha256": "E9E456B3229925E231FF80552DB0D0901E4F2F8BE9517CA8490455FDF71D423E"
+  },
+  {
+    "path": "explain\\front\\src\\components\\common\\page-header.tsx.md",
+    "bytes": 1567,
+    "sha256": "7DDE7507FD618956DE1CC1859C642B7A15BDDC35DF79E7FF058CD47A0663E314"
+  },
+  {
+    "path": "explain\\front\\src\\components\\common\\pagination.tsx.md",
+    "bytes": 1287,
+    "sha256": "8AC78E3BD29DE1D356E798CD6718214C246FE01819A76A5F75D628BBF4F1D745"
+  },
+  {
+    "path": "explain\\front\\src\\components\\common\\stat.tsx.md",
+    "bytes": 904,
+    "sha256": "D5807D7C9B06CF1C67122DC28C8F83DB6A1424DBF3A471FEE3F8E2508067A43E"
+  },
+  {
+    "path": "explain\\front\\src\\components\\layout\\app-shell.tsx.md",
+    "bytes": 1483,
+    "sha256": "B4FB3F25D824FB45AA78211A67F0A29DFD52A587D946D2EDE8D2424A598B9714"
+  },
+  {
+    "path": "explain\\front\\src\\components\\ui\\badge.tsx.md",
+    "bytes": 1116,
+    "sha256": "92BCBBEE238A05476DAF67AEB1F059284AD21040671CC82B60FDF7A125C3D606"
+  },
+  {
+    "path": "explain\\front\\src\\components\\ui\\button.tsx.md",
+    "bytes": 1349,
+    "sha256": "459F99AABF73DEFD28306538BDCA17E8E3689B031C913ACE3B6F496F76624E45"
+  },
+  {
+    "path": "explain\\front\\src\\components\\ui\\card.tsx.md",
+    "bytes": 1116,
+    "sha256": "577E2E6D8D4CF3DE4ECDC116BFBA1D6454E3679428F97CA2FF15D275324DE8F2"
+  },
+  {
+    "path": "explain\\front\\src\\components\\ui\\input.tsx.md",
+    "bytes": 735,
+    "sha256": "7B800D00233A4E8D96294D542460EE7A4D5A4966AA1A6DA4AC26AB39132AC0ED"
+  },
+  {
+    "path": "explain\\front\\src\\components\\ui\\skeleton.tsx.md",
+    "bytes": 506,
+    "sha256": "29427CE2A2ED18E703DB034D01C12D58BC3861840235D3F96549978A1B5C79E1"
+  },
+  {
+    "path": "explain\\front\\src\\components\\ui\\table.tsx.md",
+    "bytes": 1436,
+    "sha256": "D8B06E581993D7315257DD3EC5D30DE116E2BA6E857E5D88AC5070738E45EAB6"
+  },
+  {
+    "path": "explain\\front\\src\\features\\lcms3d\\Lcms3DPanel.tsx.md",
+    "bytes": 997,
+    "sha256": "6A70272B866513BDC41E973ED1AC1A6603DDB34425A96062139DA973346988CD"
+  },
+  {
+    "path": "explain\\front\\src\\features\\lcms3d\\ThreeLcmsScene.tsx.md",
+    "bytes": 1288,
+    "sha256": "DA625E10D6E96143249C21672D4342884F7CADDEFD5BCF959F9960E100062E98"
+  },
+  {
+    "path": "explain\\front\\src\\features\\lcms3d\\types.ts.md",
+    "bytes": 510,
+    "sha256": "683F5683950DB47A09E30A6453D6B3594BDB9D4CDB0AB1BDD8CC6AD8B36D415E"
+  },
+  {
+    "path": "explain\\front\\src\\features\\prsm\\FragmentationView.tsx.md",
+    "bytes": 11796,
+    "sha256": "D1B99D9EA073FE3138199FA55973BA6BE207D0169FBDB7078B2DB2C5E81881AD"
+  },
+  {
+    "path": "explain\\front\\src\\features\\prsm\\MatchedPeakSpectrumPanel.tsx.md",
+    "bytes": 8287,
+    "sha256": "E6CB6A578EA1ED6F3F821E69820E8A87BE56E54C958926E2AB061A9EC3131116"
+  },
+  {
+    "path": "explain\\front\\src\\features\\prsm\\MatchedPeaksTable.tsx.md",
+    "bytes": 5925,
+    "sha256": "F99DD7205FE8F30A138B7E868EBE1F8BD02A6E4BECA6ADDE5BC8C62F33DFBB5B"
+  },
+  {
+    "path": "explain\\front\\src\\features\\prsm\\parse.ts.md",
+    "bytes": 4803,
+    "sha256": "7BF9AF7A47CA72AAACFF8911050AD845D448C97EF30D143CA2ACE92648E90179"
+  },
+  {
+    "path": "explain\\front\\src\\features\\prsm\\SequenceView.tsx.md",
+    "bytes": 10603,
+    "sha256": "E3588E3C68C5CAEF1DDB88CB2B58B5F2B936267A1D48CF02C1C3979088E9905E"
+  },
+  {
+    "path": "explain\\front\\src\\features\\prsm\\SpectrumChart.tsx.md",
+    "bytes": 15865,
+    "sha256": "430743AEAEFBB7CD9BB456B47D87687F509ABCF7BFF99DEF32E58ADFFBB59663"
+  },
+  {
+    "path": "explain\\front\\src\\features\\prsm\\SpectrumModal.tsx.md",
+    "bytes": 3298,
+    "sha256": "BD4F0B04EB49CC5F6453BA721B6567ED65BFBADDFDF8B0EFEB4BAF8B6A94C7C4"
+  },
+  {
+    "path": "explain\\front\\src\\lib\\serverPathFromDirectoryInput.ts.md",
+    "bytes": 1103,
+    "sha256": "63AA36A8BCC7D246860FDEAC1120343D23F58A35FBB166AA69928292F9B8044D"
+  },
+  {
+    "path": "explain\\front\\src\\lib\\utils.ts.md",
+    "bytes": 1709,
+    "sha256": "9545A811BE8DC6ED4D6EDF84316B15F097135F8E86A554729B7937D25535F458"
+  },
+  {
+    "path": "explain\\front\\src\\pages\\DatasetPage.tsx.md",
+    "bytes": 2970,
+    "sha256": "95A6F55342A58F89CFD9B7F214C32E9A07FD0A0561DDC85BDAA9668D5841661A"
+  },
+  {
+    "path": "explain\\front\\src\\pages\\DatasetsPage.tsx.md",
+    "bytes": 1356,
+    "sha256": "BA37637BDD89B96D4E06DCF6C8F63797CE1456E1746FD260CAFEE19671CC64B2"
+  },
+  {
+    "path": "explain\\front\\src\\pages\\ProteinDetailPage.tsx.md",
+    "bytes": 2720,
+    "sha256": "48BC36AAC79310A100C394BE9846C1EC9BB5D3BA3C73FA5BC7E7D5AF702FBBB0"
+  },
+  {
+    "path": "explain\\front\\src\\pages\\ProteinsPage.tsx.md",
+    "bytes": 3438,
+    "sha256": "AB810C920DE85A6925BCF401B0E4D10E261527FECF313CFD9870F62BA5C55B83"
+  },
+  {
+    "path": "explain\\front\\src\\pages\\ProteoformDetailPage.tsx.md",
+    "bytes": 2662,
+    "sha256": "4F60080ECD4E2504FEE2F43F4C7375427AF09F12031062D821D1D280F01D23C8"
+  },
+  {
+    "path": "explain\\front\\src\\pages\\ProteoformsPage.tsx.md",
+    "bytes": 2123,
+    "sha256": "CF010C9DC794BE72079F79869CB7935DF3DB6F3E30829A793993A52388AD0E74"
+  },
+  {
+    "path": "explain\\front\\src\\pages\\PrsmDetailPage.tsx.md",
+    "bytes": 7101,
+    "sha256": "C8F5EA3E0A468142EBFBB0055D09A0D2610856826C82CC2E975FDDA9F15B1D70"
+  },
+  {
+    "path": "explain\\front\\src\\pages\\PrsmsPage.tsx.md",
+    "bytes": 2047,
+    "sha256": "74ADCF950BEDE662F47F05C0D06374C060808D99ECC2DE93B970990F0864A020"
+  },
+  {
+    "path": "explain\\front\\src\\App.tsx.md",
+    "bytes": 1837,
+    "sha256": "3468E479F9658457BD7530F2CF5CAC39C04A56B5349E2B3E7805EC9EAC979A93"
+  },
+  {
+    "path": "explain\\front\\src\\main.tsx.md",
+    "bytes": 2489,
+    "sha256": "A1660D4D2F0368549E353740F0F8499A7DCDE4895A7D2E403DAB93B43972648B"
+  },
+  {
+    "path": "explain\\README.md",
+    "bytes": 3498,
+    "sha256": "DC7B5CA09D7B6B79FF992E12F445E3940E932071E42F1CBEFB85910960720E95"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\谱图与峰标注.md",
+    "bytes": 6736,
+    "sha256": "4947C13D709A90CC655BADA54A4902BA804911962B69D77567C76A78E7852211"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\热图散点与DIA.md",
+    "bytes": 3564,
+    "sha256": "5205430718D27A24B7B6073E9FB087DEEB2A673C8EEFDE7E9CDD8CC000A495F0"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\三维LCMS.md",
+    "bytes": 2308,
+    "sha256": "F6FE0D6833573ACEDF99339FC20E49A232F92E3432E7053E8E03FA5BB57E8306"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\色谱与XIC.md",
+    "bytes": 4981,
+    "sha256": "F03D1E4AA2C340A56995BB5E4B73EBBB2BA07366698ABCF1EE27C721C47D11EB"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\数据契约与API.md",
+    "bytes": 6406,
+    "sha256": "40A54CDA8C3EA24AC831C81196F54DEEB654F906F8E2AB155AC5423BCFD23E52"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\完整组件目录.md",
+    "bytes": 14660,
+    "sha256": "6204B2A0C815719FFBEE140CFDEB98382441CCF01F3F57536D9B8D9FD13D51D3"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\维护与完整性检查.md",
+    "bytes": 2924,
+    "sha256": "2D308DDEF384BBE3AA9A0F18BF41F92B9C62008AF40376F75AFEB0416CEC5BB6"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\序列覆盖与碎裂.md",
+    "bytes": 3593,
+    "sha256": "1F5E5ADF4D02D7A0542C1B7A8B89E4B7FAA0C54C0936374963EFCDFEDD0C837B"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\遗留与未启用组件.md",
+    "bytes": 2824,
+    "sha256": "EBE15EB3592B3262D56A96942924A0B32A3E1839C9D91AE3BD39B721EC4ECCC8"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\主题交互与状态.md",
+    "bytes": 4208,
+    "sha256": "10C29DD5AB2E7E966CEE84C4D847BCD5D13B218DB0E34961F170B7D77EE1F6F0"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\总览.md",
+    "bytes": 3906,
+    "sha256": "C353F65FF7BE2AAC7633CECC12B630279EFC15686FBA19DB53C923376E888830"
+  },
+  {
+    "path": "front\\Agent谱图可视化参考\\组件清单.json",
+    "bytes": 35088,
+    "sha256": "7833F1AFFA07DB4C3A929D409AA79A4AA45EA85F7DEB76188DE87E585A7BBCBC"
+  },
+  {
+    "path": "front\\src\\api\\client.ts",
+    "bytes": 11512,
+    "sha256": "9961A31896D8C185EA5C64EBD9F5C7D758517FE7FAA07ADDAAE3D2167584942F"
+  },
+  {
+    "path": "front\\src\\api\\types.ts",
+    "bytes": 11694,
+    "sha256": "74EE7C2DC05CDF66F9AF5406D8BDFA2B1AB9452265D21BF0803B12C616120CCA"
+  },
+  {
+    "path": "front\\src\\components\\common\\chart-render-boundary.tsx",
+    "bytes": 516,
+    "sha256": "C1A7550E87FE8DEC6CF2CBEB2032D88E3402A021BA6861959A50B715BF9E1C2C"
+  },
+  {
+    "path": "front\\src\\components\\common\\data-state.tsx",
+    "bytes": 1241,
+    "sha256": "3F4418CA8F17D1BCED3C7CC18E0E0FAE9A1B9A13E272559A44250B2BFAC69C82"
+  },
+  {
+    "path": "front\\src\\components\\common\\decoy-truth-badge.tsx",
+    "bytes": 950,
+    "sha256": "7CF29ADE021CA556F21EA2929AF4006E1956F5A02E74DBF03521F67EF484C769"
+  },
+  {
+    "path": "front\\src\\components\\common\\page-header.tsx",
+    "bytes": 2056,
+    "sha256": "39E1DA24CA064D58111CECBF7015CC142E1AC6A618262D6E4FC2E1354DD7A2E6"
+  },
+  {
+    "path": "front\\src\\components\\common\\page-loading.tsx",
+    "bytes": 997,
+    "sha256": "3BF8A07E49D9CA8186315440EC9FDB8299CB30682416F8C2AF8BADEB7AFF3AF0"
+  },
+  {
+    "path": "front\\src\\components\\common\\pagination.tsx",
+    "bytes": 2388,
+    "sha256": "5E3855C84A25D5B2825465DBC07F32F0893ADE8B5F52D307E82232412DD222FA"
+  },
+  {
+    "path": "front\\src\\components\\common\\plot-status.tsx",
+    "bytes": 2606,
+    "sha256": "06AE714700932E690AEDD28051D5EFC1810653744B79EA33074D56AFEB058ABB"
+  },
+  {
+    "path": "front\\src\\components\\common\\stat.tsx",
+    "bytes": 773,
+    "sha256": "0A23EB33CCD10CD963FB16C105BF0BA0F1966E82CA55CE8ECC3C88C1C6DE57B8"
+  },
+  {
+    "path": "front\\src\\components\\layout\\app-shell.tsx",
+    "bytes": 2608,
+    "sha256": "A4EB00997D9473C4A0CE641A83C949646669117DEBCAC8E3BCA99D69A2B63C06"
+  },
+  {
+    "path": "front\\src\\components\\ui\\badge.tsx",
+    "bytes": 1062,
+    "sha256": "90D5F617C15D9D3FA7940FE28A5D9F6D33C323180F43E5C24E7D2DA67A2F35B7"
+  },
+  {
+    "path": "front\\src\\components\\ui\\button.tsx",
+    "bytes": 1992,
+    "sha256": "1F4BB79B3D9F6B4A70709B7DAD0415CDA921279BF6F0C25F59DB7B7D6AC9F8ED"
+  },
+  {
+    "path": "front\\src\\components\\ui\\card.tsx",
+    "bytes": 1918,
+    "sha256": "547221DA032B2F840FF3FA6845AE5D8D82460C23AD9A7CC223C55D5A023CF73C"
+  },
+  {
+    "path": "front\\src\\components\\ui\\input.tsx",
+    "bytes": 800,
+    "sha256": "2B79157DDCD2CDB2142263CF6F10D4062946C195105036A989AF4FD5DD46D09D"
+  },
+  {
+    "path": "front\\src\\components\\ui\\skeleton.tsx",
+    "bytes": 265,
+    "sha256": "D390A0DE13A346D75EC927A991985C7B7C46915D60E3851E45AC74DDDD7A020A"
+  },
+  {
+    "path": "front\\src\\components\\ui\\table.tsx",
+    "bytes": 2354,
+    "sha256": "66DC8D76AD3FA8A9969C9678C1D204DFAD1775BF1F78B7C77F53A31DE67E5498"
+  },
+  {
+    "path": "front\\src\\features\\agent-import\\api.ts",
+    "bytes": 2791,
+    "sha256": "DC120FF857AF9716F998FB75B53A3F8507E6E882E416CEE49E9B9DD288C676E8"
+  },
+  {
+    "path": "front\\src\\features\\agent-zp\\AgentZpImportDialog.tsx",
+    "bytes": 12464,
+    "sha256": "B2995E52AA9EDDE012B30CD0F578C2F46CE014D4B03101A2C72720051B15353A"
+  },
+  {
+    "path": "front\\src\\features\\bu\\api\\buClient.ts",
+    "bytes": 5200,
+    "sha256": "36AE6D513DC2379913AC93E83624AD35A77ED8B5E41114E27008C123A6812A8A"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\BuEvidenceSummary.tsx",
+    "bytes": 4637,
+    "sha256": "FB5ACA3FED834B0A318E96D5298288BB7F074EE62909B1D8937D0918E0202F15"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\BuFragmentTable.tsx",
+    "bytes": 4203,
+    "sha256": "BF453BD8FEE09BE2DB1EF9B01DDD5447AB51E17DE698D824325D40802897AC60"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\BuPfmbAnnotationCard.tsx",
+    "bytes": 14607,
+    "sha256": "DAB3078E97B8BE762FE5863165FFD96821AEBD30C67382ECA9CAB13060CCF182"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\BuPfmbFragmentTable.tsx",
+    "bytes": 6817,
+    "sha256": "C00C1F9EEDF1B97A07554EA351E6408822EA28BAA841CBB64B81827BD04CB134"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\BuPfmbHeatmap.tsx",
+    "bytes": 14731,
+    "sha256": "25BC22F18270125ACB3088AAD0654887A3E6659B5B235F11AE8CD6F520960BB0"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\BuPfmbQualitySummary.tsx",
+    "bytes": 10522,
+    "sha256": "4B6509FDE8E26B1DAD84335D944449BB43B5B6AE3B60D778E4DBBA94BE92FED6"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\BuProductIonXicCard.tsx",
+    "bytes": 12213,
+    "sha256": "58F36F4AF9E1181543A1790E735CC4025E7853449F1E41744476DCF7BD631A40"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\BuSequenceCoverage.tsx",
+    "bytes": 5732,
+    "sha256": "DC7BA3F9F3238B33C893EDEC8CAFCBF90990D799DCA8E627B38B9CA0E4E8B6F1"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\EvidenceJumpControls.tsx",
+    "bytes": 876,
+    "sha256": "ACA18B3B26FF504F787170BD82E630EA6861877BAF7418D16B08E169E5F181D6"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\evidenceSummaryModel.ts",
+    "bytes": 10745,
+    "sha256": "0FA6CA97D1ED63DA44A9FB62D1A8A0E69EE96F7C2C1766C0110A886A4F4C992E"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\EvidenceUpdateNotice.tsx",
+    "bytes": 346,
+    "sha256": "7ACC2418E2033410B089B93A211244A1F2BB27D3D3C987B723D76EA3D98E774A"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\FollowPfmbSlotControls.tsx",
+    "bytes": 1177,
+    "sha256": "3227BFC24E938A2F7F154952304A9A8543004899282A941E239882FAC4B1227B"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\pfmbSeries.ts",
+    "bytes": 2071,
+    "sha256": "50A4D7ED95CD7555E6200C08B2BA5EA54ADEC2A5ECDEC533D39609A28449C99D"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\productIonBatch.ts",
+    "bytes": 2705,
+    "sha256": "9D07B7EA7AF331CD075FCB569DBBB9AE4AD0A38E2AC31B30AC07778D0EB90435"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\productIonColors.ts",
+    "bytes": 1078,
+    "sha256": "B863FCE9593F025B91CEBD2E0A5802B4E5C5CDCD801D09164F3E07B6C34E670E"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\productIonSelection.ts",
+    "bytes": 4289,
+    "sha256": "9671B3E94A480377D0403E352DC7B36094B4516E4EB610C4439421DD2BDB6F21"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\productIonXicViewModel.ts",
+    "bytes": 1754,
+    "sha256": "2A1B87DF9D1A1C99962405D2C0863C7FADDDBE63D9B9778D8D88AAEC2EA3E985"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\SelectedEvidenceBar.tsx",
+    "bytes": 3313,
+    "sha256": "754A3A641871FB008C5FA42D418238950B2B70FF386F31CF7F137B6BD2B4EAED"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\match-detail\\useBuPfmbEvidence.ts",
+    "bytes": 2562,
+    "sha256": "0A7327B7448AFBBE0FED1064F73B35FBDE013730EC6EAF3F264976FCE36A0CEF"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\overview\\BuQcStats.tsx",
+    "bytes": 2876,
+    "sha256": "7C3C6938FF2550A2639C8D5627CF597E2240E166B1843058E71911C8F3F53D14"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\overview\\RtMzMiniHeatmap.tsx",
+    "bytes": 5283,
+    "sha256": "62FC6E40411CF6DE9F035A55E1FE39AC44F776E9DB4681AE5F9B84EB9C22D77B"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\overview\\RunSelector.tsx",
+    "bytes": 910,
+    "sha256": "74D0F4581AD3FE60AA1C821204F44F5B77D26E2F1165964AC71303B68042AA85"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\peptide-detail\\BuPeptideHeader.tsx",
+    "bytes": 2229,
+    "sha256": "BA734BE00EF54D961D0A41A7E76465CBDD21A0912D124B4AAE338FB0CA2866E3"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\peptide-detail\\BuPeptideMatchesTable.tsx",
+    "bytes": 4623,
+    "sha256": "6ECF081FDD622ECD1C0F7C803E37CE47BA091F6EF812F7B118D17026AB399954"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\protein-detail\\BuPeptideLinksTable.tsx",
+    "bytes": 3619,
+    "sha256": "5BD8588D262609BF0C86F9CC5669BCBEBEB1CBC49C33A401250E64417F10995D"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\protein-detail\\BuProteinHeader.tsx",
+    "bytes": 2482,
+    "sha256": "C330F985DDCBFC3DD06601304CABE52D956976935A00C48958C8F74254BF8466"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\sequence\\CoverageBar.tsx",
+    "bytes": 1777,
+    "sha256": "7ED4803978ED5E783E633CEFDE8B7BAF87DB77B5A939AEB69D38C8A010B96F2B"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\sequence\\coverageColors.ts",
+    "bytes": 353,
+    "sha256": "A24A5177A6280FDB867B02E6FACC6AD6AAC2BD4DE82A405E58583A114A5E95FB"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\sequence\\coverageLayout.ts",
+    "bytes": 4121,
+    "sha256": "27E82BFA70BEA16686CC347984A6BF3C48F358D08698FB4EEC191F6B38383181"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\sequence\\PeptideLegend.tsx",
+    "bytes": 2048,
+    "sha256": "97384F529B0A04AFF0EA39BFA4225FA50F107331B4B19CB4A9137BEE7D40578A"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\sequence\\SequenceCoverage.tsx",
+    "bytes": 9249,
+    "sha256": "3343DAEEFA1681401DCC7D46AA3036B8D62535BD434F9F72428A52D8BB731D53"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\BuChartModal.tsx",
+    "bytes": 2193,
+    "sha256": "FEC31A11661D852F9DCA7E2871297BD8C5C4958E4A6D1B8D175AA222FD67A131"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\BuChromatogramChart.tsx",
+    "bytes": 1977,
+    "sha256": "CD1BF56780145F3704125C1B8871D09954CE1F1FB4E3D227551767627B4A5F12"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\BuInteractivePlot.tsx",
+    "bytes": 20270,
+    "sha256": "B6707058D09A21E6B33F0BE0B3EB771EC1B27F055F4266D349EA750F5DE231EF"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\BuPfmbSpectrumChart.tsx",
+    "bytes": 16085,
+    "sha256": "66D6868B66991E39DE5EA1805E2C53D11712730AD170EB80AF24CF4BAEEDDD48"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\BuProductIonXicChart.tsx",
+    "bytes": 4595,
+    "sha256": "C2AA196A2297AD46AED90CD5CA8AB1546655030CA1497250708B0ED3D2E94F0F"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\BuSpectrumChart.tsx",
+    "bytes": 30669,
+    "sha256": "98149B8D725A8F0CEA2E1B39346D8421575B50277911D3524E45ACF340A48F22"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\BuXicChart.tsx",
+    "bytes": 3346,
+    "sha256": "83D0006C87C2BBCC55F2EBB334322E9D04B45F7012919760F074610A18D931BE"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\chartTheme.ts",
+    "bytes": 1209,
+    "sha256": "1D3492575F09558724D4241DB437FE5F2ACDBE5907E1497649E060A04B658D12"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\chartUtils.ts",
+    "bytes": 866,
+    "sha256": "1F6C652DD0991003B2B9EED037097096D5ABCA3950CE92C173EBEBDAB93BFB8A"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\DiaWindowMap.tsx",
+    "bytes": 3133,
+    "sha256": "7CF734131C172B3170654009BA0B397C05EC86F037680F38712109E10349C33C"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\MzMobilityScatter.tsx",
+    "bytes": 4402,
+    "sha256": "ABD4C7709BE99D953137454939CC8E08C3B3723D7001AC1DF8B44F8088BD7DF1"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\pfmbSpectrumOverlay.ts",
+    "bytes": 2481,
+    "sha256": "F9739D0F10FEB230568EDB5F9212E0CBFCF1423FF914A3C69A9878FBB23D7AA8"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\spectrumAnnotation.ts",
+    "bytes": 424,
+    "sha256": "D535667AF981F1DFC71E84C39676D19D8B3CA25F5561163F441B0CEA75058DA3"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\spectrum\\spectrumLabelLayout.ts",
+    "bytes": 1590,
+    "sha256": "05D6BAAE8F89FF07767DE7B9445A301B19B1E96C393FDAEE511EA8EB65D177D7"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\BuDataTable.tsx",
+    "bytes": 2339,
+    "sha256": "A89575AA1FCDEAB6AE68ECAA6B15DDF89695A865FB1A7D7950F275ECDC3171E2"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\BuEmptyState.tsx",
+    "bytes": 419,
+    "sha256": "E4D90FB5E45E421CF7B140B8359D289C3855C9AD64FDED2C9D8C64484E386BC7"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\BuListFilters.tsx",
+    "bytes": 3376,
+    "sha256": "C54FB204034FE37E52636F007BB7E42E06C05B1533371A04248B1FCFEF583FC4"
+  },
+  {
+    "path": "front\\src\\features\\bu\\components\\BuSummaryCards.tsx",
+    "bytes": 2434,
+    "sha256": "12A27335D2B7556C49EE57FD7F6BE5BE87F149C4BEFCF9F3F33A62C877ACA51D"
+  },
+  {
+    "path": "front\\src\\features\\bu\\generated\\unimodLabels.generated.ts",
+    "bytes": 44233,
+    "sha256": "8A881851EC8860B94CD0A683002A858BBFE3B7F206952828D8BBF256F89E689B"
+  },
+  {
+    "path": "front\\src\\features\\bu\\layout\\BuDatasetLayout.tsx",
+    "bytes": 5051,
+    "sha256": "5D9B135A343FB85CD1E84A750DE5F26332B5449D55F0F8431BA0F10C770A5059"
+  },
+  {
+    "path": "front\\src\\features\\bu\\pages\\BuComingSoonPage.tsx",
+    "bytes": 472,
+    "sha256": "BAE7A47CD1BC3A99EBE3B9FAB64D5A8CE5D432492D152F1FBA4476B60387AD7C"
+  },
+  {
+    "path": "front\\src\\features\\bu\\pages\\BuMatchDetailPage.tsx",
+    "bytes": 43095,
+    "sha256": "2709FDAE2478B2520411E8B1827276FE6FFF69CDF9558625402545099117AEC6"
+  },
+  {
+    "path": "front\\src\\features\\bu\\pages\\BuMatchesPage.tsx",
+    "bytes": 6387,
+    "sha256": "419BF2987B9A26527F0695AFDFC83BB3DABA3E471E4B6A7EFC177E0837B60BA1"
+  },
+  {
+    "path": "front\\src\\features\\bu\\pages\\BuOverviewPage.tsx",
+    "bytes": 12938,
+    "sha256": "A0ED9D3365E819CB734E5F2C88753C82C85501CC4CF258C2E7FC005EE81F9FD6"
+  },
+  {
+    "path": "front\\src\\features\\bu\\pages\\BuPeptideDetailPage.tsx",
+    "bytes": 1523,
+    "sha256": "17F1A511B12F87E0242FB331D801B0E878616BB90AF1F65468CD05B4DF35461E"
+  },
+  {
+    "path": "front\\src\\features\\bu\\pages\\BuPeptidesPage.tsx",
+    "bytes": 4273,
+    "sha256": "AB51F3E6F8C36B574F93193B72DFC9CF976DE8F7A505F4822B12E71FD1BE3794"
+  },
+  {
+    "path": "front\\src\\features\\bu\\pages\\BuProteinDetailPage.tsx",
+    "bytes": 2295,
+    "sha256": "0E81213D62701D96810780D4457D448371AEB7CF265F3394C0B2F64F67C7F91E"
+  },
+  {
+    "path": "front\\src\\features\\bu\\pages\\BuProteinsPage.tsx",
+    "bytes": 4525,
+    "sha256": "D024A18A836B75C1C13B09B6949D17C215C19805D89492CC09B6EC65DBAC3D82"
+  },
+  {
+    "path": "front\\src\\features\\bu\\routes\\BuModeOnly.tsx",
+    "bytes": 496,
+    "sha256": "C07E9D6D9AAD24BE132110F481D897A2F71DD97B53780105F8D55C158C4E7B23"
+  },
+  {
+    "path": "front\\src\\features\\bu\\routes\\DatasetModeGate.tsx",
+    "bytes": 2499,
+    "sha256": "95B180EEA3A30D4C6B375A67A36976BBF729F14BF3AE1FC8BAE3ADFAB6DFF30C"
+  },
+  {
+    "path": "front\\src\\features\\bu\\routes\\TdCutoffModeGate.tsx",
+    "bytes": 1041,
+    "sha256": "7876E57802CC27CEE14B6C30687D36B8B45DB530E81F552A6B21916102F68E13"
+  },
+  {
+    "path": "front\\src\\features\\bu\\utils\\listParams.ts",
+    "bytes": 964,
+    "sha256": "CFE93B50956AE6C29EDE67D3185E3D8F73233CDD9BBBE6C111D900CD3FB17F6A"
+  },
+  {
+    "path": "front\\src\\features\\bu\\utils\\modifiedSequenceFormatting.ts",
+    "bytes": 629,
+    "sha256": "3E3BCA57D80A6B73084966393BE8B35525CB7E3885717C72CB434A1006488098"
+  },
+  {
+    "path": "front\\src\\features\\bu\\types.ts",
+    "bytes": 9666,
+    "sha256": "ED1F0AB03669F029893655D7FC44A3592FE6D7D729F3BFE410609384C1A0E5FB"
+  },
+  {
+    "path": "front\\src\\features\\bu\\utils.ts",
+    "bytes": 2475,
+    "sha256": "E1346E1F6A04E40120A5E827FFB841B419332CC4277B4C3CD07896FDD460E9F0"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\api\\buClient.ts",
+    "bytes": 5386,
+    "sha256": "7A7622BEB1EFF0BC40105766CE0989D6F253E873CF6B00C978F388A00A22BAEF"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\BuEvidenceSummary.tsx",
+    "bytes": 4454,
+    "sha256": "D8B00CE88D760CE462D10DE05529964D8621D4EB2CA78B2E8DEB9873FDC006FA"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\BuFragmentTable.tsx",
+    "bytes": 4318,
+    "sha256": "B10FC8543499922C959C053C2B026E4993B394F920C3924C12179CF712329145"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\BuPfmbAnnotationCard.tsx",
+    "bytes": 15095,
+    "sha256": "B31776682FCBE12742FD4A8609E8D824A4E47D8B268B916A64C2EBF9C7A94006"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\BuPfmbFragmentTable.tsx",
+    "bytes": 6849,
+    "sha256": "5F9CFF66EB3C85FB7516684E8FA4BE11E6F547718C045B61A19C08C12311F88B"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\BuPfmbHeatmap.tsx",
+    "bytes": 15144,
+    "sha256": "E8EF28EF4842011D1F1E33867E8482B58AF187D44C09645B5E17F859555056B1"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\BuPfmbQualitySummary.tsx",
+    "bytes": 10645,
+    "sha256": "5A9319101DC61DE98282E3D4E414B413DDE1F79411827CE702A89A3DD7298579"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\BuProductIonXicCard.tsx",
+    "bytes": 11941,
+    "sha256": "E4CF9534455F1B73D20D44F09FE94FA108AC6FAAF5686209DA42A1499B0599D0"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\BuSequenceCoverage.tsx",
+    "bytes": 5816,
+    "sha256": "46008E8F870084B14C089C85B8A4EF57D2DB5D90BE5E45303788C51775B4857E"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\EvidenceJumpControls.tsx",
+    "bytes": 904,
+    "sha256": "21CDDB6D2B437ACDD5F7832CC5E0408CDD3486D0E788A27F20486CA330612A1A"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\evidenceSummaryModel.ts",
+    "bytes": 8918,
+    "sha256": "DF92D2402FA2AEBB9F5533E0A5E2A355550A8E5C68DA13C92184539A7EEAD91F"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\EvidenceUpdateNotice.tsx",
+    "bytes": 358,
+    "sha256": "781987B28434AD35FB6B1B6846966FC9D0B136B5E16A7311580B2BC7A9C43543"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\FollowPfmbSlotControls.tsx",
+    "bytes": 1211,
+    "sha256": "EE235EBC5243A88EA1D1E324F4574665D8EA1F51722EDB5298F2A4954C6A6905"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\pfmbSeries.ts",
+    "bytes": 1972,
+    "sha256": "D8B2D70556F1BDF85836461D7DF61BD48315275A8D0900A6FC1288EAF49C71A1"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\productIonBatch.ts",
+    "bytes": 2816,
+    "sha256": "DFA663413AA3A8E2D117CFAF603547FBB7DF906B9673C8EAD712B77E27EC9FE7"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\productIonColors.ts",
+    "bytes": 950,
+    "sha256": "707D1BB9AB06B780AAEBF220ECA1A747AE4EE59D1FE4AAEAC2F74468EA7B87A0"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\productIonSelection.ts",
+    "bytes": 4442,
+    "sha256": "590D01B8003775D8D6D7CD066407E4C56FA9730D0AB074FD5FEFA51120779CD5"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\productIonXicViewModel.ts",
+    "bytes": 1819,
+    "sha256": "BE084EAA4AA137FEE9929D7CF352AC4CD6A7AFA63459A247991FD1B9896D05D5"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\SelectedEvidenceBar.tsx",
+    "bytes": 3428,
+    "sha256": "B81F36CB7F3D4E8A6960773C0148CEA2CEC329B014AA923DEBC265986DD6C467"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\match-detail\\useBuPfmbEvidence.ts",
+    "bytes": 2663,
+    "sha256": "4F788133D751D49032AC3B49AD8C2DAB4E9094B3428B02AA2D030077EB2DE0DD"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\overview\\BuQcStats.tsx",
+    "bytes": 2695,
+    "sha256": "D155F9B2E4806D5F2F3A164B7FC1ABA4D7DEEEE76DAC61A07FBFCA2EE7FDD8C5"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\overview\\RtMzMiniHeatmap.tsx",
+    "bytes": 5474,
+    "sha256": "8554F22FC86CFF89D98280C11BCA5AD621AE37B50806B7B7426259EC9FD14571"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\overview\\RunSelector.tsx",
+    "bytes": 954,
+    "sha256": "18D997C425174330AF9808EADE6E3BDA8882FF14F1C98058B8DD8A6F5EEABE10"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\peptide-detail\\BuPeptideHeader.tsx",
+    "bytes": 2297,
+    "sha256": "4665ABD7CE86182107EEA9AA3FF9E5EFA0DB19159280D11A8FCCA04653E81B43"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\peptide-detail\\BuPeptideMatchesTable.tsx",
+    "bytes": 4674,
+    "sha256": "9BB56B8D46546F1CDEEE4C53FD5E13BD602A48ABC37CB7975A33BEB4DD479877"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\protein-detail\\BuPeptideLinksTable.tsx",
+    "bytes": 3661,
+    "sha256": "34FAD8F71CB73206793268398D943ED607DECB47A54582B764A0EE28E9EC5D1C"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\protein-detail\\BuProteinHeader.tsx",
+    "bytes": 2497,
+    "sha256": "E8E0CA6984399DA77A6E870DBED391172287FE51307B9FCB452398155EEB8900"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\sequence\\CoverageBar.tsx",
+    "bytes": 1816,
+    "sha256": "1369D428880BCEA390F0004490010749A70A0A788A8F24D853440A702B736F91"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\sequence\\coverageColors.ts",
+    "bytes": 884,
+    "sha256": "CC1DD95C901403BFAE0E93A9ADB2490B8E018C11E3090A059A435E1E6E84943D"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\sequence\\coverageLayout.ts",
+    "bytes": 4282,
+    "sha256": "CC9954BB4BE6B7A45043757400F21877C8A2306E3852B37DEC55CA52C5C1B911"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\sequence\\PeptideLegend.tsx",
+    "bytes": 2166,
+    "sha256": "6ABA7FFB755408A0D42B3DAA61E60F6D3AB07FCFA99E04CCE612CCED641F0613"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\sequence\\SequenceCoverage.tsx",
+    "bytes": 9437,
+    "sha256": "437085DB99DBC0C7FC5C41B5FEA19DD8085327215C7DCB34B1EE7A364FAB0071"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\BuChartModal.tsx",
+    "bytes": 2260,
+    "sha256": "4CF50DC6BB2690501EA19D651E14E6F1DD1CA3E142E2DF2FF4DFAA0D8D30301F"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\BuChromatogramChart.tsx",
+    "bytes": 1705,
+    "sha256": "DC5798AA93BBE97C16B4B0221CEEEC803FDECDF63102EB80BE3A94E6B885D703"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\BuInteractivePlot.tsx",
+    "bytes": 19352,
+    "sha256": "02D46B2780E6A40C730D29BE58D27A2C78D94FEBAAFE4394579424223A7505D2"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\BuPfmbSpectrumChart.tsx",
+    "bytes": 16117,
+    "sha256": "23B68B9A382BAA5C047F05312EE2A522F2FAAC4888AB8810C03A07B4A2C1A388"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\BuProductIonXicChart.tsx",
+    "bytes": 4623,
+    "sha256": "6294B3C49857BF01C56B73113AE5781A25518E32D5450EA7E08D7FB45F233619"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\BuSpectrumChart.tsx",
+    "bytes": 30891,
+    "sha256": "AEC22E8466666179CA6C7C515673AB7F3B915E8C3AA931224BEA9E654AB8B24F"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\BuXicChart.tsx",
+    "bytes": 3380,
+    "sha256": "6748DD985911FE4B964CE9967038EFA13CECA7C835F53EA992BD5A17DF4BC55A"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\chartTheme.ts",
+    "bytes": 1082,
+    "sha256": "DF0025179ED3C86744CDC91689D21B7EB3606C6F4714133B001A664CEC19C65D"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\chartUtils.ts",
+    "bytes": 886,
+    "sha256": "4DA00DE138EBB776DC12F05C83C8E1837D0E603EEAED26BA4A4E5544FEC4D227"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\DiaWindowMap.tsx",
+    "bytes": 3141,
+    "sha256": "661423A36271248A92901FD38C45278FD1BF69754B73E19208D19FB4C60667E9"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\MzMobilityScatter.tsx",
+    "bytes": 4433,
+    "sha256": "D36960697274E6D3614E6730529EBCC946E0186E59A10729B8A008A84BD5B46E"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\pfmbSpectrumOverlay.ts",
+    "bytes": 2581,
+    "sha256": "9800603003C5C5995D645A54FCC7A1B20D8B1F8CBB8C459A0F0DEF23C18AE665"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\spectrumAnnotation.ts",
+    "bytes": 442,
+    "sha256": "0F9D655B35BE081BC4A9E3AFE0444823541458D15B6138403856C5E3052344BF"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\spectrum\\spectrumLabelLayout.ts",
+    "bytes": 1648,
+    "sha256": "61AD4BFE90F9E9009B346A109AB90E3150BAC05E362989649AEF6194C862E703"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\BuDataTable.tsx",
+    "bytes": 2388,
+    "sha256": "FEE23B4B352EF33A23DE962B579B391CD30EF3CF728C9FA549C08AC06DA7F2B3"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\BuEmptyState.tsx",
+    "bytes": 431,
+    "sha256": "DF81E291C428FAF831D110B203C12579FA33FEBA60BF72A199F94FD36B3BF248"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\BuListFilters.tsx",
+    "bytes": 3496,
+    "sha256": "EE7E312C74E60744FA6A0AD3BB2764458A8316653658645BA0EFE6EC5D62450B"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\components\\BuSummaryCards.tsx",
+    "bytes": 2479,
+    "sha256": "884407757BD953AA80F252E8D8CCF08CF2089B281992D95B6FD907A9B1D6E5DE"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\generated\\unimodLabels.generated.ts",
+    "bytes": 45804,
+    "sha256": "325E55330A6ACE7271A7838D67C62FADF0C38826985DD31FF502FDE241FDAE7A"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\layout\\BuDatasetLayout.tsx",
+    "bytes": 2157,
+    "sha256": "B17FAFEA6B83BA703D81368E18C3A32679E81ADF5CF8E4735932A3A8D1DB89DE"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\pages\\BuComingSoonPage.tsx",
+    "bytes": 486,
+    "sha256": "47CEDD190E02F38D5F0D951B1DA11A0960E1696016305BB04C7A54610C081C23"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\pages\\BuMatchDetailPage.tsx",
+    "bytes": 34815,
+    "sha256": "CC46604953F251DFDEFF24B64CB510E0F260BCA570A85A219B7D056C45FF8981"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\pages\\BuMatchesPage.tsx",
+    "bytes": 6013,
+    "sha256": "DF0C1C4471CACB6B6EEF9BE6B7FBD69B55A54FC8A9C28E44C0D4DF87CE31D7A0"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\pages\\BuOverviewPage.tsx",
+    "bytes": 10179,
+    "sha256": "B8400CF7FF3F024297A60DE05FA46503C29D1C55511BE6604CA55F937376A144"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\pages\\BuPeptideDetailPage.tsx",
+    "bytes": 1476,
+    "sha256": "E78ADC75CAAE263DFD046BF2C9BD507256698F3E345757E374BA78C8CD7E7D98"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\pages\\BuPeptidesPage.tsx",
+    "bytes": 4303,
+    "sha256": "56CEF36DA9C4973AC7631FE50A67018AD2AEA69CE7FFF02C57F069FB33330768"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\pages\\BuProteinDetailPage.tsx",
+    "bytes": 1628,
+    "sha256": "7D62A46BF9F69B02A0C66C2511B71DD686AED56089AE24649BAA692CC779D830"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\pages\\BuProteinsPage.tsx",
+    "bytes": 4513,
+    "sha256": "339206B2F53E24DEC302B784D05DC7961C5CD548CB6EB0E94C139A5E0ADD9D64"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\routes\\BuModeOnly.tsx",
+    "bytes": 516,
+    "sha256": "E2BEF885A368002B91FA6D5FC34A4349C1D89372868CCBDBD9AE14CDD9ED0B2B"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\routes\\DatasetModeGate.tsx",
+    "bytes": 1121,
+    "sha256": "28EEC81D4FF7A5F783EF42A9828CF61664840EB4D4CC93019BC730567119404F"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\utils\\listParams.ts",
+    "bytes": 994,
+    "sha256": "0CD4BF2F8C21FD5D5C1AD4D251D0FE1B8A28C4D59A04E0B9089E4320CDF995BE"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\utils\\modifiedSequenceFormatting.ts",
+    "bytes": 654,
+    "sha256": "10164E2A73EB2DDA2B90840647078265F02271D5E0BAFF9B0B959FAB8036E158"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\index.ts",
+    "bytes": 823,
+    "sha256": "5E9A141F00114BDEB106DEBC719F3CC1A5E202AC022219E8E8E03ADF9C997EFB"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\types.ts",
+    "bytes": 9894,
+    "sha256": "5AC09B8728D8BF12B213784956CE0021FFA254B1BA915C3382591BDC657A28F5"
+  },
+  {
+    "path": "front\\src\\features\\bu-viewer\\utils.ts",
+    "bytes": 1666,
+    "sha256": "844D6CD35746EDEF4856F03042D95C60AC7F2CEB0A911A5A2CF36FDDB172C977"
+  },
+  {
+    "path": "front\\src\\features\\dataset-capabilities\\CapabilityReportPanel.tsx",
+    "bytes": 2216,
+    "sha256": "A4663B564C120C918642C98C4910D7ECD95D93D887A5F5456CD673E279383065"
+  },
+  {
+    "path": "front\\src\\features\\dataset-capabilities\\DatasetCapabilityContext.ts",
+    "bytes": 870,
+    "sha256": "88A2A5C718A72AE195D32A6C6BAE0881959BDDB0AD092F89F1A9C307B6F412DA"
+  },
+  {
+    "path": "front\\src\\features\\dataset-capabilities\\DatasetCapabilityProvider.tsx",
+    "bytes": 475,
+    "sha256": "39F681E877D32A1675D07B4706195FBE54C9312CF66AA8FC53DA8BA1B5EF8287"
+  },
+  {
+    "path": "front\\src\\features\\dataset-capabilities\\DatasetCapabilityReportSlot.tsx",
+    "bytes": 414,
+    "sha256": "EAC60A80E416EFCC79EFC6E96C1CA0773D5A052DCD9FE6C6EBDC020A3C521E12"
+  },
+  {
+    "path": "front\\src\\features\\import-upload\\activeImportJob.ts",
+    "bytes": 1869,
+    "sha256": "8136C2A2FCBECDC0D81AA1BA3A27FB86C59F6267813CDCF76C465448E328EBC8"
+  },
+  {
+    "path": "front\\src\\features\\import-upload\\ImportUploadDialog.tsx",
+    "bytes": 50555,
+    "sha256": "B87D54706F7099701A66579F4A21039E11ED7C9E283D7B8CA3E229BE758E6031"
+  },
+  {
+    "path": "front\\src\\features\\import-upload\\importUploadFiles.ts",
+    "bytes": 9166,
+    "sha256": "941A99A9F3640CEA8EB5170528395720B42730B0C0A8C754C96726343D6845E0"
+  },
+  {
+    "path": "front\\src\\features\\lcms3d\\Lcms3DPanel.tsx",
+    "bytes": 2476,
+    "sha256": "84029B31105A010C7064A37A25A9D1A2279C5D91BB559D34CDB63A14EDB04A18"
+  },
+  {
+    "path": "front\\src\\features\\lcms3d\\ThreeLcmsScene.tsx",
+    "bytes": 12045,
+    "sha256": "DEF7A89ABE4BDF91133591D4F109F4DB11A7B370DA3C142B58F68278D4D03007"
+  },
+  {
+    "path": "front\\src\\features\\lcms3d\\types.ts",
+    "bytes": 61,
+    "sha256": "A1BF4455125668364A11E2E3B45588482AE44E36DDAD7A0657D5BCE7C826A7EC"
+  },
+  {
+    "path": "front\\src\\features\\page-transition\\index.ts",
+    "bytes": 316,
+    "sha256": "2D4430C3EF0BAB34E1C8534A355EC06EDE3741EB34E37A4E9C468B47D9614BA2"
+  },
+  {
+    "path": "front\\src\\features\\page-transition\\pageTransitionContext.ts",
+    "bytes": 1804,
+    "sha256": "BDF0C697FF2062B6CE92FB8D999F85C83E6974E6974EF5622F1EFB46C2F43E45"
+  },
+  {
+    "path": "front\\src\\features\\page-transition\\PageTransitionProvider.tsx",
+    "bytes": 3614,
+    "sha256": "5E5CCC4BC5255796CADD781DB45ACFB52D68482C358839316E5FA72C62586DB9"
+  },
+  {
+    "path": "front\\src\\features\\page-transition\\TransitionLinks.tsx",
+    "bytes": 1791,
+    "sha256": "A6FEB0982C8807D50D4C0CE08C78C062A7532D7CBB0453ACB8256AAC81C2851F"
+  },
+  {
+    "path": "front\\src\\features\\page-transition\\useTransitionNavigate.ts",
+    "bytes": 680,
+    "sha256": "36AA795D7E2CC3BFEF7A94100EB1EC8F3687A4FC68A1825D8AB61219EDC0AA4C"
+  },
+  {
+    "path": "front\\src\\features\\prsm\\FragmentationView.tsx",
+    "bytes": 30135,
+    "sha256": "9663FC07883E0B9797260C599B2504331C529F0C8857E4939A061C2F561E50D8"
+  },
+  {
+    "path": "front\\src\\features\\prsm\\MatchedPeakSpectrumPanel.tsx",
+    "bytes": 11644,
+    "sha256": "5EBB8D8117F0B5AEA0DD2578ACC70232BFE7A6EF5A91EEF10A5241A9F4B448F9"
+  },
+  {
+    "path": "front\\src\\features\\prsm\\MatchedPeaksTable.tsx",
+    "bytes": 6941,
+    "sha256": "51D6190418B81906750590350684B2C2911AD27A27B0FA4B1C067D251C00DF9C"
+  },
+  {
+    "path": "front\\src\\features\\prsm\\parse.ts",
+    "bytes": 10763,
+    "sha256": "88D143591D10D252443B61B4F5DB0BB9E2BCFF1A64A85CC73AEEC30F8D41CC89"
+  },
+  {
+    "path": "front\\src\\features\\prsm\\SequenceView.tsx",
+    "bytes": 14226,
+    "sha256": "C5B19AA6A034EDD2624943AC685F3F3B9E4E572BF6B5BB3CA0C1A84CE65316E2"
+  },
+  {
+    "path": "front\\src\\features\\prsm\\SpectrumChart.tsx",
+    "bytes": 38676,
+    "sha256": "4208A6F24419D6BA79D0711CF4902A1CBA3CD25C42D4B948C917962398A09326"
+  },
+  {
+    "path": "front\\src\\features\\prsm\\SpectrumModal.tsx",
+    "bytes": 2357,
+    "sha256": "DD045C5F048796D40BB107F5A0068B7E6A2A2F3D4CEF42F1A7B71BA8B6B5CADB"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\api\\spectraClient.ts",
+    "bytes": 2193,
+    "sha256": "E19BF49D2D98AF86148283DA780029EBF00C511E67EE47DB524D5F12CAE8EEAE"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\components\\AcquisitionContextPanel.tsx",
+    "bytes": 7423,
+    "sha256": "A6A849A8C2C2F7294B7890E5E2DE74BE2359CB6B9A89C38A44C70205F5044975"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\components\\ChromatogramPanel.tsx",
+    "bytes": 3716,
+    "sha256": "85C85C3C2B6AC24589E305142095CD921BB308D6DA3E2DD1743813A5BDEAB2E6"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\components\\DetectedPeaksTable.tsx",
+    "bytes": 3525,
+    "sha256": "F3F7F6799482E246DF3844CF239E9973E16272111CE16B68AF7CD7DC624D9281"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\components\\RunSelector.tsx",
+    "bytes": 846,
+    "sha256": "088842C6D336EF98DFC4043E8A9FC3F305C60391145040B174EDDCA34A6FC0AF"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\components\\RunSummaryCards.tsx",
+    "bytes": 5089,
+    "sha256": "292A1025F61C9E3F1F657CACF983A3DA9ACFA46A5FE073FBF8D653F1C86CB9DC"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\components\\ScanListPanel.tsx",
+    "bytes": 13091,
+    "sha256": "AD5585EB9AE87362E59B8A51D486DA729904108D3EE70DB4F4EB5A9C841E3B8C"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\components\\SpectrumPanel.tsx",
+    "bytes": 15710,
+    "sha256": "CCCB4B067C86CF1C93D3B2B43D46EF6A11DF3F066C5E7BC7E122DFF6E77018CF"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\pages\\SpectraOnlyPage.tsx",
+    "bytes": 9716,
+    "sha256": "E18A85A1892AE433BA7337CF87F929B423A67A0D1D81A8FDD278D04BBF61EC10"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\utils\\peakAnnotations.ts",
+    "bytes": 7304,
+    "sha256": "C14F17A2E969E27140EB0F720EC1ECFFCA89FF84DFE781A36D92FC6BB2DD1B7B"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\utils\\scanPagination.ts",
+    "bytes": 1598,
+    "sha256": "FDEDAB40C7DAA3069087E25056B7B353D81A86193FFC23E9EB88853BB88FF1FC"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\utils\\scanRelations.ts",
+    "bytes": 6266,
+    "sha256": "336B78AA053CEBC77DA72E1892CFDE4A989CC69FF61E543026DFEA02192A7738"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\types.ts",
+    "bytes": 1424,
+    "sha256": "393028D9E56B6D3F5D9BB23174BD93C711210786D9D96A8435E6220BF4DEEB12"
+  },
+  {
+    "path": "front\\src\\features\\spectra-only\\utils.ts",
+    "bytes": 369,
+    "sha256": "C0F1E0DAE80EAA3EFDF529CA4E47EB21D8E79489531F89FA1925273498E03732"
+  },
+  {
+    "path": "front\\src\\features\\theme\\chartColors.ts",
+    "bytes": 985,
+    "sha256": "FF291B0D4E169B97665A5C5D4401193C9CC15CC268DC9CFBBA23FAF4C1BD863A"
+  },
+  {
+    "path": "front\\src\\features\\theme\\theme.tsx",
+    "bytes": 2360,
+    "sha256": "DACE0626FC0B64DB60CEF86274ACEAAB6CFF55FFE4AE219B9969B8BC8FC0D865"
+  },
+  {
+    "path": "front\\src\\features\\theme\\themeContext.ts",
+    "bytes": 610,
+    "sha256": "A7D3302228CA7F89928FBAB3A97E4C60AD57D6BDD30EB1F0C6E185D9F3287C65"
+  },
+  {
+    "path": "front\\src\\features\\theme\\ThemeToggle.tsx",
+    "bytes": 2946,
+    "sha256": "0FB5FD9C31CC3724CE905A42FF19027A6E4098C45780A2BD35509E6BD9A30B6D"
+  },
+  {
+    "path": "front\\src\\lib\\apiError.ts",
+    "bytes": 4262,
+    "sha256": "43ABC97A0DDF290E3C4AA2F246C22578E933818431B693B8F8C1366C78ED07D3"
+  },
+  {
+    "path": "front\\src\\lib\\importStages.ts",
+    "bytes": 859,
+    "sha256": "3CD8AA74D6152CEDE42C78CA6EE93078B1F68A337CA87EBFD9D34EC8A0AF05EC"
+  },
+  {
+    "path": "front\\src\\lib\\serverPathFromDirectoryInput.ts",
+    "bytes": 2425,
+    "sha256": "3F221D6B5F871F6246E765A364345FBE297D3219349F8AC4CB570ED8B254C639"
+  },
+  {
+    "path": "front\\src\\lib\\utils.ts",
+    "bytes": 1104,
+    "sha256": "7CFEC74E806281D8A57D5FC28432263CE7C75B961351A6CF2805F8C2E594D34C"
+  },
+  {
+    "path": "front\\src\\pages\\AgentImportCasePage.tsx",
+    "bytes": 21341,
+    "sha256": "FF53C6F43BF7C04E4C5C514F85D488E0601B3BE41F72F7CC9A75A286F69E73B3"
+  },
+  {
+    "path": "front\\src\\pages\\AgentImportCasesPage.tsx",
+    "bytes": 3533,
+    "sha256": "374670E0A790B6F86E0A7548A217E5F794DC77C3C2C2A501AEE7EC8885B22600"
+  },
+  {
+    "path": "front\\src\\pages\\DatasetPage.tsx",
+    "bytes": 4639,
+    "sha256": "3711125777C7983282DE5D9F550FF54C343E317BF845B81A78FD68C6EACDFECB"
+  },
+  {
+    "path": "front\\src\\pages\\DatasetsPage.tsx",
+    "bytes": 16473,
+    "sha256": "F881C823C97701DB83D9BF211F2DB40FBBFCCD1E4197790BEBCE8555F387E9B5"
+  },
+  {
+    "path": "front\\src\\pages\\ProteinDetailPage.tsx",
+    "bytes": 4787,
+    "sha256": "28F11462715B8E2F914037D0C1036C346CBB63130663B70C46E15798A4CA9905"
+  },
+  {
+    "path": "front\\src\\pages\\ProteinsPage.tsx",
+    "bytes": 5410,
+    "sha256": "E69B33B71514C05F1F44536F2C31CD5587A61AF84B31AF47E2735057D03BD3C5"
+  },
+  {
+    "path": "front\\src\\pages\\ProteoformDetailPage.tsx",
+    "bytes": 4844,
+    "sha256": "A09F5E11079D0BF6751BD6492B714345758FD2B514A0401F0278C0B860FF8D57"
+  },
+  {
+    "path": "front\\src\\pages\\ProteoformsPage.tsx",
+    "bytes": 4111,
+    "sha256": "F1AEEEB2E472F6E1988E2D8A6B969061104CFF2F5D8B523B6574F2FF6CAC9FB9"
+  },
+  {
+    "path": "front\\src\\pages\\PrsmDetailPage.tsx",
+    "bytes": 26415,
+    "sha256": "87E797471EC1FE666C2FF0333104E9FEAEF409D597E1429CCE92942723682939"
+  },
+  {
+    "path": "front\\src\\pages\\PrsmsPage.tsx",
+    "bytes": 4512,
+    "sha256": "E5658CBD9EFE45C257EFF28B67C3E5D0DB6250B4B9B80045BA0B20AB050B4930"
+  },
+  {
+    "path": "front\\src\\styles\\globals.css",
+    "bytes": 6366,
+    "sha256": "120AA92ACB0BE12BA95D71390F8E829ACC0BE4C2D74CF3611268E24F27CE53EC"
+  },
+  {
+    "path": "front\\src\\App.tsx",
+    "bytes": 3486,
+    "sha256": "3A2CD5DC20043D0616C07AEA7F1481E377888C7F4B8019A086706A9497CBDD14"
+  },
+  {
+    "path": "front\\src\\main.tsx",
+    "bytes": 1095,
+    "sha256": "F5A2BFDB5236E641B13A400A47EAF3A8A1765B6966171C856619AA3DA5D789DE"
+  },
+  {
+    "path": "front\\test-results\\.last-run.json",
+    "bytes": 45,
+    "sha256": "91D1C43004802CD49950D78EB11C8FA7D05DA8FFFFE219A8B13B2F561BC00903"
+  },
+  {
+    "path": "front\\tests\\agent-candidate-diagnostics.spec.ts",
+    "bytes": 4143,
+    "sha256": "9A0457A2C67D3D39F3241162AC1CEA7D6B16D9BD1B6CD79963192A78F35499B9"
+  },
+  {
+    "path": "front\\tests\\api-error.spec.ts",
+    "bytes": 2199,
+    "sha256": "45C5115DEE667F37A88AF13E9F00A8AE83151C29977A84E748B2B8FD4A7F9823"
+  },
+  {
+    "path": "front\\tests\\bu-evidence-summary.spec.ts",
+    "bytes": 5179,
+    "sha256": "D90DFCF1770B7F4E1564820571CE3B2BA68EAB4D7D3BD25CF02427D0E1147207"
+  },
+  {
+    "path": "front\\tests\\bu-match-detail.spec.ts",
+    "bytes": 30724,
+    "sha256": "BAEDA3D0796D3157C585115CB7C3A226CEC3B4AFB9C903052E10D4AC5A4F90FB"
+  },
+  {
+    "path": "front\\tests\\bu-overview-chart-states.spec.ts",
+    "bytes": 5579,
+    "sha256": "09D54645070F88112DD36D36EA5627E37F2DAD17A4033260DB0877FAEAA867CA"
+  },
+  {
+    "path": "front\\tests\\bu-pfmb-annotation.spec.ts",
+    "bytes": 11763,
+    "sha256": "13E9E7DDA904A88EA7FFC7D199AB8B8297B6C530E76B9682109450173BFB46CE"
+  },
+  {
+    "path": "front\\tests\\bu-pfmb-quality.spec.ts",
+    "bytes": 8441,
+    "sha256": "8EC7C04D6C2F1FA06BFBD501CAA64461E8430DEF76FD347083EEAADE8FCC68C1"
+  },
+  {
+    "path": "front\\tests\\bu-pfmb-visuals.spec.ts",
+    "bytes": 19857,
+    "sha256": "A20B80A9F56C2A45B8A09E9BFF121DC3F1637BFAAB0BA7C339CE115EEF25D2F6"
+  },
+  {
+    "path": "front\\tests\\bu-protein-sequence-coverage.spec.ts",
+    "bytes": 6266,
+    "sha256": "B741BF82F74683D46366809661B574E14DA26965FCFD40278A420FC0A534EFA1"
+  },
+  {
+    "path": "front\\tests\\bu-q-value-filter.spec.ts",
+    "bytes": 3432,
+    "sha256": "37AE5F3E7D67E1835D29BB7520D2CD8CB9EE8E7957B33DB749B8D6A2BCCFC6CE"
+  },
+  {
+    "path": "front\\tests\\bu-rt-linkage.spec.ts",
+    "bytes": 17953,
+    "sha256": "2DCDB89FD747C613408EA0D0AA982396A102FEF9EC1BD8591FE4BDBC9E6A3680"
+  },
+  {
+    "path": "front\\tests\\bu-source-presentation.spec.ts",
+    "bytes": 5211,
+    "sha256": "5E5D646DCD96BD8A143E2FEE5BEEDAF994295DBF6A955484320BCAAC1E7D363C"
+  },
+  {
+    "path": "front\\tests\\bu-spectrum-label-layout.spec.ts",
+    "bytes": 1329,
+    "sha256": "CDCAA0DE73F884412798B52BF793B53866B0B15D24C4A5E6BEC07FA40508219A"
+  },
+  {
+    "path": "front\\tests\\capability-fixtures.ts",
+    "bytes": 713,
+    "sha256": "8CE4A24041B91A1C7E993284368E8E4E562B90B11B45BC34C8B667A1628BEAD6"
+  },
+  {
+    "path": "front\\tests\\capability-report.spec.ts",
+    "bytes": 33180,
+    "sha256": "D54A832ED47D5D04E19B88E3AF2CCD7864A81E24B1A68FE8AA83D9AFE1852D16"
+  },
+  {
+    "path": "front\\tests\\import-upload-api.spec.ts",
+    "bytes": 6100,
+    "sha256": "BE12358D8AF2E8E161784062A8448E49657898551FA8FDFAD374A7C717179BBE"
+  },
+  {
+    "path": "front\\tests\\import-upload-files.spec.ts",
+    "bytes": 9173,
+    "sha256": "A060640ECAC2C032B8632B6E58FFD193FB878BA7A8EB59691300AB2E9D0AF9EA"
+  },
+  {
+    "path": "front\\tests\\import-upload-page.spec.ts",
+    "bytes": 30422,
+    "sha256": "A72D39A1060EA260DB10E139D32E47CC32AF45812DB51F320AFA69DC42681ECA"
+  },
+  {
+    "path": "front\\tests\\page-transition.spec.ts",
+    "bytes": 22098,
+    "sha256": "6681DE630968DD0B6C549DD96864EB90AE64ECE2EB1AA1E1CBFDB0AC541CB93E"
+  },
+  {
+    "path": "front\\tests\\product-ion-selection.spec.ts",
+    "bytes": 6592,
+    "sha256": "AAD1EAB0E77713B6E0AB193FEBB6F841FFB2F259FF40F5D3A79FB0D5A2A254D8"
+  },
+  {
+    "path": "front\\tests\\spectra-only-peak-annotations.spec.ts",
+    "bytes": 3801,
+    "sha256": "1F8B4ACCCAFD7EE45551744151946713D865ACDA08C86C47E289F7927FC81FDF"
+  },
+  {
+    "path": "front\\tests\\spectra-only-scan-relations.spec.ts",
+    "bytes": 8434,
+    "sha256": "7E25F11DCC92894C4F7FF8230BF72D44339833F0FC1E2EB918B6BBF73751A6D5"
+  },
+  {
+    "path": "front\\tests\\theme.spec.ts",
+    "bytes": 3088,
+    "sha256": "1F5FC484C9B45814A4E382BD95BACC48FFA7145C08A7B8A9724EA2D127DB8E73"
+  },
+  {
+    "path": "front\\.gitignore",
+    "bytes": 90,
+    "sha256": "D1A49EC05059132819334B5031F323273F3BF405A893105C08191EEDFA8D410D"
+  },
+  {
+    "path": "front\\debug-pr6.png",
+    "bytes": 246324,
+    "sha256": "68C31C1DA2EB054E079AD499662C104ED4518150D2A424140701924E80018449"
+  },
+  {
+    "path": "front\\eslint.config.js",
+    "bytes": 853,
+    "sha256": "8CC4BC5BE60480651C4396C85A433A248BA060189A311BDAE3E970213818E8A2"
+  },
+  {
+    "path": "front\\index.html",
+    "bytes": 1518,
+    "sha256": "58EB4DA938C099F1A8634A209DF07440804F7347A075675B1C647E7AD23D4E47"
+  },
+  {
+    "path": "front\\package.json",
+    "bytes": 1654,
+    "sha256": "087A49EF9716B765CA9337A2D6A86E0E36F9A14E7EAC48A80218134D7FB3F9E3"
+  },
+  {
+    "path": "front\\playwright.config.ts",
+    "bytes": 463,
+    "sha256": "379A8802F0B0C7D9C8AC3175677E18FED5CFC8F63D8E12349D2B70D1640C3B4E"
+  },
+  {
+    "path": "front\\pnpm-lock.yaml",
+    "bytes": 154650,
+    "sha256": "09F9A00BF16948DF49FA2F81BC4981D444DDD1247431CA0AD3F099E1DFF65E23"
+  },
+  {
+    "path": "front\\pnpm-workspace.yaml",
+    "bytes": 29,
+    "sha256": "AC02D96368617C760F093CFE61FDEC64B6244007AB3553E0D6621F706F54A353"
+  },
+  {
+    "path": "front\\postcss.config.js",
+    "bytes": 87,
+    "sha256": "98E8D8A143F16216F4B50A2520024F6254987049B2E199026742A96E16BA411E"
+  },
+  {
+    "path": "front\\pr4-bu-matches.png",
+    "bytes": 245982,
+    "sha256": "9B206C06D2241551E0FFB2F0C91D809ABD4714195B86C5B25640EB50AC99FBF6"
+  },
+  {
+    "path": "front\\pr4-bu-overview.png",
+    "bytes": 209839,
+    "sha256": "A6E4C11B0979C68B468EC1C5A5449EE5AB0232E551692DC73CE9781813F3ECA1"
+  },
+  {
+    "path": "front\\pr4-datasets.png",
+    "bytes": 205443,
+    "sha256": "6806E0149225B5CC8E2B500E4D128689EE646A3A314C4A34B5C66BB9C2BA4D75"
+  },
+  {
+    "path": "front\\pr5-match-spectrum.png",
+    "bytes": 179151,
+    "sha256": "9170E0574F5F13CD7EF86C47DFCA6C4B1794CDF543790A3BE0220623C4DA9AE7"
+  },
+  {
+    "path": "front\\pr5-overview-tic.png",
+    "bytes": 220859,
+    "sha256": "D134CBB80E07085495D3E589025B1778FC60B63F968F8DB20BE85F21354E94EA"
+  },
+  {
+    "path": "front\\pr5.2-ms2.png",
+    "bytes": 108034,
+    "sha256": "15F696346CDA784CAEF65B43A80BE75E196E45BFAD729F6F187DAB9E680890BB"
+  },
+  {
+    "path": "front\\pr5.2-overview-bpc.png",
+    "bytes": 322741,
+    "sha256": "56BD4E5B8F995C8CD8ADF1BC21DD2D333149C8B5416F7A3FEE1BB39CE014ECC8"
+  },
+  {
+    "path": "front\\pr5.2-overview-tic.png",
+    "bytes": 317375,
+    "sha256": "FEDE980CC5B87BBF2D7F19C6CE68E2FB8E0D3AA2F8EB71F51C02305A920C558B"
+  },
+  {
+    "path": "front\\pr5.2-xic.png",
+    "bytes": 254436,
+    "sha256": "B3A150E6A0FBABBB2D04A060257898C11E607412BB65E5C439508F08343E19F8"
+  },
+  {
+    "path": "front\\pr6-protein-decoy.png",
+    "bytes": 212390,
+    "sha256": "2BC1EC9623BD86BA33432CC6C2CB3EE650AFE27F53941F46E4A8A77AA1EBC98E"
+  },
+  {
+    "path": "front\\pr6-protein-list-only.png",
+    "bytes": 209461,
+    "sha256": "D769D1E7EEE0034CDD1767C4A20147FB242DE9A03052ED7E3FDE06A9CA20B347"
+  },
+  {
+    "path": "front\\pr6-protein-p62805-coverage.png",
+    "bytes": 240645,
+    "sha256": "76ABEE0588AA7E4C061EF516C8101507174996E42433DBB6B7556D3CE50D809A"
+  },
+  {
+    "path": "front\\pr7-match-ms1.png",
+    "bytes": 307399,
+    "sha256": "DF66E71F6EF0D1CD9D531601AA1B28ACC545AF3F2EF5D1FE263636F3A3E3486D"
+  },
+  {
+    "path": "front\\pr8-overview-d-dia-windows.png",
+    "bytes": 108272,
+    "sha256": "FD2505A0177C282ED7A34AD9C274B61D77F367D0F236D241EAFE72C34DB3549D"
+  },
+  {
+    "path": "front\\pr8-overview-d-run-tic.png",
+    "bytes": 328133,
+    "sha256": "4415F9E4DA1493B56CF180C31431C1B77322A445194260D71732D2E732D60F5C"
+  },
+  {
+    "path": "front\\pr8-overview-run-selector.png",
+    "bytes": 4912,
+    "sha256": "8C8313C45ACE9C9E44D0BF6AC04C8AC363E93109196A537722CE960F3D21D55E"
+  },
+  {
+    "path": "front\\pr9-overview-qc.png",
+    "bytes": 332378,
+    "sha256": "F4758EDF27481C68A88F22D1826BD333FC308B055C9348E56767541D0A6E3573"
+  },
+  {
+    "path": "front\\pr9-overview-rt-mz-run38-empty.png",
+    "bytes": 147428,
+    "sha256": "67ABA96D86441C00CC8A41A6EE7D92A564D06EC9B2BBC4476917DB42D67E8270"
+  },
+  {
+    "path": "front\\pr9-overview-rt-mz.png",
+    "bytes": 254093,
+    "sha256": "ACC1A3482E5ED14B49B8B947DE71ED1B1AE6A2B516296C905D8FCE83C9527D73"
+  },
+  {
+    "path": "front\\tailwind.config.ts",
+    "bytes": 3786,
+    "sha256": "469545BDB56C577B3A237FEB67556FFBB672D234DD789367A18658AFE02AE3FC"
+  },
+  {
+    "path": "front\\tsconfig.app.json",
+    "bytes": 620,
+    "sha256": "662A0F6217BD4EE6BFC1B7AA75D166B95F4D0C5E16B44DCCE9DAC381D409D171"
+  },
+  {
+    "path": "front\\tsconfig.json",
+    "bytes": 226,
+    "sha256": "FCED469EB32F4CE1C7FCA439FF027FE81BA41604C60D0E3A9398B75402487A59"
+  },
+  {
+    "path": "front\\tsconfig.node.json",
+    "bytes": 445,
+    "sha256": "313ED1534AFFE23F5BF02C163B900F25C295A49AFEA7073CC40A6CEC99A1E0B6"
+  },
+  {
+    "path": "front\\vite.config.ts",
+    "bytes": 603,
+    "sha256": "5FA16A06A3D8E6375F565C26CD57B0B11F14BDB072A144356FE2E60DF97166DA"
+  },
+  {
+    "path": "Hela_DIA_v2_PFMB_delivery_20260629\\docs\\前端_v2_接入说明.md",
+    "bytes": 2953,
+    "sha256": "A3E1D3C2D449AD7D8CE6E87ECEB3E6FED15B1CB1B5BDBD874AE3E120A44398E3"
+  },
+  {
+    "path": "Hela_DIA_v2_PFMB_delivery_20260629\\docs\\DEVELOPER_PFMB.md",
+    "bytes": 6750,
+    "sha256": "5832CA7357FCAEEBAF3DC5DE81EDD5FB1F3013B9ECA19E5071C73BAC2E468FA9"
+  },
+  {
+    "path": "Hela_DIA_v2_PFMB_delivery_20260629\\交付说明.md",
+    "bytes": 1044,
+    "sha256": "E6A4191FFD2B7991DF2253D9D6E0DADB25E97DCA83C18293F8CB189229EA3D14"
+  },
+  {
+    "path": "Hela_DIA_v2_PFMB_delivery_20260629\\pfm.py",
+    "bytes": 29304,
+    "sha256": "4F2289FED06ABEAA003577A66B13F3BAB0869401EA77EC48D27245715CF42A8F"
+  },
+  {
+    "path": "Hela_DIA_v2_PFMB_delivery_20260629\\pfmb_io.py",
+    "bytes": 3736,
+    "sha256": "D48BC0AB2C20FF917D30EDC5945965572B83EFB6B27E320E714F33A5942A110C"
+  },
+  {
+    "path": "MD5-demo\\fast_metadata_hash.py",
+    "bytes": 4423,
+    "sha256": "E32C6F7A58D72829EDF7B27C564867A8E14FB92C13F51B9AF6A669392A72836D"
+  },
+  {
+    "path": "mzml-demo\\scripts\\prsmup.py",
+    "bytes": 17867,
+    "sha256": "EFE60153C902A389F2719A9B7758C1BEADB3CD3FF06F67D7C7012CB12A6D94CC"
+  },
+  {
+    "path": "mzml-demo\\static\\app.js",
+    "bytes": 7473,
+    "sha256": "C17A3BD73657B3C902D894B9E8F6A16CEE5754C333FB4D120B26D945ADD5E62C"
+  },
+  {
+    "path": "mzml-demo\\static\\index.html",
+    "bytes": 3485,
+    "sha256": "704DE2F833842D83BFE305ACFCC4D6CFA70B7BB988451E8CDCA515CBE9E69C4B"
+  },
+  {
+    "path": "mzml-demo\\tests\\test_prsmup.py",
+    "bytes": 8584,
+    "sha256": "BBCF43AFDC2E9E7A8E4E4A89B769D2BDACE9E5C366E536E422F0BE44EE6AED3D"
+  },
+  {
+    "path": "mzml-demo\\app.py",
+    "bytes": 11320,
+    "sha256": "CC8DDF8124CD2316F8A2552E66631C6CEFEDF967EFF80B5A6925A689112E215B"
+  },
+  {
+    "path": "mzml-demo\\README.md",
+    "bytes": 14986,
+    "sha256": "737DA0EFFA4EBF6E9ECFEBAA4B664FF213F008724A5DC0FCD4A035FE655F7FF1"
+  },
+  {
+    "path": "mzml-demo\\requirements.txt",
+    "bytes": 76,
+    "sha256": "E25130BAB6FA4F3FC80EAB285EA7D6CF6497757F8A54E0211ED55560F806C4B7"
+  },
+  {
+    "path": "scripts\\generate-unimod-labels.mjs",
+    "bytes": 3567,
+    "sha256": "138959EB98C8BD4855F35C3724973236B7B2B278C3D81DE15EEF836BF4200B52"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\packages\\Mono.Unix.7.1.0-final.1.21458.1\\lib\\net45\\Mono.Unix.dll.config",
+    "bytes": 410,
+    "sha256": "913580BEBFEEA6FF4F8AAFB55048C00426BC00BCDED75BB7B160135BF721DEC1"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\runtimes\\android-arm\\libMono.Unix.so",
+    "bytes": 71328,
+    "sha256": "30545A200C0C71074A29423EBDFF5F808A4AD1F5CC656721EB3F3350C54BDA69"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\runtimes\\android-arm64\\libMono.Unix.so",
+    "bytes": 92088,
+    "sha256": "EE91ECBC66F716179A33A0AF17161845DD3F13C50600435C81E435B99FA4C9A0"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\runtimes\\android-x64\\libMono.Unix.so",
+    "bytes": 100552,
+    "sha256": "96476EBBED0FBB11EEE8F75C4E4C8FA45572714F418100A299D821312810997D"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\runtimes\\android-x86\\libMono.Unix.so",
+    "bytes": 103996,
+    "sha256": "F51000F295AD9D34D7AF8ECA0E2B53C8C186E907B2B7FB3E856C1BBBF58C7D01"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\runtimes\\linux-arm\\libMono.Unix.so",
+    "bytes": 70992,
+    "sha256": "B927BF1189FE9B6F9AFA8719DEFAE73C18386F28B5ECBF7E0723B55048A559A1"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\runtimes\\linux-arm64\\libMono.Unix.so",
+    "bytes": 96048,
+    "sha256": "D49CDEF79A6D698F153C208C7AA359526BC05813D787B1E23A93E50616FD15B7"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\runtimes\\linux-x64\\libMono.Unix.so",
+    "bytes": 120768,
+    "sha256": "CE99F51103806110793E8AC8F24A9218589AD59D7CFDCF41A999BF6835F406B5"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\runtimes\\osx-arm64\\libMono.Unix.dylib",
+    "bytes": 165839,
+    "sha256": "51A929F193E12CC9B3527C6976E91B8E0985E63A90F4337069BC3FD86D7A3410"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\runtimes\\osx-x64\\libMono.Unix.dylib",
+    "bytes": 164792,
+    "sha256": "57F1108983640D49B11704BD6EA275C2B52AA01D3CD85247BEF76DF9F35E0798"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\AWS.Logger.Core.dll",
+    "bytes": 33200,
+    "sha256": "51655673738559AC2EF612440F801CB737053D44ED4988269505D7ED5530F19D"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\AWSSDK.CloudWatchLogs.dll",
+    "bytes": 136192,
+    "sha256": "1B2901FB5E3162A192B896A67FDFE921E06899F3708110F18B854AFECFD93F87"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\AWSSDK.Core.dll",
+    "bytes": 904704,
+    "sha256": "8F3E5DB3D2EBEAB1191E45D125675C78AE60AF2562E4B2659137CBE923E2056E"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\AWSSDK.S3.dll",
+    "bytes": 636928,
+    "sha256": "1AB00DD0B47501A51C85639D20C0E064617CB911B50D9AF8548F60D259ADE15B"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\IronSnappy.dll",
+    "bytes": 15360,
+    "sha256": "43184CE5266081F7CEDEA5C78CFE53CDA2148F2C65080A84AD7B711A44E784D9"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\LICENSE",
+    "bytes": 11523,
+    "sha256": "988B2CE6B5E93EEA134CDE8C7294E00DC50E5E798E979968A5C62F98B308F686"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\log4net.config",
+    "bytes": 957,
+    "sha256": "A65A07F844922D73E4023809C82C8EC0A47FE7759DB78CF4A328A1C9A5812C17"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\log4net.dll",
+    "bytes": 270336,
+    "sha256": "896AB9CAC41E3977792BA2034EA8730610C2779FA51BAB6BED426094EA8D3ECD"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\MathNet.Numerics.dll",
+    "bytes": 1689600,
+    "sha256": "3958748CE40A282D30FED4B06F8C8F62C476F482134E34D927ECB7B48B0CDA8B"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\Mono.Options.dll",
+    "bytes": 45168,
+    "sha256": "A05E7221AF2E0ECAF6A60D7BBDD8D25366E5CF41965DD74F02AD9D86C9EEA012"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\Mono.Unix.dll",
+    "bytes": 189816,
+    "sha256": "11785D12A6417ACB2E166AE982D703042825EA941D2CA8AB3791615C081A19B9"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\Mono.Unix.dll.config",
+    "bytes": 410,
+    "sha256": "913580BEBFEEA6FF4F8AAFB55048C00426BC00BCDED75BB7B160135BF721DEC1"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\Namotion.Reflection.dll",
+    "bytes": 52224,
+    "sha256": "0E62E1B0FF13454479B37A562E16BAEACD90D975183F814EF6145043D20B96CD"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\Newtonsoft.Json.dll",
+    "bytes": 701992,
+    "sha256": "B624949DF8B0E3A6153FDFB730A7C6F4990B6592EE0D922E1788433D276610F3"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\NJsonSchema.dll",
+    "bytes": 229376,
+    "sha256": "22B74A3A2D610EA4CEE335B49617A1BD3BFCCB6C37D6D4C2A61C642571CB8044"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\nunit.engine.api.dll",
+    "bytes": 18432,
+    "sha256": "AE3EEAC230304E2599A799E60DF8E9CDA6F7F276E3D810ABC42E4FC044A93695"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\nunit.engine.core.dll",
+    "bytes": 92672,
+    "sha256": "315DEE30BFD58107CDCA8659FEC5BF4EA2EE35A8CC8AFB587D2A157D8E9DDD15"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\nunit.engine.dll",
+    "bytes": 55296,
+    "sha256": "ED72E273D74B573A11B4CC4512813FFB04D9F4CC1C4CAF175786D15FDA51C142"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\nunit.framework.dll",
+    "bytes": 480768,
+    "sha256": "95D8DE871989736235288D803AB77C5BC9853E4B8E045856B3BA848B34D24864"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\NUnit3.TestAdapter.dll",
+    "bytes": 127488,
+    "sha256": "BA74EF3C77E33409C6C3908AEC22FAF9E4511F736DEB0DCF45B268194F03605F"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\OpenMcdf.dll",
+    "bytes": 61952,
+    "sha256": "A38C2CCE6561862AACD6AFC500234EC011BA3D4297DF6271D79CCF3F79C15F7E"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\OpenMcdf.Extensions.dll",
+    "bytes": 34304,
+    "sha256": "4204BF954AD1A98AED815D3C1F6F367ACBB2E9D3AB406B117ED1EAD2AB27175D"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\Parquet.dll",
+    "bytes": 159232,
+    "sha256": "EA1988D7A93C130235D76FA03030FA6C002E359B984C0A00B542354F15B64148"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\System.Buffers.dll",
+    "bytes": 20856,
+    "sha256": "ACCCCFBE45D9F08FFEED9916E37B33E98C65BE012CFFF6E7FA7B67210CE1FEFB"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\System.IO.FileSystem.AccessControl.dll",
+    "bytes": 28552,
+    "sha256": "E6026501AD4056FF2F1655B0AFDFE8923BC6E8FBAD67E1E9EF56E3002F49FBB9"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\System.Memory.dll",
+    "bytes": 141184,
+    "sha256": "8E76318E8B06692ABF7DAB1169D27D15557F7F0A34D36AF6463EFF0FE21213C7"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\System.Numerics.Vectors.dll",
+    "bytes": 115856,
+    "sha256": "1D3EF8698281E7CF7371D1554AFEF5872B39F96C26DA772210A33DA041BA1183"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\System.Runtime.CompilerServices.Unsafe.dll",
+    "bytes": 16768,
+    "sha256": "3CADCB6B8A7335141C7C357A1D77AF1FF49B59B872DF494F5025580191D1C0D5"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\System.Security.AccessControl.dll",
+    "bytes": 33672,
+    "sha256": "1FDA491EEBDB19EA0A83CF6C16AB5DD004A1BFDFC845EDE017EBE0945BEB927F"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\System.Security.Principal.Windows.dll",
+    "bytes": 18312,
+    "sha256": "B4D8E15ADC235D0E858E39B5133E5D00A4BAA8C94F4F39E3B5E791B0F9C0C806"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\System.Text.Encoding.CodePages.dll",
+    "bytes": 758664,
+    "sha256": "93DA6A111239A3804DA2EFD6A6FAA92BF5CBFE3B2B079AD3C04BE643179F4088"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\System.ValueTuple.dll",
+    "bytes": 25232,
+    "sha256": "E905D102585B22C6DF04F219AF5CBDBFA7BC165979E9788B62DF6DCC165E10F4"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\testcentric.engine.metadata.dll",
+    "bytes": 177152,
+    "sha256": "8BA4A430307145498EC67B2C1AD540AE52E7FF683C8AE3BA1388B2BD8407B2C1"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\THERMO_LICENSE",
+    "bytes": 6561,
+    "sha256": "8FE83C8B84E0A984C9720563C80D605503135E1F1DA41ECAD283CF4C82C9CB2A"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\ThermoFisher.CommonCore.Data.dll",
+    "bytes": 406016,
+    "sha256": "8B10B14F885C00619A90D0A8434D08098F3BDFFCC260D59FEB00EA8B7EFBC139"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\ThermoFisher.CommonCore.RawFileReader.dll",
+    "bytes": 650752,
+    "sha256": "A9B2FC190367881C6541291CAF57E114F7D305A10BA933CCBB0040D3A8A33888"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\ThermoRawFileParser.exe",
+    "bytes": 199168,
+    "sha256": "478DF50558A9809EC0DAC58180570E317242C48F210B1E5D3F916BC2A0D44162"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\ThermoRawFileParser.exe.config",
+    "bytes": 2743,
+    "sha256": "9A0312BC64692708C9B09336D4459872745604B17630CD7CEF33F516D671E28B"
+  },
+  {
+    "path": "ThermoRawFileParser1.4.5\\zlib.net.dll",
+    "bytes": 69632,
+    "sha256": "4167B599F36AF0781B81563BD2179A6D35DAA3145F0B6F99AC6D9EE1894B516A"
+  },
+  {
+    "path": "third_party\\unimod\\unimod.xml",
+    "bytes": 2506678,
+    "sha256": "AA50802955726F15312773575C36324FD13EF82A1B0F9AA0E47015A4005C4E8D"
+  },
+  {
+    "path": "tools\\import_job_benchmark.py",
+    "bytes": 9713,
+    "sha256": "4C1B0F8082DD3D2AFC88C467ABE0BBECEE09297BBB5540FC5AFA935868E043F6"
+  },
+  {
+    "path": "tools\\inspect_mzml_scan_levels.py",
+    "bytes": 5873,
+    "sha256": "B4BA54E2EF313269DEBA8434C53DB5526F277A666CAD9F25AA9C55324257806B"
+  },
+  {
+    "path": "tools\\inspect_viewer_raw_metadata.py",
+    "bytes": 2490,
+    "sha256": "AC6F4655211A2259D08BC1D9F23D8AB818C32D4125D5B971249B0AF5D497CD33"
+  },
+  {
+    "path": ".gitignore",
+    "bytes": 1410,
+    "sha256": "2C01DC59B95AFAD5247214491084424C3909C864D54EC28804534268F45CF2A3"
+  },
+  {
+    "path": "项目说明文档.md",
+    "bytes": 18246,
+    "sha256": "D1252F6C99F52BA0290CCA60B4D8314E1295D460D3CE3B68CEB3CD461E145D7E"
+  },
+  {
+    "path": "新周任务.txt",
+    "bytes": 255,
+    "sha256": "CE4127FC576382E88300FDED2969F86614695C65C93E3A9A1C7D66A68EC1020C"
+  },
+  {
+    "path": "逐行解释索引.md",
+    "bytes": 5787,
+    "sha256": "46AA880A7B8B30825CA0FFA1FA00AE774DE145B21743962469C61D830FCF0683"
+  },
+  {
+    "path": "AGENTS.md",
+    "bytes": 3931,
+    "sha256": "A7C3F2605F9C766A9F5E9989A99F7278D42B7E91366C9BB08F76A610C3111982"
+  },
+  {
+    "path": "start-all.bat",
+    "bytes": 834,
+    "sha256": "E5BC06CB38B686DC4DDCEA8BA80CA3F0A7EAF17E012EE75E290756CC69FA3552"
+  },
+  {
+    "path": "start-back.bat",
+    "bytes": 1567,
+    "sha256": "5F62C8DEA1CFC7FA2996886DA3A0FDBD277BBC8E4454E3F3DAAF9929161263AE"
+  },
+  {
+    "path": "start-front.bat",
+    "bytes": 1115,
+    "sha256": "F4AD72567631294FBE6519DA8F1109BC4BB7722F9D9D2F80E485E2BB2C3D796E"
+  }
+]

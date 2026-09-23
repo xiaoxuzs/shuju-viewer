@@ -9,6 +9,8 @@ export interface BuOverviewCounts {
   decoy_matches: number;
 }
 
+export type BuDecoyTruthState = "DIRECT" | "MISSING" | "AMBIGUOUS";
+
 export interface BuQcBlock {
   by_run: Record<string, unknown>[];
   aggregated: Record<string, unknown>;
@@ -56,7 +58,8 @@ export interface BuProteinListItemOut {
   accession: string;
   gene_name: string | null;
   description: string | null;
-  is_decoy: boolean;
+  is_decoy: boolean | null;
+  is_decoy_state: BuDecoyTruthState;
   protein_group: string | null;
   peptide_count: number;
   match_count: number;
@@ -158,7 +161,8 @@ export interface BuMatchListItemOut {
   q_value: number | null;
   score: number | null;
   intensity: number | null;
-  is_decoy_match: boolean;
+  is_decoy_match: boolean | null;
+  is_decoy_state: BuDecoyTruthState;
   scan_number: number;
   protein_group: string | null;
   protein_accessions: string[];
@@ -403,6 +407,7 @@ export interface BuListParams {
   sort?: string;
   order?: "asc" | "desc";
   q_max?: number;
+  q_filter?: boolean;
   run_id?: number;
   peptide_id?: number;
   protein_id?: number;

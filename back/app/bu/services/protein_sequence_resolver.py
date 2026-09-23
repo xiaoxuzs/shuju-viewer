@@ -55,6 +55,16 @@ def resolve_base_sequence(
         metadata["sequence_fetch_error"] = "missing_accession"
         return None, metadata
 
+    capabilities = _json_object(dataset.get("capabilities"))
+    if capabilities.get("import_mode") == "agent_declarative":
+        metadata.update(
+            {
+                "sequence_source": "missing",
+                "sequence_fetch_error": "exact_search_fasta_required",
+            }
+        )
+        return None, metadata
+
     fasta_record = _lookup_dataset_fasta(str(dataset.get("source_root") or ""), accession)
     if fasta_record:
         sequence = normalize_aa(fasta_record.sequence)

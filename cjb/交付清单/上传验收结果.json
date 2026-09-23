@@ -1,0 +1,43 @@
+{
+  "relocated_root": "C:\\Users\\65573\\AppData\\Local\\Temp\\viewer-cjb-check-a294464d751d4aac87305783229d583f\\moved delivery",
+  "source_data_used": false,
+  "initial_table_counts": {
+    "agent_artifacts": 0,
+    "agent_attempts": 0,
+    "agent_import_cases": 0,
+    "agent_messages": 0,
+    "agent_notifications": 0,
+    "checkpoint_blobs": 0,
+    "checkpoint_migrations": 10,
+    "checkpoint_writes": 0,
+    "checkpoints": 0,
+    "dataset_zp_assets": 0,
+    "datasets": 0,
+    "identification_matches": 0,
+    "import_jobs": 0,
+    "peptides": 0,
+    "protein_relation_mapping": 0,
+    "proteins": 0,
+    "proteoforms": 0,
+    "runs": 0,
+    "zp_conversion_jobs": 0
+  },
+  "upload_job": {
+    "status": "success",
+    "stage": "success",
+    "progress": 100.0
+  },
+  "spectrum_response_keys": [
+    "run_id",
+    "dataset_id",
+    "scan",
+    "native_id",
+    "ms_level",
+    "rt_seconds",
+    "mz",
+    "intensity",
+    "precursor"
+  ],
+  "active_zp_under_delivery_data_root": true,
+  "result": "passed"
+}

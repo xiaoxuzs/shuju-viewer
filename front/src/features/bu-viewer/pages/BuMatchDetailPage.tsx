@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 
 import { DataEmptyState, DataLoadError } from "@/components/common/data-state";
+import { DecoyTruthBadge } from "@/components/common/decoy-truth-badge";
 import { PageLoading } from "@/components/common/page-loading";
 import { PlotStatus } from "@/components/common/plot-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -318,9 +319,12 @@ export function BuMatchDetailPage() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle title={data.modified_sequence ?? data.sequence}>
-            {formatModifiedSequenceForDisplay(data.modified_sequence ?? data.sequence)}
-          </CardTitle>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <CardTitle title={data.modified_sequence ?? data.sequence}>
+              {formatModifiedSequenceForDisplay(data.modified_sequence ?? data.sequence)}
+            </CardTitle>
+            <DecoyTruthBadge value={data.is_decoy_match} state={data.is_decoy_state} />
+          </div>
         </CardHeader>
         <CardContent
           className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4"

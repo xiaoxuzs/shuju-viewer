@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import { advisoryCapabilityReport } from "./capability-fixtures";
+
 const dataset = {
   id: 39,
   slug: "demo",
@@ -33,6 +35,7 @@ function matchDetail(rawFormat: string, scanNumber: number | null | undefined = 
     score: 10,
     intensity: 1000,
     is_decoy_match: false,
+    is_decoy_state: "DIRECT",
     ...(scanNumber !== undefined ? { scan_number: scanNumber } : {}),
     protein_group: null,
     protein_accessions: [],
@@ -158,6 +161,9 @@ async function mockMzmlMatch(
 ) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/datasets/demo/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(dataset.id));
+    }
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
     if (url.pathname === "/api/v1/datasets/demo/matches/1") {
       if (matchDelayMs > 0) {
@@ -275,6 +281,9 @@ test("shows a generic English error without exposing backend details", async ({ 
   const backendError = "\u540e\u7aef\u5185\u90e8\u9519\u8bef";
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/datasets/demo/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(dataset.id));
+    }
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
     if (url.pathname === "/api/v1/datasets/demo/matches/1") {
       return route.fulfill({
@@ -292,7 +301,31 @@ test("shows a generic English error without exposing backend details", async ({ 
   await expect(page.getByText(backendError)).toHaveCount(0);
 });
 
+test.afterEach(async ({ page }, testInfo) => {
+  if (page.isClosed()) return;
+  const events = await page.evaluate(() => (window as unknown as { viewerPeakEvents?: unknown[] }).viewerPeakEvents);
+  if (events) await testInfo.attach("peak-input-events", { body: JSON.stringify(events), contentType: "application/json" });
+});
+
 test("precursor XIC selects MS2 and matched ion toggles product XIC comparison", async ({ page }) => {
+  // Bounded input evidence: distinguish a missed peak from a missing request.
+  await page.addInitScript(() => {
+    const events: unknown[] = [];
+    Object.assign(window, { viewerPeakEvents: events });
+    for (const type of ["mousedown", "mouseup", "click", "dblclick"]) {
+      document.addEventListener(type, (event) => {
+        const mouse = event as MouseEvent;
+        const svg = (event.target as Element)?.closest?.("svg[aria-label^='MS2 scan']");
+        if (!svg || events.length >= 16) return;
+        const rect = svg.getBoundingClientRect();
+        events.push({ type, detail: mouse.detail, x: mouse.clientX - rect.left, y: mouse.clientY - rect.top,
+          label: svg.getAttribute("aria-label"), width: rect.width, height: rect.height,
+          stems: [...svg.querySelectorAll("[data-has-live='true']")].map((line) => ({
+            label: line.getAttribute("data-primary-label"), x: line.getAttribute("x1"), y: line.getAttribute("y2"),
+          })) });
+      }, true);
+    }
+  });
   await mockMzmlMatch(page);
   await page.goto("/datasets/demo/matches/1");
 
@@ -349,12 +382,43 @@ test("precursor XIC selects MS2 and matched ion toggles product XIC comparison",
   });
   await clickMs2Peak(page, 67727, 125);
   await secondProductRequest;
+  await expect(productCard.getByText("b2 125.0000 m/z")).toBeVisible();
+  await expect(page.getByTestId("live-fragment-row").filter({ hasText: "b2" }).getByRole("checkbox")).toBeChecked();
   await expect(productCard.getByTestId("plot-series")).toHaveCount(2);
 
   await productCard.getByRole("button", { name: "Remove y5 product ion XIC" }).click();
   await expect(productCard.getByText("b2 125.0000 m/z")).toBeVisible();
   await productCard.getByRole("button", { name: "Clear all" }).click();
   await expect(productCard).toContainText("Select product ions to display product XIC.");
+});
+
+test("sub-threshold pointer movement still selects a product ion exactly once", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+  const svg = page.locator('svg[aria-label^="MS2 scan #67726"]').first();
+  await svg.scrollIntoViewIfNeeded();
+  const peak = svg.locator('line[data-has-live="true"][data-primary-label="y5"]').first();
+  await expect(peak).toHaveAttribute("data-primary-source", "live");
+  // Vertical SVG lines have zero CSS-box width, so Playwright visibility is
+  // not the stroke's visual visibility. Read its rendered geometry directly.
+  const box = await peak.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, height: rect.height };
+  });
+  expect(box.height).toBeGreaterThan(0);
+  // The trace showed the guessed bottom-margin coordinate below the plot after
+  // layout settled. Exercise the same 1px gesture on the actual rendered stem.
+  const x = box.x;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  // Less than the product's 4px zoom threshold: this is a click, not a zoom.
+  await page.mouse.move(x + 1, y);
+  await page.mouse.up();
+  const card = page.getByTestId("product-ion-xic-card");
+  await expect(card.getByText("y5 175.1190 m/z")).toBeVisible();
+  await expect(card.getByTestId("plot-series")).toHaveCount(1);
+  await expect(svg.locator("[data-product-ion-selected='true']")).toHaveCount(1);
 });
 
 test("product ion evidence uses a compact table and XIC split layout", async ({ page }) => {
@@ -383,6 +447,39 @@ test("product ion evidence uses a compact table and XIC split layout", async ({ 
   expect(emptyBox).not.toBeNull();
   expect(emptyBox!.height).toBeGreaterThanOrEqual(150);
   expect(emptyBox!.height).toBeLessThanOrEqual(230);
+});
+
+test("a chart resize does not discard an accepted product-ion click", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+  const svg = page.locator('svg[aria-label^="MS2 scan #67726"]').first();
+  await expect(svg).toBeVisible();
+  await expect(svg.locator('line[data-product-ion-id]')).toHaveCount(9);
+  // Reproduce a layout update inside the chart's 180ms double-click delay.
+  // This is a real click and ResizeObserver update, not a mocked API selection.
+  await svg.evaluate((element) => {
+    element.addEventListener("click", () => {
+      requestAnimationFrame(() => { element.parentElement!.style.width = "90%"; });
+    }, { once: true });
+  });
+  await clickMs2Peak(page, 67726, 125);
+  const card = page.getByTestId("product-ion-xic-card");
+  await expect(card.getByText("b2 125.0000 m/z")).toBeVisible();
+  await expect(card.getByTestId("plot-series")).toHaveCount(1);
+  await expect(page.getByTestId("live-fragment-row").filter({ hasText: "b2" }).getByRole("checkbox")).toBeChecked();
+});
+
+test("double clicking a spectrum does not select a product ion", async ({ page }) => {
+  await mockMzmlMatch(page);
+  await page.goto("/datasets/demo/matches/1");
+  const svg = page.locator('svg[aria-label^="MS2 scan #67726"]').first();
+  await expect(svg.locator('line[data-product-ion-id]')).toHaveCount(9);
+  const box = await svg.boundingBox();
+  if (!box) throw new Error("MS2 SVG has no bounding box");
+  await page.clock.install();
+  await svg.dblclick({ position: { x: 72 + (box.width - 92) * 0.1, y: box.height - 60 } });
+  await page.clock.runFor(250);
+  await expect(page.getByTestId("product-ion-xic-card")).toContainText("Select product ions to display product XIC.");
 });
 
 test("adds top fragments, enforces the limit, and switches raw or normalized views", async ({ page }) => {
@@ -679,6 +776,9 @@ test("unsupported raw format shows a downgrade message without match-level spect
   let matchLevelCalls = 0;
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/datasets/demo/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(dataset.id));
+    }
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
     if (url.pathname === "/api/v1/datasets/demo/matches/1") return fulfillJson(route, matchDetail("bruker_d"));
     if (

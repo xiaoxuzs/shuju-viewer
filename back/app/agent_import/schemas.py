@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent_import.contracts import AgentAnalysisCategory
 
 
 class AgentCaseFromPathIn(BaseModel):
     source_path: str = Field(..., min_length=1)
-    data_type: AgentAnalysisCategory
-    format_name: str = Field(..., min_length=1, max_length=160)
+    data_type: AgentAnalysisCategory = "AUTO"
+    format_name: str = Field("Unknown format", min_length=1, max_length=160)
     format_details: str | None = Field(default=None, max_length=4000)
+    delivery_policy: Literal["manual", "auto_test"] = "manual"
+
+
+class AgentCaseFromUploadIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    upload_id: str
+    data_type: AgentAnalysisCategory = "AUTO"
+    format_name: str = Field("Unknown format", min_length=1, max_length=160)
+    format_details: str | None = Field(default=None, max_length=4000)
+    delivery_policy: Literal["manual", "auto_test"] = "manual"
 
 
 class AgentCaseCreatedOut(BaseModel):
@@ -22,7 +32,14 @@ class AgentCaseCreatedOut(BaseModel):
     version: int
 
 
+class AgentExecutionRecoveryIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    new_code_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class AgentCaseOut(BaseModel):
+    progress: dict[str, Any] | None = None
     case_id: str
     workspace_id: str
     status: str
@@ -44,6 +61,11 @@ class AgentCaseOut(BaseModel):
     dataset_slug: str | None
     created_at: str
     updated_at: str
+    deadline_at: str | None = None
+    model_tokens_reserved: int = 0
+    delivery_policy: str = "manual"
+    ever_published: bool = False
+    authorization_wait_reason: str | None = None
 
 
 class AgentMessageOut(BaseModel):
@@ -78,6 +100,7 @@ class AgentArtifactOut(BaseModel):
     sha256: str
     size_bytes: int
     media_type: str | None
+    structured_payload: dict[str, Any] | None = None
     created_at: str
 
 

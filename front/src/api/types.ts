@@ -33,6 +33,7 @@ export interface DatasetDeletedOut {
 
 /** 已导入的数据集元数据及下属 cutoff 列表。 */
 export interface DatasetOut {
+  revision_id?: string;
   id: number;
   slug: string;
   name: string;
@@ -50,6 +51,77 @@ export interface DatasetOut {
   /** universal schema 没有 updated_at 列；后端总是返回 null。 */
   updated_at: string | null;
   cutoffs: CutoffOut[];
+}
+
+export type DatasetFactState =
+  | "DIRECT"
+  | "DERIVED"
+  | "MISSING"
+  | "AMBIGUOUS"
+  | "VIEWER_UNSUPPORTED";
+
+export type DatasetViewAvailability = "AVAILABLE" | "PARTIAL" | "DISABLED";
+
+export interface DatasetEntityCapability {
+  entity: string;
+  state: DatasetFactState;
+  count: number | null;
+  reason_code: string | null;
+  evidence_refs: string[];
+  derivation_id: string | null;
+}
+
+export interface DatasetViewRequirement {
+  entity: string;
+  state: DatasetFactState;
+  required: boolean;
+  reason_code: string | null;
+  derivation_id: string | null;
+}
+
+export interface DatasetViewCapability {
+  view_id: string;
+  title: string;
+  route: string;
+  availability: DatasetViewAvailability;
+  requirements: DatasetViewRequirement[];
+  reason_code: string | null;
+  message: string | null;
+}
+
+export interface DatasetMissingInput {
+  input_id: string;
+  label: string;
+  reason_code: string;
+  message: string;
+  unlocks: string[];
+}
+
+export interface DatasetCapabilityAmbiguity {
+  ambiguity_id: string;
+  message: string;
+  evidence_refs: string[];
+  affected_views: string[];
+}
+
+export interface DatasetCapabilityWarning {
+  warning_id: string;
+  message: string;
+  evidence_refs: string[];
+}
+
+/** Dataset capability projection; enforcement distinguishes verified Agent facts from legacy advice. */
+export interface DatasetCapabilityReport {
+  schema_version: 1;
+  dataset_id: number;
+  source_case_id: string | null;
+  provenance: "VALIDATED_FACTS" | "LEGACY_METADATA";
+  enforcement: "ENFORCED" | "ADVISORY";
+  entities: DatasetEntityCapability[];
+  views: DatasetViewCapability[];
+  missing_inputs: DatasetMissingInput[];
+  ambiguities: DatasetCapabilityAmbiguity[];
+  warnings: DatasetCapabilityWarning[];
 }
 
 export interface DatasetRunSummary {
@@ -71,6 +143,7 @@ export interface BuRunSummary {
 }
 
 export type ImportUploadType =
+  | "AGENT_UNKNOWN"
   | "TD_RAW"
   | "TD_MZML"
   | "TD_TOPPIC_HTML"
@@ -141,6 +214,7 @@ export interface UnknownFormatImportOut {
 }
 
 export interface AgentImportCaseOut {
+  progress?: { phase: string; processed: number | null; total: number | null; remaining: number | null; updated_at: string } | null;
   case_id: string;
   workspace_id: string;
   status: string;
@@ -157,11 +231,19 @@ export interface AgentImportCaseOut {
   version: number;
   stop_requested_at: string | null;
   candidate_zp_sha256: string | null;
-  verification: Record<string, unknown> | null;
+  verification: (Record<string, unknown> & {
+    dataset_capability_report?: DatasetCapabilityReport;
+    dataset_capability_report_error?: { code: string; message: string };
+  }) | null;
   dataset_id: number | null;
   dataset_slug: string | null;
   created_at: string;
   updated_at: string;
+  deadline_at?: string | null;
+  model_tokens_reserved?: number;
+  delivery_policy?: "manual" | "auto_test";
+  ever_published?: boolean;
+  authorization_wait_reason?: string | null;
 }
 
 export interface AgentImportMessageOut {
@@ -196,10 +278,11 @@ export interface AgentImportArtifactOut {
   sha256: string;
   size_bytes: number;
   media_type: string | null;
+  structured_payload: Record<string, unknown> | null;
   created_at: string;
 }
 
-export type ImportUploadState = "CREATED" | "UPLOADING" | "READY" | "STARTED" | "FAILED";
+export type ImportUploadState = "CREATED" | "UPLOADING" | "READY" | "STARTED" | "FAILED" | "CASE_PINNED";
 
 export interface ImportUploadCreated {
   upload_id: string;

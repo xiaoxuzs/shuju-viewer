@@ -8,10 +8,13 @@ import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
+from collections.abc import Mapping
 
 from app.agent_import.contracts import AgentCandidatePlan
 from app.agent_import.errors import AgentBinaryPlanError
 from app.agent_import.zp_capabilities import build_zp_capabilities
+from app.declarative_ingest import preflight_declarative_plan
+from app.dataset_capabilities import VIEWER_VIEW_CATALOG
 from app.zp_runtime.package import ensure_binary_layer_importable
 
 
@@ -19,13 +22,16 @@ def preflight_mapping_plan(
     *,
     source_root: str | Path,
     plan: AgentCandidatePlan,
+    allow_legacy_mapping: bool = True,
+    trusted_observations: Mapping[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     root = Path(source_root).resolve(strict=True)
     if plan.status != "READY" or plan.binary_operation is None or plan.zp_conversion_plan is None:
         raise AgentBinaryPlanError("only a READY executable candidate can pass preflight")
     mapping = plan.zp_conversion_plan.mapping_plan
+    declarative = plan.zp_conversion_plan.declarative_plan
     if plan.binary_operation != "convert_declared_mapping_to_zp":
-        if mapping is not None:
+        if mapping is not None or declarative is not None:
             raise AgentBinaryPlanError("non-mapping operation cannot contain a mapping plan")
         return {
             "schema_version": 1,
@@ -33,8 +39,42 @@ def preflight_mapping_plan(
             "binary_operation": plan.binary_operation,
             "mapping_adapter": None,
         }
+    if declarative is not None:
+        if not allow_legacy_mapping and trusted_observations is None:
+            raise AgentBinaryPlanError(
+                "unknown-format declarative execution requires persisted Agent 1 observations",
+                code="EVIDENCE_BINDING_MISSING",
+            )
+        try:
+            report = preflight_declarative_plan(
+                source_root=root,
+                plan=declarative,
+                trusted_observations=trusted_observations,
+            )
+        except (OSError, ValueError) as exc:
+            raise AgentBinaryPlanError(
+                str(exc),
+                code=str(getattr(exc, "code", "AGENT_BINARY_PLAN_INVALID")),
+            ) from exc
+        return {
+            "schema_version": 2,
+            "status": report.status,
+            "binary_operation": plan.binary_operation,
+            "mapping_adapter": "viewer_declarative_bottom_up_v1",
+            "declarative_plan_id": declarative.plan_id,
+            "mapped_field_count": report.mapped_field_count,
+            "explicitly_unmapped_field_count": report.explicitly_unmapped_field_count,
+            "requested_view_ids": list(report.requested_view_ids),
+            "view_resolution": {view: ("REGISTERED" if view in VIEWER_VIEW_CATALOG else "REPORT_ONLY_VIEWER_UNSUPPORTED_DISABLED") for view in report.requested_view_ids},
+            "view_request_policy": "Unknown view IDs are retained for truthful DISABLED/VIEWER_UNSUPPORTED reporting, never executed or routed. They are not a failure by themselves when the Blueprint marks the feature optional and unsupported. Required runnable views remain independently verified.",
+        }
     if mapping is None:
         raise AgentBinaryPlanError("declared mapping operation requires mapping_plan")
+    if not allow_legacy_mapping:
+        raise AgentBinaryPlanError(
+            "legacy named mapping adapters are not executable from an unknown-format Agent Case",
+            code="LEGACY_MAPPING_NOT_ALLOWED",
+        )
     adapters = build_zp_capabilities().get("mapping_adapters", {})
     if not isinstance(adapters, dict) or mapping.adapter_id not in adapters:
         raise AgentBinaryPlanError(

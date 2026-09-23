@@ -36,6 +36,7 @@ def main() -> None:
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--user-message", action="append", default=[])
     args = parser.parse_args()
 
     source = args.source.expanduser().resolve(strict=True)
@@ -45,22 +46,34 @@ def main() -> None:
     plan = AgentCandidatePlan.model_validate_json(
         args.plan.expanduser().resolve(strict=True).read_text(encoding="utf-8")
     )
-    preflight = preflight_mapping_plan(source_root=source, plan=plan)
+    trusted_observations = {item.call_id: item.payload for item in research.observations}
+    trusted_observations.update(
+        {
+            f"user-message:{index}": {"kind": "user_input", "text": message}
+            for index, message in enumerate(args.user_message, 1)
+        }
+    )
+    preflight = preflight_mapping_plan(
+        source_root=source,
+        plan=plan,
+        allow_legacy_mapping=False,
+        trusted_observations=trusted_observations,
+    )
     context = AgentModelContext(
         case_id="live-agent1-review-single-sample",
         context_revision=1,
         source_root=str(source),
-        analysis_category=research.blueprint.analysis_category,
+        analysis_category="AUTO",
         requested_source_profile=research.blueprint.source_profile,
         format_details="Review the preflight-passed Agent 2 plan against your approved DatasetBlueprint.",
         dataset_fingerprint="0" * 32,
         source_summary=summarize_source_root(source),
-        user_messages=[],
+        user_messages=list(args.user_message),
     )
     strategy = {
         "schema_version": 3,
         "decision": "BLUEPRINT_READY",
-        "analysis_category": research.blueprint.analysis_category,
+        "analysis_category": "AUTO",
         "proposed_source_profile": research.blueprint.source_profile,
         **research.model_dump(mode="json"),
     }
@@ -79,7 +92,7 @@ def main() -> None:
     print(
         json.dumps(
             {
-                "model": settings.agent_read_model,
+                "model": settings.openai_model,
                 "status": review.status,
                 "issues": review.issues,
                 "questions": review.questions,

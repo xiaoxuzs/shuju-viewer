@@ -23,6 +23,10 @@ import { BuChromatogramChart } from "@/features/bu/components/spectrum/BuChromat
 import { DiaWindowMap } from "@/features/bu/components/spectrum/DiaWindowMap";
 import { BU_CHART, DEFAULT_ZOOM, isZoomed, type Zoom } from "@/features/bu/components/spectrum/chartTheme";
 import type { BuDatasetContext } from "@/features/bu/layout/BuDatasetLayout";
+import {
+  findDatasetViewCapability,
+  useDatasetCapability,
+} from "@/features/dataset-capabilities/DatasetCapabilityContext";
 import { DIACLIP_DISPLAY_NAME, formatCount, isDiaclipSourceSoftware } from "@/features/bu/utils";
 import { chartQueryRetry, parseApiError } from "@/lib/apiError";
 import {
@@ -35,6 +39,9 @@ const ZOOM_HINT = "wheel to zoom (Shift = Y) · brush-drag = X";
 
 export function BuOverviewPage() {
   const { dataset } = useOutletContext<BuDatasetContext>();
+  const capabilityReport = useDatasetCapability();
+  const chromatogramCapability = findDatasetViewCapability(capabilityReport, "chromatogram");
+  const chromatogramAvailable = chromatogramCapability?.availability !== "DISABLED";
   const { beginManualTransition } = usePageTransition();
   const [chromType, setChromType] = useState<"tic" | "bpc">("tic");
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
@@ -42,30 +49,31 @@ export function BuOverviewPage() {
   const [chromModalBatchId, setChromModalBatchId] = useState<number | null>(null);
   const [chromModalZoom, setChromModalZoom] = useState<Zoom>(DEFAULT_ZOOM);
   const { data, isLoading, error } = useQuery({
-    queryKey: ["bu", dataset.slug, "overview"],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "overview"],
     queryFn: () => fetchBuOverview(dataset.slug),
   });
   const defaultRun = data?.runs.find((run) => run.raw_format === "mzml") ?? data?.runs[0];
   const selectedRun = data?.runs.find((run) => run.run_id === selectedRunId) ?? defaultRun;
-  const qMax = data?.q_value_cutoff ?? 0.01;
+  const qMax = data?.q_value_cutoff ?? undefined;
   const chromatogram = useQuery({
-    queryKey: ["bu", dataset.slug, "chromatogram", selectedRun?.run_id, chromType],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "chromatogram", selectedRun?.run_id, chromType],
     queryFn: () => fetchBuRunChromatogram(dataset.slug, selectedRun!.run_id, chromType),
-    enabled: !!selectedRun,
+    enabled: !!selectedRun && chromatogramAvailable,
     retry: chartQueryRetry,
   });
   const diaWindows = useQuery({
-    queryKey: ["bu", dataset.slug, "dia-windows", selectedRun?.run_id],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "dia-windows", selectedRun?.run_id],
     queryFn: () => fetchBuRunDiaWindows(dataset.slug, selectedRun!.run_id),
     enabled: selectedRun?.raw_format === "bruker_d",
     retry: chartQueryRetry,
   });
   const rtMz = useQuery({
-    queryKey: ["bu", dataset.slug, "rt-mz", selectedRun?.run_id, qMax],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "rt-mz", selectedRun?.run_id, qMax],
     queryFn: () =>
       fetchBuRtMzHeatmap(dataset.slug, {
         run_id: selectedRun?.run_id,
         q_max: qMax,
+        q_filter: qMax !== undefined,
         bins_rt: 80,
         bins_mz: 80,
         decoy: false,
@@ -124,6 +132,12 @@ export function BuOverviewPage() {
   if (error && !data) return <DataLoadError />;
   if (!data) return <DataEmptyState />;
   const isDiaclip = isDiaclipSourceSoftware(data.source_software);
+  const hasRtMzPoints = !!rtMz.data
+    && rtMz.data.total_points > 0
+    && rtMz.data.max_count > 0
+    && rtMz.data.counts.length > 0
+    && (rtMz.data.counts[0]?.length ?? 0) > 0;
+  const showRtMzCard = rtMz.isLoading || !!rtMz.error || hasRtMzPoints;
 
   return (
     <div className="space-y-5">
@@ -155,7 +169,12 @@ export function BuOverviewPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {chromatogram.isLoading ? (
+          {!chromatogramAvailable ? (
+            <PlotStatus
+              kind="unsupported"
+              title={chromatogramCapability?.message ?? "Chromatogram data is unavailable."}
+            />
+          ) : chromatogram.isLoading ? (
             <PlotStatus kind="loading" title={`Loading ${chromType.toUpperCase()} chromatogram...`} />
           ) : chromatogram.error ? (
             <ChromatogramErrorState
@@ -184,22 +203,22 @@ export function BuOverviewPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">RT-m/z Identifications</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {rtMz.isLoading ? (
-            <PlotStatus kind="loading" title="Loading RT-m/z heatmap..." className="min-h-72" />
-          ) : rtMz.error ? (
-            <PlotStatus kind="error" className="min-h-72" />
-          ) : rtMz.data?.total_points === 0 ? (
-            <PlotStatus kind="empty" title="No RT-m/z identifications available." className="min-h-72" />
-          ) : rtMz.data ? (
-            <RtMzMiniHeatmap heatmap={rtMz.data} />
-          ) : null}
-        </CardContent>
-      </Card>
+      {showRtMzCard && (
+        <Card data-testid="rt-mz-card">
+          <CardHeader>
+            <CardTitle className="text-base">RT-m/z Identifications</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {rtMz.isLoading ? (
+              <PlotStatus kind="loading" title="Loading RT-m/z heatmap..." className="min-h-72" />
+            ) : rtMz.error ? (
+              <PlotStatus kind="error" className="min-h-72" />
+            ) : rtMz.data ? (
+              <RtMzMiniHeatmap heatmap={rtMz.data} />
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       {selectedRun?.raw_format === "bruker_d" && (
         <Card>
@@ -230,7 +249,7 @@ export function BuOverviewPage() {
                 <span>Format: {run.raw_format ?? "-"}</span>
                 <span>Matches: {formatCount(run.match_count)}</span>
                 <span className="col-span-2 break-all">
-                  {isDiaclip ? `${DIACLIP_DISPLAY_NAME} run` : "DIA-NN"}: {run.diann_run_name ?? "-"}
+                  {isDiaclip ? `${DIACLIP_DISPLAY_NAME} run` : data.source_software === "DIA-NN" ? "DIA-NN" : "Source run"}: {run.diann_run_name ?? run.file_name}
                 </span>
               </div>
             </div>

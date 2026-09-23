@@ -1,0 +1,969 @@
+{
+  "schema_version": 1,
+  "verified_baseline": {
+    "source_sha256": "3403ba44f1964dcbd348d748eb2051b01ad94aa313802fb2252be038d72a9383",
+    "source_files": 682,
+    "backend": {
+      "passed": 891,
+      "skipped": 12,
+      "seconds": 39.77,
+      "evidence": ".tmp/网页独立复现-20260920-01/后端全量-正常策略.xml"
+    },
+    "frontend": "Application UI source unchanged; prior182 Mock tests not rerun. Real browser driver and candidate browser validation passed on final source.",
+    "product_e2e": "PASSED_REAL_NORMAL_ENTRY: fresh isolated PG, full MaxQuant, blank format/AUTO, real configured GPT research/implementation/repair/review, complete ZP/source/SQL/HTTP/browser, normal UI approval and browsable delivery in502.643s.",
+    "deployment": "User local API8000 restarted via tested app.local_start; health build_id matches final source. Existing dataset62 unchanged; frontend5173 retained.",
+    "real_maxquant_fresh_run": "SUCCESS: 7d10b72d-9dd5-4616-80e8-49275ac26597, dataset2/files-7d10b72d in isolated retained test runtime; its test processes stopped."
+  },
+  "basis": "Latest user clarification governs ordinary tasks. Historical experiment facts below remain unchanged and do not authorize or constrain new ordinary tasks.",
+  "baseline": {
+    "head": "b358fc83d619421ddeb5bd2fd06aee85a3623708",
+    "source_sha256": "4be27eaf1d9026d4a0bdba88cbf92a0ebc866482612e62b451d2724605c001c1",
+    "tracked_modified": 107,
+    "untracked_status_entries": 93
+  },
+  "recovery": {
+    "case_id": "6adfa2e5-a8b4-47ba-88cb-8088dbb01333",
+    "activation": "NOT_ACTIVATED",
+    "historical_calls_hint": 8,
+    "historical_reserved_hint": 716318,
+    "must_reconcile_database_before_activation": true
+  },
+  "single_api_cleanup_verified_baseline": {
+    "source_sha256": "056c705b1680fec8899bbd9e4ee22d402f33483806c6f059efb1dab56b80741d",
+    "source_files": 660,
+    "backend": {
+      "passed": 813,
+      "skipped": 12,
+      "seconds": 44.343,
+      "evidence": ".tmp/单一API-20260918-01/后端完整回归.xml"
+    },
+    "frontend": {
+      "passed": 180,
+      "failed": 1,
+      "skipped": 0,
+      "flaky": 0,
+      "seconds": 228.385889,
+      "evidence": ".tmp/单一API-20260918-01/前端完整回归/results.json",
+      "failure": "bu-match-detail.spec.ts:336 first product XIC request timeout; frontend source unchanged by API cleanup"
+    },
+    "real_browser_entry": ".viewer-test-deliveries/单一API-浏览器Worker-20260918-02/browser.json",
+    "worker_result": ".viewer-test-deliveries/单一API-浏览器Worker-20260918-02/worker-check.json",
+    "pg_normal_entry": ".tmp/单一API-20260918-01/真实PG正常入口-隔离权限复验/case.json",
+    "import_completed": false,
+    "blocking_code": "MODEL_AUTHORIZATION_REQUIRED",
+    "deployment": "Not deployed; owned test services stopped; no historical Case recovery"
+  },
+  "forbidden": [
+    "production",
+    "dotenv changes",
+    "git mutations",
+    "host component installation",
+    "privilege elevation",
+    "host reboot",
+    "new remote server",
+    "historical evidence deletion",
+    "deduplication policy change",
+    "generated code host execution"
+  ],
+  "items": [
+    {
+      "id": "U01",
+      "state": "外部阻塞",
+      "depends_on": [
+        "U02",
+        "U04"
+      ],
+      "code": [
+        "cs/有界执行控制.py",
+        "back/app/agent_import/recovery.py"
+      ],
+      "evidence": [
+        ".viewer-test-deliveries/diaclip-20260916-01/evidence/viewer-20260917-u01-u12-01/register-1789632515519342000.json"
+      ],
+      "facts": "Historical retained receipt: FAILED/version13/8 requests/716318 reserved. Current request prohibits original recovery and old DB access; not rechecked or changed.",
+      "remaining_code": [
+        "one-time recovery permission activation and exact compatibility manifest",
+        "current code/model recovery and final business delivery",
+        "No recovery attempted in API cleanup; old recovery window remains unactivated"
+      ]
+    },
+    {
+      "id": "U02",
+      "state": "验证通过",
+      "depends_on": [
+        "U04"
+      ],
+      "code": [
+        "back/app/agent_import/model_routing.py",
+        "cs/有界执行控制.py",
+        "back/app/agent_import/model_context.py",
+        "back/app/agent_import/model_http_worker.py"
+      ],
+      "evidence": [
+        ".tmp/有界实施-20260917-01/模型探针审批阻塞.json",
+        ".viewer-test-deliveries/diaclip-20260916-01/evidence/viewer-20260917-u01-u12-01/model-probe-1789701385847377100.json",
+        ".tmp/单一API-20260918-01/后端完整回归.xml",
+        ".tmp/研究优化-20260920-01/单次真实汇总/summary.json",
+        ".tmp/研究优化-20260920-01/最终后端全量-复验.xml"
+      ],
+      "remaining": "Other sources/maintenance real-model scope remains separate.",
+      "scope": "Final same-API real GPT full MaxQuant browser run passed in502.643s, including actual model patch repair; no upstream model identity guarantee."
+    },
+    {
+      "id": "U03",
+      "state": "验证通过",
+      "depends_on": [],
+      "code": [
+        "back/app/agent_import/local_sessions.py",
+        "front/src/features/agent-import/localSession.ts",
+        "front/src/features/import-upload/ImportUploadDialog.tsx",
+        "cs/本机会话启动.py"
+      ],
+      "scope": "Normal start-back/app.local_start, automatic source acceptance, blank-format/AUTO/no-login/grant fresh browser -> verified delivery passed; user local service now loaded final build.",
+      "evidence": [
+        ".viewer-test-deliveries/会话入口-20260917-05/browser.json",
+        ".tmp/有界实施-20260917-01/本机会话与上传.xml",
+        ".viewer-test-deliveries/单一API-浏览器Worker-20260918-02/browser.json",
+        ".viewer-test-deliveries/单一API-浏览器Worker-20260918-02/worker-check.json",
+        ".tmp/自动授权-20260918-01/产品PG入口-10/browser.json",
+        ".tmp/自动授权-20260918-01/产品PG入口-10/delivered-browser.json",
+        ".tmp/产品运行策略-20260918-01/无grant产品入口-03/browser.json",
+        ".tmp/共享访问-20260918-01/无登录空格式产品入口-02/browser.json",
+        "logs/back-shared-access-20260918-01.stdout.log"
+      ],
+      "remaining": "Same unchanged imported data remains subject to dedup; no claim that every source/format has a registered semantic recipe."
+    },
+    {
+      "id": "U04",
+      "state": "实施中",
+      "depends_on": [],
+      "code": [
+        "back/app/agent_import/authorization_ledger.py",
+        "back/app/agent_import/model_audit.py",
+        "back/app/agent_import/failure_progress.py",
+        "back/app/agent_import/admission_policy.py",
+        "back/app/agent_import/policy_admin.py",
+        "back/app/agent_import/task_runtime.py"
+      ],
+      "evidence": [
+        ".tmp/有界实施-20260917-01/持久授权基线.xml",
+        ".tmp/有界实施-20260917-01/未对账活动窗口修正.xml",
+        ".tmp/有界实施-20260917-01/释放租约迟到登记.xml",
+        ".viewer-test-deliveries/单一API-浏览器Worker-20260918-02/worker-check.json",
+        ".tmp/单一API-20260918-01/真实PG正常入口-隔离权限复验/case.json",
+        ".tmp/产品运行策略-20260918-01/无grant产品入口-03/task-policy-pg.xml"
+      ],
+      "remaining": [
+        "Historical grants/recovery untouched; no 24/180 requirement for ordinary product tasks",
+        "Deterministic plan exhaustion now stops instead of restarting research",
+        "Broader crash/recovery and policy administration remain separate",
+        "New manual/auto success now closes TaskRuntime in the same transaction, with rollback tests. Original dataset62 historical null ended_at was not backfilled.",
+        "Original published Case's historical null end time not backfilled; broader recovery/maintenance budgets remain scoped."
+      ],
+      "scope": "Persisted ordinary TaskRuntime; structured model repairs, bounded rejected-review rerouting, cancellation-before-send and atomic success end time. New measured local profile750k units, no manual model grant."
+    },
+    {
+      "id": "U05",
+      "state": "实施中",
+      "depends_on": [],
+      "code": [
+        "back/app/source_inspection/preview_process.py",
+        "back/app/agent_import/research_tools.py"
+      ],
+      "evidence": [
+        ".tmp/有界实施-20260917-01/预览时限与会话.xml"
+      ],
+      "scope": "Registered MaxQuant source contract now enforces reported protein association/sample label, companion reader scope, independent full source/groups/FASTA/DDA verification. Fresh real product run passed.",
+      "remaining": "Multi-run/mzML, richer group/protein/peptide quantitative projection/UI and unregistered source rules remain limited."
+    },
+    {
+      "id": "U06",
+      "state": "外部阻塞",
+      "depends_on": [],
+      "code": [
+        "back/app/agent_import/engineering_admission.py",
+        "cs/工程隔离探针.py"
+      ],
+      "scope": "signed/expiring admission controller and runner factory written; offline signature tests only",
+      "evidence": [
+        ".tmp/有界实施-20260917-01/工程admission离线.xml"
+      ],
+      "remaining": "installed authorized local engine, pinned offline image, actual negative isolation tests; no installation performed"
+    },
+    {
+      "id": "U07",
+      "state": "实施中",
+      "depends_on": [
+        "U04",
+        "U06"
+      ],
+      "code": [
+        "back/app/agent_import/workflow.py",
+        "back/app/agent_import/engineering_consumer.py"
+      ],
+      "evidence": [
+        ".tmp/有界实施-20260917-01/工程admission离线.xml"
+      ],
+      "remaining": "runner injection is implemented; trusted acceptance, code/capability activation and ENGINEERING successful return path remain unimplemented"
+    },
+    {
+      "id": "U08",
+      "state": "实施中",
+      "depends_on": [
+        "U04",
+        "U09"
+      ],
+      "code": [
+        "back/app/agent_import/maintenance.py",
+        "back/app/agent_import/maintenance_consumer.py",
+        "front/src/features/agent-import/PublishedFeedback.tsx"
+      ],
+      "evidence": [
+        ".tmp/有界实施-20260917-01/维护反馈角色边界修正.xml",
+        ".tmp/产品运行策略-20260918-01/无grant产品入口-03/maintenance.json"
+      ],
+      "remaining": "Shared unauthenticated feedback retains published lineage and independent maintenance role. Mapping candidate generation passes synthetic transport; revision validation/publication/rollback and code repair remain unfinished."
+    },
+    {
+      "id": "U09",
+      "state": "实施中",
+      "depends_on": [],
+      "code": [
+        "back/app/agent_import/revisions.py",
+        "back/app/agent_import/revision_validation.py",
+        "back/app/api/deps.py",
+        "front/src/api/client.ts"
+      ],
+      "scope": "Added prepare_from_zp and trusted independent namespace projection receipt. Actual distinct ZPs rebuild two PG18.3 namespaces for one dataset; original head/data unchanged. Legacy CAS/read-pin/rollback remains fixture-tested; revision reads feature stays off.",
+      "evidence": [
+        ".tmp/有界实施-20260917-01/修订HTTP与维护边界.xml"
+      ],
+      "remaining": [
+        "Builder and independent producer now exist and passed real PG; not yet connected to maintenance publication orchestration",
+        "Actual PG/HTTP/browser two-version activation, rollback and concurrency across full application",
+        "Compatible build/process activation and version-wide retention references"
+      ]
+    },
+    {
+      "id": "U10",
+      "state": "实施中",
+      "depends_on": [],
+      "scope": "Final backend891/12 and real fresh PG18.3/HTTP/browser/GPT timed source run. Previous UI Mock182 is unchanged-source evidence, not a rerun.",
+      "evidence": [
+        ".tmp/完整MaxQuant-20260920-01/后端全量-保留修复.xml",
+        ".tmp/完整MaxQuant-20260920-01/前端全量-最终/results.json",
+        ".viewer-test-deliveries/maxquant-20260920-01/receipt.json",
+        ".tmp/网页独立复现-20260920-01/最终后端全量.xml",
+        ".tmp/网页独立复现-20260920-01/无真实模型启动器-02/summary.json",
+        ".tmp/网页独立复现-20260920-01/最终后端全量-取消复验.xml",
+        ".tmp/网页独立复现-20260920-01/无真实模型启动器-03/summary.json",
+        ".tmp/网页独立复现-20260920-01/后端全量-正常策略.xml",
+        ".tmp/网页独立复现-20260920-01/真实网页-07/browser.json"
+      ]
+    },
+    {
+      "id": "U11",
+      "state": "实施中",
+      "depends_on": [
+        "U01",
+        "U09"
+      ],
+      "code": [
+        "back/app/agent_import/asset_retention.py"
+      ],
+      "scope": "Fresh real MaxQuant normal-browser delivery, durable full source/ZP/HANDOVER and signed acceptance passed. Original dataset62 retained. Timed test processes stopped.",
+      "evidence": [
+        ".viewer-test-deliveries/maxquant-20260920-01/HANDOVER.md",
+        ".viewer-test-deliveries/maxquant-20260920-01/restart-readback.json",
+        ".viewer-test-deliveries/maxquant-web-20260920-07/HANDOVER.md"
+      ],
+      "remaining": "Revision-wide references/GC concurrency and retention policy still separate; no historical data deleted."
+    },
+    {
+      "id": "U12",
+      "state": "外部阻塞",
+      "depends_on": [],
+      "scope": "不裁决业务唯一性；保持现行复合索引，允许同dataset子修订开发",
+      "evidence": []
+    }
+  ],
+  "next_actions": [
+    "For this supported full source scope, use normal start-all/start-back and blank-format UI; do not repeat unchanged imported source to bypass dedup",
+    "No further real-model timing retries unless a new failure/change requires them",
+    "Keep unsupported quantitative/UI/source-format scope explicit",
+    "Continue version/maintenance/sandbox work only within its separate authority; no old DIA-CLIP recovery"
+  ],
+  "not_claimed": [
+    "all U01-U12 complete",
+    "old DIA-CLIP recovery",
+    "all file formats and all scientific semantics",
+    "runtime autonomous engineering",
+    "real container admission",
+    "maintenance repair published",
+    "production deployment"
+  ],
+  "previous_verified_baseline": {
+    "source_sha256": "dc00df6cbf8696fe99f5a86c1d7e05dc3633b1f358017af71578c5f7a10f4f6b",
+    "source_files": 660,
+    "backend": {
+      "passed": 812,
+      "skipped": 12,
+      "seconds": 66.794,
+      "evidence": ".tmp/有界实施-20260917-01/最终后端完整回归.xml"
+    },
+    "frontend": {
+      "passed": 181,
+      "skipped": 0,
+      "flaky": 0,
+      "seconds": 270.177547,
+      "evidence": ".tmp/有界实施-20260917-01/当前全前端规格回归/results.json",
+      "reuse_scope": "UI source unchanged after this full run; only backend junction test was added"
+    },
+    "real_browser_entry": ".viewer-test-deliveries/会话入口-20260917-05/browser.json",
+    "typescript": "tsc -p tsconfig.app.json --noEmit --incremental false: exit 0",
+    "deployment": "not deployed; owned test processes stopped; revision read feature remains disabled"
+  },
+  "authorization_scope_updates": [
+    {
+      "date": "2026-09-18",
+      "basis": "User explicitly confirmed single API cleanup including model-related .env settings, followed by import-program verification",
+      "scope": "Only model connection configuration/branches and related tests; unrelated .env, business routes, production and historical evidence remain excluded"
+    },
+    {
+      "date": "2026-09-18",
+      "basis": "Explicit user product-requirement correction",
+      "scope": "Remove manual model-budget grants from normal import and maintenance; retain authentication/runtime/sandbox/publication controls; do not alter historical experiments"
+    },
+    {
+      "date": "2026-09-18",
+      "basis": "User explicitly approved fixed-user shared access without ordinary identity verification",
+      "scope": "Remove ordinary login/operator token gate; preserve internal administration, sandbox and publication controls. Continue visible normal UI import with blank format fields and supplied complete source directory."
+    }
+  ],
+  "single_api": {
+    "connection_fields": [
+      "OPENAI_BASE_URL",
+      "OPENAI_API_KEY",
+      "OPENAI_MODEL"
+    ],
+    "base_url": "http://localhost:55597/v1",
+    "model": "gpt-6-astra",
+    "all_roles_same_connection": true,
+    "retired_connections_removed": true,
+    "credentials_logged": false,
+    "legacy_evidence_unchanged": true
+  },
+  "previous_grant_based_verified_baseline": {
+    "recorded_at": "2026-09-18T14:58:03+08:00",
+    "source_sha256": "fd27efe25b9a16749557c726d5918c31b2caaa44e16c16194f9dfcb1abc5a9f7",
+    "source_files": 668,
+    "source_scope": "source_code._TREES/_FILES working copy including necessary untracked implementation; excludes secrets/data/cs harnesses/dist/cjb copies",
+    "tracked_modified": 116,
+    "untracked_status_entries": 124,
+    "backend": {
+      "passed": 825,
+      "skipped": 12,
+      "seconds": 39.3,
+      "evidence": ".tmp/自动授权-20260918-01/后端全量-02.xml"
+    },
+    "frontend": {
+      "passed": 182,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "seconds": 210.875491,
+      "evidence": ".tmp/自动授权-20260918-01/前端完整回归/results.json",
+      "reuse_scope": "No later front/src or front/tests edits; later changes only to standalone verification scripts and backend"
+    },
+    "typescript": "tsc -p tsconfig.app.json --noEmit --incremental false: exit 0",
+    "pg_policy": {
+      "passed": 7,
+      "postgres_version": "18.3",
+      "guard_enabled": true,
+      "evidence": ".tmp/自动授权-20260918-01/产品PG入口-10/policy-pg.xml",
+      "not_pg16_evidence": true
+    },
+    "product": {
+      "status": "SUCCESS",
+      "case_id": "7f7934d6-cb65-4622-a5de-47a6d8275c0d",
+      "dataset_id": 2,
+      "dataset_slug": "submitted-7f7934d6",
+      "zp_sha256": "79926369cfe5ec70c3d4e10de40d3bc985986f0b27667c891701d35541d0b5ff",
+      "source_sha256": "5d8a992a1c4a57e964ed9a635bb78569428b7f11565a7f2001e5aef8f9977d4c",
+      "source_scope": "synthetic 87-byte TSV, 2 complete rows, 2 runs, zero/null; NOT MaxQuant or DIA-CLIP",
+      "model_transport": "explicit loopback gpt-test-fixture only, no real GPT calls",
+      "entry": "fresh browser -> normal app.main path+upload dedup -> server policy transaction -> independent original AgentWorker -> real tools/contracts/Writer/full-v2/PG/HTTP/browser/final import/HANDOVER",
+      "evidence": ".tmp/自动授权-20260918-01/产品PG入口-10",
+      "retained_root": ".viewer-test-deliveries/automatic-policy-pg-20260918-10",
+      "readback": ".viewer-test-deliveries/automatic-policy-pg-20260918-10/restart-readback.json",
+      "worker_seconds": 40.06300000002375,
+      "worker_peak_rss_bytes": 173006848,
+      "retained_root_file_bytes": 88996788,
+      "processes_stopped": true
+    },
+    "maintenance": {
+      "task_id": "5d21a0b9-b055-42f1-8bac-783b207cc0c5",
+      "state": "AWAITING_REVISION_VALIDATION",
+      "candidate_sha256": "48c49f2acf62b2715951af62516d65c91b2e60eb80c98ef84ae13453053bada8",
+      "initial_role_called": false,
+      "model_transport": "same local fixture route as initial roles",
+      "scope": "positive published-context role consumption and fixed executor recompilation; no changed scientific facts, no maintenance publication",
+      "evidence": ".tmp/自动授权-20260918-01/产品PG入口-10/maintenance.json"
+    },
+    "revisions": {
+      "scope": "two distinct real ZPs -> two PG namespaces under one logical dataset, independent projection receipts; head remains legacy, activation/HTTP/browser rollback not exercised",
+      "evidence": ".tmp/自动授权-20260918-01/产品PG入口-10/revision-pg.json"
+    },
+    "fixture_budget_readback": {
+      "requests": 5,
+      "limit": 12,
+      "remaining": 7,
+      "reserved_units": 234190,
+      "outcomes": {
+        "RESPONSE": 5
+      },
+      "unclosed_experiments": 0,
+      "not_real_gateway_usage": true
+    },
+    "new_real_gateway_requests": 0,
+    "original_case_accessed_or_recovered": false,
+    "deployment": "No production deployment or target real-model activation; owned test services stopped",
+    "harness_sha256": {
+      "cs/GPT正常入口验收.py": "9ee592fff703e29e0e58bf9bfcef1861513d87738f6378bc600bc3dda5cc0ac2",
+      "cs/智能导入传输夹具.py": "adc114cf6ecbc9f04f96151c7792baa8296fc2625f07828b0eb17153c31ebbb7",
+      "cs/修订投影定向验收.py": "3e0c63f7d31a2d845f4ccab01ba16f9e2809a047c8e53409ad02f7ba6965436c",
+      "cs/保留交付回读.py": "51edb370dee33ab5354ffac37d8b5e7494c0b40e4025fe47b8d27fe1a72002f3",
+      "cs/前端隔离回归.py": "1ca6a23efe66e352f41c41de02db68351c0729e23c4bb2eed28cabfe6dadf216"
+    },
+    "post_acceptance_harness_change": {
+      "file": "cs/GPT正常入口验收.py",
+      "current_sha256": "c5894ea0687ec2c383e1310243bbf688f67492b2819f31f4dd2b97a061d85eb6",
+      "change": "Mirror committed HANDOVER bytes into managed delivery root in addition to temporary evidence output",
+      "verification": "AST checked; complete normal-entry run above used 9ee592... harness. Managed MD export itself executed and identity checked by updated readback on the same successful delivery. Product source/build unchanged.",
+      "managed_md": ".viewer-test-deliveries/automatic-policy-pg-20260918-10/HANDOVER.md"
+    }
+  },
+  "current_product_requirement": {
+    "source": "User clarification on 2026-09-18: product requirement correction, NOT model API permission repair",
+    "manual_model_grant_required": false,
+    "inherited_historical_24_calls_180_minutes": false,
+    "automatic_unlimited_grant": false,
+    "model_connection": "Single existing OPENAI_BASE_URL/OPENAI_API_KEY/OPENAI_MODEL, unchanged",
+    "execution_policy": "Existing server task settings, frozen at task creation; per-request audit/fence/cancel/limits retained",
+    "historical_experiment_access": "explicit compatibility only; no old DB accessed or Case restored",
+    "maxquant_waiting_input": "Directory supplied. Actual normal UI submission performed; current blocker is research model timeout, not a missing directory, user identity or grant.",
+    "user_authentication_required": false,
+    "access_model": "Shared workspace for fixed users; no ordinary login/operator token. Host/Origin, allowed paths and separate internal administrative authority remain."
+  },
+  "historical_authorization_id": "viewer-20260917-u01-u12-01",
+  "historical_authorization_basis": "User's one-time U01-U12 implementation authorization in this task; historical extensions are not authorization.",
+  "historical_experiment_limits": {
+    "new_model_requests": 24,
+    "experiment_union_seconds": 10800,
+    "new_experiment_seconds": 3600,
+    "original_case_recovery_seconds": 1800,
+    "original_case_lifetime_requests": 12,
+    "original_case_reserved_limit": 2000000
+  },
+  "historical_execution_last_receipt": {
+    "model_requests_sent": 1,
+    "experiments_started": 1,
+    "active_seconds": 26.107572555541992,
+    "requests_remaining": 23,
+    "runtime_authority": "Retained DIA-CLIP PostgreSQL business DB agent_authorizations; registered 2026-09-17T08:08:35.512345+00:00; this file is only a progress index",
+    "authorization_contract_sha256": "772c25a89a3a2fd2a3c4935d3760079704fbccc8c8648fd1eb2d059941e8dabb",
+    "last_successful_probe": ".viewer-test-deliveries/diaclip-20260916-01/evidence/viewer-20260917-u01-u12-01/model-probe-1789701385847377100.json",
+    "api_cleanup_new_gateway_requests": 0,
+    "note": "Historical last receipt, NOT a current live balance. Automatic-policy iteration adds zero real gateway requests and does not access the old DB. Local gpt-test-fixture requests use a separate explicit synthetic authority, never counted as real GPT acceptance.",
+    "scope": "Historical receipt only; not an ordinary-task prerequisite or remaining quota",
+    "historical_online_blocker": "Latest real grant authority is in the old retained DIA-CLIP business DB excluded by the current request; no live balance check or new real grant issued. Complete authorized MaxQuant source path also missing."
+  },
+  "current_execution": {
+    "updated_at": "2026-09-20T18:13:00+08:00",
+    "scope": "Authorized MaxQuant continuation; not all U01-U12",
+    "case_id": "6bd93504-78a1-41c6-81f0-8702eb60896a",
+    "status": "SUCCESS",
+    "version": 26,
+    "context_revision": 5,
+    "source": "E:/viewer-agent/maxquant/maxquant-viz-data/single-sample",
+    "source_files": 10,
+    "source_bytes": 300770287,
+    "source_sha256": "e2659802e83babd0ddb115523caf71704f6ed2d522686ffe8ab865ba753a06c5",
+    "format_inputs": {
+      "analysis": "AUTO",
+      "format_name": "",
+      "format_details": "",
+      "login": false,
+      "model_grant": false
+    },
+    "dataset_id": 62,
+    "dataset_slug": "single-sample-6bd93504",
+    "ever_published": true,
+    "counts": {
+      "identifications": 35,
+      "peptides": 32,
+      "proteins": 33,
+      "protein_groups": 32,
+      "runs": 1,
+      "spectra": 7534,
+      "peak_pairs": 3949930,
+      "chromatograms": 1,
+      "identified_spectrum_links": 35
+    },
+    "candidate_zp_sha256": "12572f8ea3f42167711e25ea5661f8f3b5eee92e1ff79dbee1945f906f70dd2d",
+    "candidate_bytes": 41666699,
+    "handover_sha256": "50c39c7d97eb0bec1a00d77f71a8b0af361ba530b9d22c95d887c8068bb15ee3",
+    "verification_operation": "95624b2862c5cca6151b0fce007f1564bf2893362155437c32d655d091f29c87",
+    "verifier": "full-semantic-v2.1",
+    "postgres": "18.3",
+    "preserved_delivery": ".viewer-test-deliveries/maxquant-20260920-01",
+    "managed_assets": "shuju/.viewer-zp/agent-cases/6bd93504-78a1-41c6-81f0-8702eb60896a",
+    "readback": ".tmp/完整MaxQuant-20260920-01/停启无模型回读-01/report.json",
+    "models": {
+      "connection": "single OPENAI_*; gateway declares gpt-6-astra; actual upstream identity not proven",
+      "new_case_requests_this_continuation": 13,
+      "total_case_request_records": 17,
+      "previous_independent_diagnostic": 1,
+      "unknown_timeout_records": 3,
+      "case_reserved_units": 1668862,
+      "unit": "conservative UTF-8 request bytes plus output allowance; not billed tokens",
+      "limits": "existing ordinary server task policy; no 24-call/180-minute product grant",
+      "implementation_timeout_seconds": 300,
+      "research_timeout_seconds": 180,
+      "review_timeout_seconds": 300
+    },
+    "limitations": [
+      "Group quantities retained and independently checked in group source_fields, not structured group-quantification UI",
+      "Four protein accessions absent from supplied FASTA; 15 identification intensities missing",
+      "No source fragment annotations; no invented FDR/search/annotations",
+      "Canonical PEP is checked in ZP/SQL; public detail DTO only retains it in source_fields",
+      "Vendor RAW preserved; no proof of lossless vendor RAW to mzML conversion"
+    ],
+    "runtime": {
+      "launcher": "cs/本地可信验证启动.py",
+      "runtime_root": ".tmp/完整MaxQuant-20260920-01/可信运行-02",
+      "api_port": 8000,
+      "normal_mode_restored": true,
+      "read_only_restart_passed": true
+    }
+  },
+  "previous_no_grant_with_sessions_baseline": {
+    "recorded_at": "2026-09-18T16:14:32+08:00",
+    "source_sha256": "3cec551fca15b7e61ccc0d4309c6be0978e91f3b982153a106ad693365e69786",
+    "source_files": 670,
+    "product_source_sha256": "98b085cdd464e936fea48b4eb8a24ad141a1a6469b43eaf1087d2d2e7e9762e4",
+    "product_to_current_diff": [
+      "back/tests/test_agent_model_provider_repair.py: expected timeout code updated; production code unchanged"
+    ],
+    "backend": {
+      "passed": 834,
+      "skipped": 12,
+      "seconds": 42.41,
+      "evidence": ".tmp/产品运行策略-20260918-01/后端全量-04.xml"
+    },
+    "frontend": {
+      "passed": 182,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "seconds": 221.41832,
+      "evidence": ".tmp/产品运行策略-20260918-01/前端完整回归/results.json"
+    },
+    "typescript": "tsc -p tsconfig.app.json --noEmit --incremental false: exit 0",
+    "pg_policy": {
+      "passed": 8,
+      "seconds": 6.29,
+      "postgres_version": "18.3",
+      "grant_records": 0,
+      "guard_disabled": false,
+      "evidence": ".tmp/产品运行策略-20260918-01/无grant产品入口-03/task-policy-pg.xml",
+      "not_pg16_evidence": true
+    },
+    "product": {
+      "status": "SUCCESS",
+      "case_id": "8813886a-42f1-4155-9536-6848e3bfcb3a",
+      "dataset_id": 2,
+      "dataset_slug": "submitted-8813886a",
+      "zp_sha256": "c66c7a0e52d142ea6891ff4676fc1ed786aac817c21f3eb0fc62213841d8a144",
+      "handover_sha256": "7e9844fd229a53f19ccccb82af2228da882cab9916a6681cae1243a14ed54ed1",
+      "source_scope": "Synthetic complete 87-byte table, 2 rows and 2 runs; NOT MaxQuant",
+      "model_transport": "Explicit local gpt-test-fixture, not real GPT",
+      "entry": "Fresh session -> normal app.main path/upload -> recorded server task policy with zero grants -> independent Worker -> tools/contracts/Writer/full semantic/PG/HTTP/browser/final commit/HANDOVER",
+      "grant_rows": {
+        "agent_authorizations": 0,
+        "agent_import_policies": 0,
+        "agent_authorized_lineages": 0,
+        "agent_case_authority": 0,
+        "agent_experiments": 0
+      },
+      "browser_negative_checks": [
+        "anonymous",
+        "cross-owner",
+        "out-of-scope path"
+      ],
+      "evidence": ".tmp/产品运行策略-20260918-01/无grant产品入口-03",
+      "retained_root": ".viewer-test-deliveries/product-policy-20260918-03",
+      "readback": ".viewer-test-deliveries/product-policy-20260918-03/restart-readback.json",
+      "worker_seconds": 36.04700000002049,
+      "worker_peak_rss_bytes": 172539904,
+      "retained_file_bytes": 90177277,
+      "processes_stopped": true
+    },
+    "maintenance": {
+      "task_id": "39c4be68-e15d-4ed4-85bb-e0765eba0fc8",
+      "state": "AWAITING_REVISION_VALIDATION",
+      "grant_required": false,
+      "parent_case_inherited": true,
+      "ever_published_preserved": true,
+      "initial_role_called": false,
+      "scope": "normal feedback -> queued task -> independent maintenance role -> fixed mapping executor/ZP; no repair publication claimed",
+      "evidence": ".tmp/产品运行策略-20260918-01/无grant产品入口-03/maintenance.json"
+    },
+    "request_journal": {
+      "initial": 4,
+      "maintenance": 1,
+      "outcome": "RESPONSE",
+      "unknown": 0,
+      "unsent_pending": 0,
+      "units": {
+        "initial": 191042,
+        "maintenance": 43144
+      },
+      "not_billed_tokens": true,
+      "real_gateway_requests": 0
+    },
+    "harness_sha256": {
+      "cs/GPT正常入口验收.py": "403bffe02c06092bcb2a1399e89e48e91455a486daa8a957461e3722025b8bf4",
+      "cs/保留交付回读.py": "8e5d58485e29a6cba88b97196965bd4a90db50eb509da168c853e069bce5dce7"
+    },
+    "original_case_or_old_database_accessed": false,
+    "production_deployed": false
+  },
+  "previous_shared_workspace_verified_baseline": {
+    "source_sha256": "34681efd6531ef23c0d8ac5083fe752920eccf73088b2441fcf09f51cfdb4cda",
+    "source_files": 671,
+    "backend": {
+      "passed": 839,
+      "skipped": 12,
+      "seconds": 50.09,
+      "evidence": ".tmp/共享访问-20260918-01/后端全量-01.xml",
+      "later_change": "Generated HANDOVER access wording only; affected 23 tests and full product verification passed afterwards"
+    },
+    "frontend": {
+      "passed": 182,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "seconds": 222.156174,
+      "evidence": ".tmp/共享访问-20260918-01/前端全量-复验/results.json"
+    },
+    "typescript": "tsc -p tsconfig.app.json --noEmit --incremental false: exit 0",
+    "product": {
+      "status": "SUCCESS",
+      "case_id": "c133eae3-63da-4125-9676-e5c19954259c",
+      "dataset_id": 2,
+      "source_scope": "2-row synthetic complete table; NOT real MaxQuant",
+      "model_transport": "local HTTP substitute",
+      "login_required": false,
+      "grant_required": false,
+      "format_name_input": "",
+      "format_details_input": "",
+      "analysis_input": "AUTO",
+      "tests": [
+        "fresh browser with no handoff/cookie injection",
+        "normal server path and file upload",
+        "second unauthenticated context reads shared case",
+        "internal management remains 403",
+        "outside allowed directory rejected",
+        "normal Worker/Writer/full semantic/PG/HTTP/browser/final commit",
+        "independent maintenance candidate only"
+      ],
+      "evidence": ".tmp/共享访问-20260918-01/无登录空格式产品入口-02",
+      "retained_root": ".viewer-test-deliveries/shared-workspace-20260918-02",
+      "readback": ".viewer-test-deliveries/shared-workspace-20260918-02/restart-readback.json",
+      "processes_stopped": true
+    },
+    "real_maxquant": {
+      "case_id": "6bd93504-78a1-41c6-81f0-8702eb60896a",
+      "source_path": "E:\\viewer-agent\\maxquant\\maxquant-viz-data\\single-sample",
+      "source_scope_requested": "All contents of the directory; no source slicing",
+      "browser_url": "http://localhost:5173/agent-import-cases/6bd93504-78a1-41c6-81f0-8702eb60896a",
+      "login_used": false,
+      "grant_used": false,
+      "format_name_input": "",
+      "format_details_input": "",
+      "analysis_input": "AUTO",
+      "status": "FAILED",
+      "last_successful_node": "Case created and research executing beyond the previous identity gate",
+      "failure_code": "MODEL_REQUEST_TIMEOUT",
+      "phase": "agent_1_research",
+      "reason": "TRANSPORT_TIMEOUT",
+      "http_status": null,
+      "configured_model": "gpt-6-astra",
+      "observed_gateway_origin": "http://localhost:55597",
+      "real_upstream_identity": "not proven",
+      "request_timeout_seconds": 180,
+      "model_request_artifacts_visible": 4,
+      "exact_gateway_completed_requests": "not reconciled; do not infer from artifact sizes",
+      "final_zp_created": false,
+      "final_dataset_committed": false,
+      "handover_created": false,
+      "failure_log": "logs/back-shared-access-20260918-01.stdout.log:921",
+      "failure_time": "2026-09-18T17:28:36+08:00",
+      "no_retry_by_new_case": true,
+      "no_deadline_extension": true
+    },
+    "deployment": "Current user-owned local backend restarted with consent on 127.0.0.1:8000 and left running; frontend kept; no production rollout",
+    "historical_case_or_old_database_accessed": false
+  },
+  "previous_optimization_verified_baseline": {
+    "source_sha256": "8ed018229f1d22e78a95cb75a02d20174409e5efaa43dbf5b2758fcae1cab9ad",
+    "source_files": 672,
+    "backend": {
+      "passed": 845,
+      "skipped": 12,
+      "seconds": 39.52,
+      "evidence": ".tmp/研究优化-20260920-01/最终后端全量-复验.xml"
+    },
+    "frontend": "Unchanged this iteration; no new full frontend run claimed",
+    "product_e2e": "Not rerun in this optimization; last full synthetic shared-workspace evidence belongs to previous baseline",
+    "deployment": "No deliberate restart of current API/Worker; loaded-code state not rechecked",
+    "original_case_state": "FAILED (unchanged)",
+    "latency_diagnostic": {
+      "related_case": "6bd93504-78a1-41c6-81f0-8702eb60896a",
+      "diagnostic_case": "fa65bc36-8679-494c-9c24-b93f9a720daf",
+      "real_requests": 1,
+      "protocol": "chat_completions/json_object",
+      "request_model": "gpt-6-astra",
+      "response_model": "gpt-6-astra",
+      "input_bytes": 84423,
+      "timeout_seconds": 180,
+      "output_limit": 4096,
+      "elapsed_seconds": 137.0470000000205,
+      "connection_and_send_seconds": 2.0630000000237487,
+      "response_headers_seconds": 136.9220000000205,
+      "finish_reason": "stop",
+      "http_response_received": true,
+      "blueprint_valid": false,
+      "validation_error_type": "root value_error; exact message was not retained in this attempt",
+      "diagnostic_stopped_before_second_call": true,
+      "interpretation": "HTTP phase completed inside unchanged timeout; output contract failed. Raw summary's diagnostic budget error is the one-call diagnostic refusing extra repair, NOT a new product permission requirement.",
+      "evidence": ".tmp/研究优化-20260920-01/单次真实汇总/summary.json",
+      "comparison_limit": "Fresh bounded deterministic observations, not exact historical tool-argument replay or controlled throughput benchmark",
+      "source_evidence_bytes_before": 95555,
+      "source_evidence_bytes_after": 67457,
+      "no_full_import_or_case_recovery": true,
+      "later_offline_only_changes": [
+        "explicit at-most prompt wording",
+        "precise validation feedback on bounded repair",
+        "MODEL_BLUEPRINT_INVALID classification",
+        "future invalid-response retention and nonzero diagnostic failure exit"
+      ]
+    },
+    "harness_sha256": {
+      "cs/研究上下文测验.py": "20112fa53bba3416b377d7b0f12242247b3986654dac7c0375fbd805213b8d45"
+    }
+  },
+  "previous_maxquant_verified_baseline": {
+    "source_sha256": "56b81c826f67a4fd2ac479200ad72a12b646518ea2fe8c48182324a89ccd215a",
+    "source_files": 676,
+    "delivery_source_sha256": "07a4275dff9f3642163f5b85f65d7859ebac2a7758a2d6e427aa52a4667b8358",
+    "difference_since_delivery": [
+      "front/tests/bu-match-detail.spec.ts (test coordinates only; no production code change)"
+    ],
+    "backend": {
+      "passed": 862,
+      "skipped": 12,
+      "seconds": 60.23,
+      "evidence": ".tmp/完整MaxQuant-20260920-01/后端全量-保留修复.xml"
+    },
+    "frontend": {
+      "passed": 182,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "seconds": 164.425829,
+      "evidence": ".tmp/完整MaxQuant-20260920-01/前端全量-最终/results.json",
+      "transport": "Mock regression; separate real-product browser validation exists"
+    },
+    "typescript": "tsc -p tsconfig.app.json --noEmit --incremental false: exit 0",
+    "product_e2e": "Same live MaxQuant Case: blank format/AUTO/shared access -> real GPT research/repair/implementation/review -> complete ZP -> independent PG18.3/HTTP/browser -> ordinary reviewed import -> SUCCESS/HANDOVER -> model/Worker-off restart readback",
+    "deployment": "Local current workspace on 127.0.0.1:8000 plus existing frontend5173; no production rollout",
+    "original_case_state": "MaxQuant 6bd93504 SUCCESS/version26/revision5; old DIA-CLIP case untouched"
+  },
+  "web_reproduction_optimization": {
+    "status": "PASSED_REAL_NORMAL_ENTRY_WITHIN_25_MINUTES",
+    "goal": "Complete authorized MaxQuant import from a fresh normal browser submission in the tens-of-minutes range without developer per-Case preparation",
+    "code": [
+      "back/app/local_start.py",
+      "start-back.bat",
+      "back/app/agent_import/source_acceptance.py",
+      "back/app/agent_import/workflow.py",
+      "back/app/agent_import/model_context.py",
+      "back/app/agent_import/model_provider.py",
+      "back/app/agent_import/model_audit.py",
+      "back/app/agent_import/case_service.py",
+      "front/verification/product-import-check.mjs"
+    ],
+    "source_rule": {
+      "scope": "Registered MaxQuant tables, one explicitly Thermo data-dependent mzML, parameter-declared first-token FASTA",
+      "full_source_files": 10,
+      "expected_identifications": 35,
+      "expected_groups": 32,
+      "fasta_keys": 4499,
+      "seconds": 2.266,
+      "candidate_plan_used": false,
+      "evidence": ".tmp/网页独立复现-20260920-01/来源规则全量-01/summary.json"
+    },
+    "fixture": {
+      "case_id": "f9d0ee01-1a9f-4199-81ee-43642f364c64",
+      "status": "SUCCESS",
+      "dataset_id": 2,
+      "submit_to_browsable_seconds": 37.43,
+      "real_gpt": false,
+      "source_rows": 2,
+      "grant_rows": 0,
+      "fresh_pg_runtime_tests": 11,
+      "processes_stopped": true,
+      "evidence": ".tmp/网页独立复现-20260920-01/无真实模型启动器-03/summary.json"
+    },
+    "external_rejection": {
+      "tool": "exec_command",
+      "process_created": false,
+      "real_model_calls": 0,
+      "evidence": ".tmp/网页独立复现-20260920-01/真实验收审批回执.json",
+      "rejection_layer": "external execution approval; not model gateway or Viewer authorization",
+      "workaround_or_real_retry": false,
+      "resolved": "User explicitly confirmed after disclosure; subsequent tools approved the real experiments. No workaround."
+    },
+    "next": "No more timing experiment required for this scope. Normal local startup is enabled; retain unsupported-source/semantic/version/engineering limitations.",
+    "fixture_previous": {
+      "case_id": "54c6af6d-55fe-451d-a647-41bed8e2dc25",
+      "status": "SUCCESS",
+      "dataset_id": 2,
+      "submit_to_browsable_seconds": 38.153,
+      "real_gpt": false,
+      "source_rows": 2,
+      "grant_rows": 0,
+      "fresh_pg_runtime_tests": 10,
+      "processes_stopped": true,
+      "evidence": ".tmp/网页独立复现-20260920-01/无真实模型启动器-02/summary.json"
+    },
+    "cancel_progress_boundary": "Model progress is inside dispatch try/finally; cancellation before send becomes NOT_SENT with both ledgers released. Real local PG test added.",
+    "final_real_run": {
+      "case_id": "7d10b72d-9dd5-4616-80e8-49275ac26597",
+      "status": "SUCCESS",
+      "version": 8,
+      "dataset_id": 2,
+      "dataset_slug": "files-7d10b72d",
+      "submitted_at": "2026-09-20T13:27:39.850Z",
+      "browsable_at": "2026-09-20T13:36:02.493Z",
+      "seconds": 502.643,
+      "timing_target_seconds": 1500,
+      "timing_target_met": true,
+      "real_model_requests": 6,
+      "all_responses_received": true,
+      "declared_model": "gpt-6-astra",
+      "upstream_identity_proven": false,
+      "ordinary_reserved_units": 458337,
+      "ordinary_reservation_limit": 750000,
+      "unit": "conservative request bytes plus output allowance; NOT billed tokens",
+      "grant_rows": 0,
+      "source_contract_precreated": false,
+      "reused_case": false,
+      "reused_research": false,
+      "reused_candidate": false,
+      "format_name": "",
+      "format_details": "",
+      "analysis": "AUTO",
+      "login": false,
+      "source_files": 10,
+      "source_bytes": 300770287,
+      "identifications": 35,
+      "peptides": 32,
+      "proteins": 33,
+      "protein_groups": 32,
+      "spectra": 7534,
+      "peak_pairs": 3949930,
+      "zp_sha256": "db5f20f7d2ea2467f0f5261a55963cfc292b0f04d4ee669e32a2d33e98488ebc",
+      "handover_sha256": "1cd8e8887f497f5a3f8a1a8679d4acf6b46fae3d39f536250842bca9c55c5c5f",
+      "verification_operation": "13425cad55d7de9731678afd1864e9398170e5c4a860ba569ebedde69babfbcd",
+      "evidence": ".tmp/网页独立复现-20260920-01/真实网页-07",
+      "retained": ".viewer-test-deliveries/maxquant-web-20260920-07",
+      "test_processes_stopped": true
+    },
+    "failed_runs": [
+      {
+        "run": 1,
+        "case_id": "4c77dde8-9f69-4616-9bf1-8ffe46432fcd",
+        "seconds": 415.385,
+        "first_failure": "MODEL_REQUEST_TIMEOUT during full Blueprint rewrite repair",
+        "request_attempts": 4
+      },
+      {
+        "run": 2,
+        "case_id": "5a175c8c-7e84-4469-ada9-659d59662c1a",
+        "seconds": 398.253,
+        "first_failure": "Contradictory Join defaults; full candidate repair reservation exceeded",
+        "request_attempts": 5
+      },
+      {
+        "run": 3,
+        "case_id": "272998ef-1f47-4c79-9668-850d7813a728",
+        "seconds": 652.646,
+        "first_failure": "Companion virtual fields misinterpreted as mappings; full rewrite then review reservation exceeded",
+        "request_attempts": 6
+      },
+      {
+        "run": 4,
+        "case_id": "958b3ba8-b519-4c40-9c44-53ae9eaab761",
+        "seconds": 256.267,
+        "first_failure": "Research Blueprint180s transport timeout",
+        "request_attempts": 3
+      },
+      {
+        "run": 5,
+        "case_id": "7fe5728c-9e43-47a2-9471-1e239bd3bdd9",
+        "seconds": 370.383,
+        "first_failure": "Report-only optional unsupported view treated as executable requirement; REJECTED routed to user",
+        "request_attempts": 6
+      },
+      {
+        "run": 6,
+        "case_id": "12213ed9-cf95-4261-802d-f2090ba31606",
+        "first_failure": "Ordinary automatic review repair succeeded but second review exceeded old500000 policy",
+        "request_attempts": 6
+      }
+    ],
+    "real_request_attempts_across_all_7_runs": 36,
+    "normal_policy_change": "After measured ordinary review repair required about600k conservative units, new local-profile tasks default to750k. Historical/frozen policies unchanged; explicit tighter process override wins. Research timeout300s, implementation300s, review300s; no per-Case grant."
+  },
+  "previous_optimization_fixture_verified_baseline": {
+    "source_sha256": "7f1c9c8d6a279e6a14ef0686cecd6b452ebbf266e07cb769720532f0d7b9d16d",
+    "source_files": 680,
+    "backend": {
+      "passed": 873,
+      "skipped": 12,
+      "seconds": 43.7,
+      "evidence": ".tmp/网页独立复现-20260920-01/最终后端全量-取消复验.xml"
+    },
+    "frontend": "Application UI unchanged; previous182 not rerun. Changed verification browser driver syntax-checked and exercised against new actual PG/API with explicit synthetic model transport.",
+    "product_e2e": "Same final source, normal app.local_start + fresh browser + standalone Worker + real PG/HTTP/Writer/browser reviewed SUCCESS, 37.430s; synthetic2-row/model-transport substitute only",
+    "deployment": "New start-back normal startup implemented and tested in isolated fixture. User's existing local real dataset62/service untouched this iteration.",
+    "real_maxquant_fresh_run": "NOT EXECUTED: external exec_command approval rejected before CreateProcess; 0 real model requests."
+  },
+  "previous_web_fixture_verified_baseline": {
+    "source_sha256": "7f1c9c8d6a279e6a14ef0686cecd6b452ebbf266e07cb769720532f0d7b9d16d",
+    "source_files": 680,
+    "backend": {
+      "passed": 873,
+      "skipped": 12,
+      "seconds": 43.7,
+      "evidence": ".tmp/网页独立复现-20260920-01/最终后端全量-取消复验.xml"
+    },
+    "frontend": "Application UI unchanged; previous182 not rerun. Changed verification browser driver syntax-checked and exercised against new actual PG/API with explicit synthetic model transport.",
+    "product_e2e": "Same final source, normal app.local_start + fresh browser + standalone Worker + real PG/HTTP/Writer/browser reviewed SUCCESS, 37.430s; synthetic2-row/model-transport substitute only",
+    "deployment": "New start-back normal startup implemented and tested in isolated fixture. User's existing local real dataset62/service untouched this iteration.",
+    "real_maxquant_fresh_run": "NOT EXECUTED: external exec_command approval rejected before CreateProcess; 0 real model requests."
+  }
+}

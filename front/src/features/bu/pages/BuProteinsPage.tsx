@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
 
 import { DataLoadError } from "@/components/common/data-state";
+import { DecoyTruthBadge } from "@/components/common/decoy-truth-badge";
 import { Pagination } from "@/components/common/pagination";
 import { Badge } from "@/components/ui/badge";
 import { fetchBuProteins } from "@/features/bu/api/buClient";
@@ -22,7 +23,7 @@ export function BuProteinsPage() {
   const pageSize = 50;
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["bu", dataset.slug, "proteins", page, search, hideDecoy],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "proteins", page, search, hideDecoy],
     queryFn: () =>
       fetchBuProteins(dataset.slug, {
         page,
@@ -37,6 +38,11 @@ export function BuProteinsPage() {
 
   const columns: BuColumn<BuProteinListItemOut>[] = [
     { key: "accession", header: "Accession", render: (row) => row.accession },
+    {
+      key: "classification",
+      header: "Classification",
+      render: (row) => <DecoyTruthBadge value={row.is_decoy} state={row.is_decoy_state} />,
+    },
     { key: "gene", header: "Gene", render: (row) => row.gene_name ?? "-" },
     { key: "description", header: "Description", render: (row) => row.description ?? "-" },
     {

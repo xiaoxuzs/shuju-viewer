@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.agent_import.contracts import AgentAnalysisCategory
 
@@ -80,6 +80,24 @@ class BlueprintGap(_StrictModel):
     resolution: str = Field(..., min_length=1, max_length=1000)
 
 
+class BlueprintCapabilityAssessment(_StrictModel):
+    capability_id: str = Field(..., min_length=1, max_length=160, description="Globally unique across ALL levels. Use distinct IDs such as entity.spectra and view.spectra; do not reuse the same ID for an entity and its view.")
+    level: Literal["entity", "relationship", "view"]
+    state: Literal["DIRECT", "DERIVED", "MISSING", "AMBIGUOUS", "VIEWER_UNSUPPORTED"]
+    reason: str = Field(..., min_length=1, max_length=1000)
+    evidence_ids: list[str] = Field(..., min_length=1, max_length=30)
+    derivation_id: str | None = Field(default=None, max_length=160)
+    unlocks: list[str] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def _derived_has_algorithm(self) -> "BlueprintCapabilityAssessment":
+        if self.state == "DERIVED" and not self.derivation_id:
+            raise ValueError("DERIVED capability assessment requires derivation_id")
+        if self.state != "DERIVED" and self.derivation_id is not None:
+            raise ValueError("derivation_id is allowed only for DERIVED assessments")
+        return self
+
+
 class BlueprintCitation(_StrictModel):
     title: str = Field(..., min_length=1, max_length=500)
     url: str = Field(..., min_length=8, max_length=2000)
@@ -107,9 +125,35 @@ class DatasetBlueprint(_StrictModel):
     default_import: BlueprintDefaultImport
     evidence: list[BlueprintEvidence] = Field(..., min_length=1, max_length=300)
     gaps: list[BlueprintGap] = Field(default_factory=list, max_length=100)
+    capability_assessments: list[BlueprintCapabilityAssessment] = Field(default_factory=list, max_length=300)
     citations: list[BlueprintCitation] = Field(..., max_length=100)
     acceptance_criteria: list[str] = Field(..., min_length=1, max_length=200)
     assumptions: list[str] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def _evidence_references_exist(self) -> "DatasetBlueprint":
+        evidence_ids = [item.evidence_id for item in self.evidence]
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise ValueError("Blueprint evidence_id values must be unique")
+        capability_ids = [item.capability_id for item in self.capability_assessments]
+        if len(capability_ids) != len(set(capability_ids)):
+            raise ValueError("Blueprint capability_id values must be unique")
+        declared = set(evidence_ids)
+        referenced = {
+            evidence_id
+            for collection in (
+                self.source_assets,
+                self.scientific_entities,
+                self.binary_content,
+                self.visualizations,
+                self.capability_assessments,
+            )
+            for item in collection
+            for evidence_id in item.evidence_ids
+        }
+        if not referenced.issubset(declared):
+            raise ValueError("Blueprint references an undeclared evidence_id")
+        return self
 
 
 class ResearchTraceEntry(_StrictModel):
@@ -120,6 +164,15 @@ class ResearchTraceEntry(_StrictModel):
     status: Literal["SUCCEEDED", "FAILED"]
     result_bytes: int = Field(..., ge=0)
     result_summary: str = Field(..., max_length=500)
+    result_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class ResearchObservation(_StrictModel):
+    call_id: str = Field(..., min_length=1, max_length=200)
+    tool_name: str = Field(..., min_length=1, max_length=120)
+    status: Literal["SUCCEEDED", "FAILED"]
+    result_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    payload: dict[str, Any]
 
 
 class AgentResearchResult(_StrictModel):
@@ -128,6 +181,7 @@ class AgentResearchResult(_StrictModel):
     model: str = Field(..., min_length=1, max_length=120)
     blueprint: DatasetBlueprint
     trace: list[ResearchTraceEntry] = Field(..., min_length=1, max_length=200)
+    observations: list[ResearchObservation] = Field(default_factory=list, max_length=64)
     local_tool_calls: int = Field(..., ge=1)
     web_search_calls: int = Field(..., ge=0)
     fetch_calls: int = Field(..., ge=0)

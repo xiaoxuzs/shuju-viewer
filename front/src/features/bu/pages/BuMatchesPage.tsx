@@ -2,6 +2,7 @@ import { useOutletContext, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { DataLoadError } from "@/components/common/data-state";
+import { DecoyTruthBadge } from "@/components/common/decoy-truth-badge";
 import { Pagination } from "@/components/common/pagination";
 import { Badge } from "@/components/ui/badge";
 import { fetchBuMatches, fetchBuOverview } from "@/features/bu/api/buClient";
@@ -19,8 +20,8 @@ export function BuMatchesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const page = Number(searchParams.get("page") ?? "1") || 1;
   const search = searchParams.get("search") ?? "";
-  const qMaxText = searchParams.get("q_max") ?? String(defaultQMax ?? 0.01);
-  const qMax = Number(qMaxText);
+  const qMaxText = searchParams.get("q_max") ?? String(defaultQMax ?? "");
+  const qMax = numberParam(qMaxText);
   const runIdText = searchParams.get("run_id") ?? "";
   const proteinIdText = searchParams.get("protein_id") ?? "";
   const runId = numberParam(runIdText);
@@ -29,18 +30,19 @@ export function BuMatchesPage() {
   const pageSize = 50;
 
   const overview = useQuery({
-    queryKey: ["bu", dataset.slug, "overview", "runs"],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "overview", "runs"],
     queryFn: () => fetchBuOverview(dataset.slug),
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["bu", dataset.slug, "matches", page, search, qMaxText, runIdText, proteinIdText, hideDecoy],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "matches", page, search, qMaxText, runIdText, proteinIdText, hideDecoy],
     queryFn: () =>
       fetchBuMatches(dataset.slug, {
         page,
         page_size: pageSize,
         search: search || undefined,
-        q_max: Number.isFinite(qMax) ? qMax : undefined,
+        q_max: qMax,
+        q_filter: qMax !== undefined,
         run_id: runId,
         protein_id: proteinId,
         decoy: !hideDecoy,
@@ -59,6 +61,11 @@ export function BuMatchesPage() {
         const raw = row.modified_sequence ?? row.sequence;
         return <span title={raw}>{formatModifiedSequenceForDisplay(raw)}</span>;
       },
+    },
+    {
+      key: "classification",
+      header: "Classification",
+      render: (row) => <DecoyTruthBadge value={row.is_decoy_match} state={row.is_decoy_state} />,
     },
     { key: "run", header: "Run", render: (row) => row.run_name },
     {

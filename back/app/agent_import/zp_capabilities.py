@@ -6,16 +6,17 @@ import importlib
 from typing import Any
 
 from app.zp_runtime.package import ensure_binary_layer_importable
+from app.declarative_ingest import build_declarative_ingest_capabilities
 
 
-def build_zp_capabilities() -> dict[str, Any]:
+def build_zp_capabilities(*, include_legacy_mapping_adapters: bool = True) -> dict[str, Any]:
     ensure_binary_layer_importable()
     source_adapters = importlib.import_module("binary_layer.source_adapters")
     bottom_up = importlib.import_module("binary_layer.bottom_up_schema")
     composite = importlib.import_module("binary_layer.composite_bottom_up_bundle")
     top_down = importlib.import_module("binary_layer.top_down_schema")
     adapters = source_adapters.build_default_source_adapter_registry().names()
-    return {
+    capabilities = {
         "schema_version": 1,
         "target_format_version": 3,
         "writer": "Viewer ZpWriter",
@@ -36,6 +37,8 @@ def build_zp_capabilities() -> dict[str, Any]:
             "bottom_up": list(bottom_up.BOTTOM_UP_EXTENSION_TYPES),
             "top_down": list(top_down.TOP_DOWN_EXTENSION_TYPES),
         },
+        "preferred_mapping_protocol": "viewer_declarative_bottom_up_v1",
+        "declarative_ingest": build_declarative_ingest_capabilities(),
         "mapping_adapters": {
             "maxquant_mzml_v1": {
                 "source_type": composite.SOURCE_TYPE,
@@ -168,3 +171,6 @@ def build_zp_capabilities() -> dict[str, Any]:
             }
         },
     }
+    if not include_legacy_mapping_adapters:
+        capabilities.pop("mapping_adapters", None)
+    return capabilities

@@ -14,7 +14,7 @@ export function BuPeptideDetailPage() {
   const { peptideId = "" } = useParams();
   const parsedPeptideId = Number(peptideId);
   const { data, isLoading, error } = useQuery({
-    queryKey: ["bu", dataset.slug, "peptide", parsedPeptideId],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "peptide", parsedPeptideId],
     queryFn: () => fetchBuPeptide(dataset.slug, parsedPeptideId),
     enabled: Number.isFinite(parsedPeptideId),
   });

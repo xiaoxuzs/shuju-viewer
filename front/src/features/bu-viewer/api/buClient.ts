@@ -32,6 +32,7 @@ export async function fetchBuRtMzHeatmap(
   params: {
     run_id?: number;
     q_max?: number;
+    q_filter?: boolean;
     bins_rt?: number;
     bins_mz?: number;
     decoy?: boolean;

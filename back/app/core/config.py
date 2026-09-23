@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,6 +38,12 @@ def _resolved_test_data_root(path: Path) -> Path:
     try:
         resolved.relative_to(temp_root)
     except ValueError as exc:
+        managed_root = os.environ.get("VIEWER_TEST_STORAGE_ROOT")
+        identity = os.environ.get("VIEWER_TEST_STORAGE_ID", "")
+        if managed_root:
+            from app.agent_import.test_storage import validate_test_storage
+            if validate_test_storage(resolved, managed_root, identity):
+                return resolved
         raise RuntimeError(f"Test DATA_ROOT must be inside the system temporary directory: {temp_root}") from exc
     if resolved == temp_root:
         raise RuntimeError("Test DATA_ROOT must be an isolated directory, not the system temporary root itself")
@@ -96,17 +103,59 @@ class Settings(BaseSettings):
     import_upload_chunk_bytes: int = Field(default=8_388_608, ge=1)
     #: Enable the controlled unknown-format Agent Case workflow.
     agent_import_enabled: bool = Field(default=True)
-    moonshot_api_key: str | None = Field(default=None)
-    moonshot_base_url: str = Field(default="https://api.moonshot.cn/v1")
-    moonshot_request_timeout_seconds: int = Field(default=60, ge=1)
-    agent_read_model: str = Field(default="kimi-k3")
+    #: Disable on API hosts when using the explicit standalone Worker.
+    agent_api_worker_enabled: bool = Field(default=True)
+    #: Explicit consent for redacted, allowlisted source excerpts to the research model.
+    agent_source_read_enabled: bool = Field(default=False)
+    #: Separate consent before research containing source excerpts reaches the implementation model.
+    agent_implementation_source_evidence_enabled: bool = Field(default=False)
+    agent_source_root: Path = Field(default=BACKEND_ROOT.parent)
+    #: Approved public document IDs -> exact HTTPS URLs. No arbitrary model URL.
+    agent_public_documents_json: str = Field(default="{}")
+    viewer_build_id: str | None = Field(default=None)
+    viewer_validation_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    agent_case_deadline_seconds: int = Field(default=7200, ge=60)
+    agent_case_token_budget: int = Field(default=500000, ge=1000)
+    # Compatibility name: guards unmanaged transport, not a product grant requirement.
+    # Ordinary Worker tasks always carry their own persisted runtime policy.
+    agent_model_authorization_required: bool = True
+    agent_test_model_enabled: bool = False
+    agent_delivery_reads_enabled: bool = False
+    agent_implementation_request_timeout_seconds: int | None = Field(default=None, ge=1)
+    agent_maintenance_request_timeout_seconds: int = Field(default=180, ge=1)
+    agent_maintenance_max_output_tokens: int = Field(default=4096, ge=256, le=4096)
+    agent_case_process_memory_budget_bytes: int = Field(default=0, ge=0)
+    agent_input_snapshot_enabled: bool = Field(default=False)
+    agent_source_max_bytes: int = Field(default=2_147_483_648, ge=1)
+    #: Local trusted-code verification only; generated-code sandboxing is a separate gate.
+    agent_candidate_verification_enabled: bool = Field(default=False)
+    agent_verification_postgres_bin: Path | None = Field(default=None)
+    agent_verification_node: Path | None = Field(default=None)
+    agent_verification_browser_cache: Path | None = Field(default=None)
+    agent_verification_oracle_root: Path | None = Field(default=None)
+    agent_verification_signing_key: str | None = Field(default=None)
+    agent_internal_token: str | None = Field(default=None)
+    agent_browser_sessions_enabled: bool = False
+    agent_browser_origin: str | None = None
+    agent_browser_session_seconds: int = Field(default=1800, ge=60, le=3600)
+    agent_revision_reads_enabled: bool = False
+    agent_auto_delivery_enabled: bool = Field(default=False)
+    agent_engineering_enabled: bool = False
+    agent_engineering_allowed_paths_json: str = "[]"
+    agent_engineering_executable: Path | None = None
+    agent_engineering_engine: str | None = None
+    agent_engineering_image: str | None = None
+    agent_engineering_admission_path: Path | None = None
+    agent_engineering_admission_key: str | None = None
+    agent_research_reasoning_effort: Literal["low", "medium", "high"] = "high"
+    # One explicit OpenAI-compatible connection for every model role.
+    openai_api_key: str | None = Field(default=None)
+    openai_base_url: str = Field(default="")
+    openai_model: str = Field(default="")
+    openai_request_timeout_seconds: int = Field(default=180, ge=1)
     agent_read_max_output_tokens: int = Field(default=4096, ge=256)
     agent_review_max_output_tokens: int = Field(default=16384, ge=1024)
     agent_review_request_timeout_seconds: int = Field(default=300, ge=1)
-    deepseek_api_key: str | None = Field(default=None)
-    deepseek_base_url: str = Field(default="https://api.deepseek.com")
-    deepseek_request_timeout_seconds: int = Field(default=120, ge=1)
-    agent_implementation_model: str = Field(default="deepseek-v4-pro")
     agent_implementation_max_output_tokens: int = Field(default=8192, ge=256)
     #: Optional project-level FASTA used when a Bottom-Up import does not include a dataset FASTA.
     bu_default_fasta_path: Path | None = Field(default=None)

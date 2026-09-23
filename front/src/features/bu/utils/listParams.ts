@@ -9,7 +9,7 @@ export function setListParam(
 ) {
   const next = new URLSearchParams(searchParams);
   const trimmed = value.trim();
-  if (trimmed) next.set(key, trimmed);
+  if (trimmed || key === "q_max") next.set(key, trimmed);
   else next.delete(key);
   if (resetPage) next.set("page", "1");
   setSearchParams(next);
@@ -21,13 +21,13 @@ export function clearListParams(
   keys: string[],
 ) {
   const next = new URLSearchParams(searchParams);
-  keys.forEach((key) => next.delete(key));
+  keys.forEach((key) => key === "q_max" ? next.set(key, "") : next.delete(key));
   next.set("page", "1");
   setSearchParams(next);
 }
 
 export function numberParam(value: string | null): number | undefined {
-  if (!value) return undefined;
+  if (!value?.trim()) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }

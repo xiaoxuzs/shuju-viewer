@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import type { DatasetOut } from "@/api/types";
+import type { DatasetOut, DatasetViewCapability } from "@/api/types";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  findDatasetViewCapability,
+  useDatasetCapability,
+} from "@/features/dataset-capabilities/DatasetCapabilityContext";
+import { DatasetCapabilityReportSlot } from "@/features/dataset-capabilities/DatasetCapabilityReportSlot";
 import { AcquisitionContextPanel } from "@/features/spectra-only/components/AcquisitionContextPanel";
 import { ChromatogramPanel } from "@/features/spectra-only/components/ChromatogramPanel";
 import { RunSelector } from "@/features/spectra-only/components/RunSelector";
@@ -27,6 +32,9 @@ import {
 
 export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
   const { beginManualTransition } = usePageTransition();
+  const capabilityReport = useDatasetCapability();
+  const spectraView = findDatasetViewCapability(capabilityReport, "spectra");
+  const spectraDisabled = spectraView?.availability === "DISABLED";
   const runs = useMemo(() => dataset.runs ?? [], [dataset.runs]);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(runs[0]?.run_id ?? null);
   const [selectedScan, setSelectedScan] = useState<number | null>(null);
@@ -34,7 +42,7 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
   const scanIndex = useQuery({
     queryKey: ["spectra-only", dataset.id, selectedRun?.run_id ?? null, "scan-index", "full"],
     queryFn: ({ signal }) => fetchSpectraFullScanIndex(dataset.id, selectedRun!.run_id, signal),
-    enabled: selectedRun?.run_id != null,
+    enabled: !spectraDisabled && selectedRun?.run_id != null,
     retry: chartQueryRetry,
   });
   const allScans = scanIndex.data?.items ?? [];
@@ -63,10 +71,13 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
   const needsSelectedSpectrum = selectedScanNumber != null;
   const needsParentSpectrum = selectedMsLevel === 2 && parentMs1ScanNumber != null;
   usePageTransitionReady(
-    !scanIndex.isLoading
-    && chromatogramReady
-    && (!needsSelectedSpectrum || selectedSpectrumReady)
-    && (!needsParentSpectrum || parentSpectrumReady),
+    spectraDisabled
+    || (
+      !scanIndex.isLoading
+      && chromatogramReady
+      && (!needsSelectedSpectrum || selectedSpectrumReady)
+      && (!needsParentSpectrum || parentSpectrumReady)
+    ),
   );
 
   useEffect(() => {
@@ -86,20 +97,35 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
     setSelectedScan(scanNumber);
   };
   const spectraMode = dataset.capabilities?.spectra_source === "zp" ? "ZP binary" : "mzML memory";
+  const pageHeader = (
+    <PageHeader
+      title={dataset.name}
+      description={dataset.description ?? "Raw spectra dataset."}
+      crumbs={[{ label: "Datasets", to: "/datasets" }, { label: dataset.name }]}
+      actions={
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Badge>Spectra</Badge>
+          {dataset.status && <Badge variant="secondary">{dataset.status}</Badge>}
+        </div>
+      }
+    />
+  );
+
+  if (spectraDisabled && spectraView) {
+    return (
+      <>
+        {pageHeader}
+        <DatasetCapabilityReportSlot />
+        <DisabledSpectraView view={spectraView} />
+      </>
+    );
+  }
 
   return (
     <>
-      <PageHeader
-        title={dataset.name}
-        description={dataset.description ?? "Raw spectra dataset."}
-        crumbs={[{ label: "Datasets", to: "/datasets" }, { label: dataset.name }]}
-        actions={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge>Spectra</Badge>
-            {dataset.status && <Badge variant="secondary">{dataset.status}</Badge>}
-          </div>
-        }
-      />
+      {pageHeader}
+
+      <DatasetCapabilityReportSlot />
 
       <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
         <SummaryCard label="Runs" value={runs.length.toLocaleString()} />
@@ -182,6 +208,22 @@ export function SpectraOnlyPage({ dataset }: { dataset: DatasetOut }) {
         </div>
       </div>
     </>
+  );
+}
+
+function DisabledSpectraView({ view }: { view: DatasetViewCapability }) {
+  return (
+    <Card className="border-destructive/40 bg-destructive/5" data-testid="disabled-spectra-view">
+      <CardContent className="p-5">
+        <div className="font-semibold text-destructive">Spectra view unavailable</div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {view.message ?? "This dataset does not contain verified spectra Viewer can display."}
+        </p>
+        {view.reason_code && (
+          <code className="mt-2 block font-mono text-xs text-destructive">{view.reason_code}</code>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

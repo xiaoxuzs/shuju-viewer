@@ -1,5 +1,6 @@
 import { TransitionLink } from "@/features/page-transition";
 
+import { DecoyTruthBadge } from "@/components/common/decoy-truth-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +18,7 @@ export function BuProteinHeader({ slug, protein }: { slug: string; protein: BuPr
           </div>
           <div className="flex flex-wrap gap-2">
             {protein.gene_name && <Badge variant="secondary">{protein.gene_name}</Badge>}
-            {protein.is_decoy && <Badge variant="outline">decoy</Badge>}
+            <DecoyTruthBadge value={protein.is_decoy} state={protein.is_decoy_state} />
             <Button asChild size="sm" variant="outline">
               <TransitionLink to={`/datasets/${slug}/matches?protein_id=${protein.id}`}>View all matches</TransitionLink>
             </Button>

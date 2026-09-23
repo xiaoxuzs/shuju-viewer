@@ -73,3 +73,36 @@ def test_default_fasta_is_used_when_dataset_has_no_fasta(tmp_path: Path, monkeyp
     assert sequence == "MARTKQTAR"
     assert metadata["sequence_source"] == "default_fasta"
     assert session.statements[0]["sequence"] == "MARTKQTAR"
+
+
+def test_agent_dataset_never_backfills_from_an_unrelated_default_fasta(tmp_path: Path, monkeypatch) -> None:
+    fallback = tmp_path / "human.fasta"
+    fallback.write_text(">sp|P62805|H4_HUMAN\nMARTKQTAR\n", encoding="utf-8")
+    monkeypatch.setattr(protein_sequence_resolver.settings, "bu_default_fasta_path", fallback)
+    monkeypatch.setattr(protein_sequence_resolver.settings, "bu_uniprot_enabled", True)
+
+    def fail_fetch(_accession: str) -> tuple[str | None, dict[str, Any]]:
+        raise AssertionError("Agent datasets require the exact search FASTA and must not query UniProt")
+
+    monkeypatch.setattr(protein_sequence_resolver, "_fetch_uniprot_cached", fail_fetch)
+    session = _Session()
+
+    sequence, metadata = protein_sequence_resolver.resolve_base_sequence(
+        session,  # type: ignore[arg-type]
+        {
+            "dataset_id": 1,
+            "source_root": str(tmp_path),
+            "capabilities": {"import_mode": "agent_declarative"},
+        },
+        {
+            "id": 2,
+            "accession": "P62805",
+            "is_decoy": False,
+            "base_sequence": None,
+            "extra_metadata": {"sequence_state": "MISSING"},
+        },
+    )
+
+    assert sequence is None
+    assert metadata["sequence_fetch_error"] == "exact_search_fasta_required"
+    assert session.statements == []

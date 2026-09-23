@@ -75,17 +75,23 @@ def test_case_records_zp_evidence_before_review(tmp_path: Path) -> None:
     assert "E:/data/unknown" not in api_payload
     assert str(zp) not in api_payload
     assert str(certificate) not in api_payload
-    assert [item.artifact_type for item in service.list_artifacts(case_id)] == [
+    artifacts = service.list_artifacts(case_id)
+    by_type = {item.artifact_type: item for item in artifacts}
+    assert len(artifacts) == 5
+    assert set(by_type) == {
         "strategy",
         "candidate_plan",
         "candidate_zp",
         "deep_validation_certificate",
         "verification_summary",
-    ]
+    }
+    assert by_type["strategy"].structured_payload == {"decision": "READY"}
+    assert by_type["candidate_plan"].structured_payload == _plan().model_dump(mode="json")
+    assert by_type["candidate_zp"].structured_payload is None
     assert service.list_attempts(case_id)[0].result == "PASSED"
 
 
-def test_three_binary_failures_require_user_and_answer_starts_guided_revision(tmp_path: Path) -> None:
+def test_three_distinct_binary_failures_require_user_and_answer_starts_guided_revision(tmp_path: Path) -> None:
     service = _service(tmp_path)
     case_id = _case(service)
 
@@ -93,7 +99,10 @@ def test_three_binary_failures_require_user_and_answer_starts_guided_revision(tm
         current = service.get_case(case_id)
         if current.status == CaseStatus.CREATED:
             service.start_analysis(case_id)
-        service.record_failure(case_id, code="ZP_UNSUPPORTED_SOURCE", summary=f"failure {attempt + 1}")
+        # Three genuinely different observations still exhaust the scientific
+        # attempt limit. Identical evidence now stops after two (separate test).
+        service.record_failure(case_id, code="ZP_UNSUPPORTED_SOURCE", summary=f"failure {attempt + 1}",
+                               diagnostics={"unsupported_source": ("identifications", "spectra", "reference")[attempt]})
 
     waiting = service.get_case(case_id)
     assert waiting.status == CaseStatus.NEEDS_USER

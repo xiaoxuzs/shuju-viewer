@@ -24,7 +24,11 @@ class _CountsResult:
 
 
 class _CountsSession:
-    def execute(self, *_args: Any, **_kwargs: Any) -> _CountsResult:
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def execute(self, statement: Any, _params: dict[str, Any] | None = None) -> _CountsResult:
+        self.statements.append(str(statement))
         return _CountsResult()
 
 
@@ -53,8 +57,10 @@ def test_raw_only_overview_does_not_read_bottom_up_extensions(
     )
     monkeypatch.setattr(overview_service, "_runs", lambda *_args: [])
 
-    overview = overview_service.get_overview(_CountsSession(), dataset)  # type: ignore[arg-type]
+    session = _CountsSession()
+    overview = overview_service.get_overview(session, dataset)  # type: ignore[arg-type]
 
     assert overview.counts.matches == 0
     assert overview.counts.runs == 1
     assert overview.runs == []
+    assert session.statements[0].count("is_decoy_state") == 2

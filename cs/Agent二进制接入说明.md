@@ -43,7 +43,7 @@ Agent 1 当前只获得以下本地只读工具：
 ## 安全边界
 
 - 模型输出不能包含可执行代码、shell 命令、绝对路径或 `..` 路径。
-- Agent 1 首轮必须调用工具，且完成数据类型对应的本地检查后才能输出 Blueprint。
+- Agent 1 首轮必须调用工具并把 inventory 分页读完；小目录逐文件检查，大目录至少覆盖每类扩展名；mzML/FASTA 还必须调用对应科学 inspector。
 - 工具参数只能使用 Case 相对路径；绝对路径、`..`、symlink 和 junction 被拒绝。
 - 初始模型请求不发送文件正文；工具仅返回有界结构化统计。
 - 源目录采样不跟随符号链接或 Windows junction/reparse point。
@@ -85,22 +85,36 @@ Agent 1 当前只获得以下本地只读工具：
 
 本次接入关闭了 `viewer-agent` 原型中直接落通用数据库表、固定 demo importer 和浅层 JSON “验证即成功”的路径。
 
-当前 Agent 可以注册已有 `.zp`，并调用 ZP engine 已存在的 mzML、Thermo RAW、Top-Down bundle、DIA-NN 等转换能力。之前人工硬编码、空谱图的 MaxQuant demo adapter 和 validator 豁免已经删除；本轮由 Agent 1 Blueprint 驱动新增了受控复合 adapter `maxquant_mzml_v1`：它复用真实 mzML core writer，并把 MaxQuant 结果写入既有 Bottom-Up extensions。
+当前 Agent 可以注册已有 `.zp`，并调用 ZP engine 已存在的 mzML、Thermo RAW、Top-Down bundle、DIA-NN 等转换能力。未知 Bottom-Up 数据新增 `viewer_declarative_bottom_up_v1` 通用协议：Agent 2 只能选择已注册 reader、canonical target、transform 和 exact join；计划必须登记每个物理表字段，真正的转换器会消费该计划并写入 `viewer_semantic_dataset` ZP 扩展。
 
-该 adapter 已注册进 `SourceInspector`、`SourceAdapterRegistry` 和 Agent `zp_capabilities`。后续目录满足同一严格签名时，Viewer ZP 默认转换链路可直接识别，不再调用模型重新设计：单 run、RAW/mzML/FASTA/mqpar/evidence/proteinGroups 齐全，RAW 与 mzML SHA-1 一致，且实际修饰属于当前支持范围。用户仍可在 Agent Case 中查看 Mapping Plan、要求返工或拒绝；没有通过审核的模型输出不会改变 adapter。
+旧 `maxquant_mzml_v1` adapter 仅保留为历史兼容，默认模型能力清单不再暴露它。MaxQuant 验收必须走通用声明式协议，不能按软件名、目录名或固定 adapter id 分支。完整真实样本已通过该路径写入 7,534 张谱图、35 条 PSM、32 条肽段、33 条蛋白、32 个蛋白组、1 条实际修饰和 35 条 PSM 定量。
 
-第一版不泛化到多 run、缺 RAW、缺 FASTA、其他厂商 RAW 或新的实际修饰；这些结构仍返回不支持并要求新的 Agent Blueprint/受控 adapter，不能静默套用本规则。
+通用协议允许表格-only、缺 FASTA 和缺谱图的降级导入。缺 FASTA 时保留 PSM、肽段和蛋白 accession；缺谱图时保留结果实体但禁用 spectrum/XIC；缺 fragment annotation 时不得补造。封闭二进制仍必须有 Viewer 信任的物理 reader，否则报告 `VIEWER_UNSUPPORTED`。
+
+真实 Viewer staging 会在人工批准前执行 ZP 回读、universal schema 投影、谱图 API（如适用）及能力报告编译，然后回滚暂存事务。用户批准后使用同一候选 SHA-256 正式发布。
 
 自定义分析类别当前是用户声明的研究语义，不会被静默映射成 Top-Down、Bottom-Up 或 Spectra Only。Viewer 的物理 `datasets/runs.analysis_mode` 仍只使用既有受支持模式；若 Agent 无法为自定义类别提出当前 ZP 能力可执行的物理方案，应返回 `NEEDS_USER` 或 `UNSUPPORTED`，而不是伪造可导入结果。
 
 真实数据验收入口：
 
 ```powershell
-back\.venv\Scripts\python.exe cs\Kimi研究Agent真实验收.py --output .tmp\Kimi-Agent1-blueprint.json
+back\.venv\Scripts\python.exe cs\Kimi研究Agent真实验收.py `
+  --output .tmp\Kimi-Agent1-blueprint.json `
+  --user-message 'confirm unit:Retention time=minute' `
+  --user-message 'confirm acquisition_mode=dda'
 
 back\.venv\Scripts\python.exe cs\DeepSeek实施Agent真实验收.py `
   --blueprint .tmp\Kimi-Agent1-blueprint.json `
-  --output .tmp\DeepSeek-Agent2-plan.json
+  --output .tmp\DeepSeek-Agent2-plan.json `
+  --user-message 'confirm unit:Retention time=minute' `
+  --user-message 'confirm acquisition_mode=dda'
+
+back\.venv\Scripts\python.exe cs\DeepSeek实施Agent真实验收.py `
+  --blueprint .tmp\Kimi-Agent1-blueprint.json `
+  --candidate .tmp\DeepSeek-Agent2-plan.json `
+  --execute-root .tmp\双Agent通用验收\execution `
+  --user-message 'confirm unit:Retention time=minute' `
+  --user-message 'confirm acquisition_mode=dda'
 
 back\.venv\Scripts\python.exe cs\Kimi复核Agent2真实验收.py `
   --blueprint .tmp\Kimi-Agent1-blueprint.json `
@@ -108,11 +122,26 @@ back\.venv\Scripts\python.exe cs\Kimi复核Agent2真实验收.py `
   --output .tmp\Kimi-Agent1-review.json
 
 back\.venv\Scripts\python.exe cs\MaxQuant复合二进制验收.py
+
+back\.venv\Scripts\python.exe cs\MaxQuant通用机制验收.py `
+  --source <MaxQuant样本目录> `
+  --output .tmp\MaxQuant通用机制验收\candidate.zp
 ```
 
 研究入口真实调用当前配置的 Agent 1 模型；本地 Sol 模式只使用 Viewer 本地只读工具，不写 `.zp`、数据库或源目录。
 
-## 本地 Sol 切换验证记录
+## 本轮最终验证记录（2026-09-04）
+
+- 真实 Agent 1 从 `AUTO` 识别 Bottom-Up，完成 10/10 文件通用检查、mzML/FASTA 深度摘要；能力清单未暴露 legacy MaxQuant adapter。
+- 真实 Agent 2 生成 schema v3 通用声明式计划并实际执行：7,534 spectra、35 PSM、32 peptides、33 proteins、32 groups、1 modification、35 quantification，35/35 scan 精确关联。
+- 实际执行成功的候选仍被 Agent 1 因 modification delimiter 与 Blueprint 不一致而拒绝发布；后续 rework 的多值 leading accession 冲突也被拒绝，并已前移为 preflight 规则。本记录不把两个分别通过不同门禁的候选合并宣称为一次已批准发布。
+- 29 条蛋白序列直接可用、4 条明确缺失；protein coverage 部分可用，fragment annotation 禁用，缺失输入与 unlocks 已进入报告。
+- 缺 mzML 与 FASTA 的验收仍保留 35 PSM、32 peptides、33 proteins；只禁用依赖谱图/序列的视图。
+- 后端全量 pytest：`638 passed, 12 skipped`。
+- 前端 Playwright：`163 passed`；生产构建通过；lint 为 0 errors、9 个既有 warnings。
+- 指纹基准：32,998 文件，中位数 `0.0638s`，满足 `≤ 0.5s`。
+
+## 本地 Sol 切换验证记录（历史）
 
 - Agent 1 的实际运行配置已切换为本地 OpenAI-compatible `gpt-5.6-sol`；Agent 2 仍为 `deepseek-v4-pro`，其配置与请求路径未修改。
 - 本地接口的工具调用、工具结果回传、`response_format=json_object` 与 `max_completion_tokens` 两轮协议探测均返回 HTTP 200，最终内容可解析为 JSON。

@@ -6,6 +6,7 @@ import axios from "axios";
 import type {
   AgentZpImportCreateIn,
   AgentZpImportOut,
+  DatasetCapabilityReport,
   DatasetDeletedOut,
   DatasetOut,
   ImportEnqueueIn,
@@ -35,6 +36,38 @@ export const api = axios.create({
   baseURL: "/api/v1",
   timeout: 30_000,
 });
+
+const pinnedRevisions = new Map<string, string>();
+export function pinnedDatasetRevision(slug: string): string {
+  return pinnedRevisions.get(encodeURIComponent(slug)) ?? "legacy";
+}
+function datasetSlug(url?: string): string | undefined {
+  return url?.match(/^\/datasets\/([^/?]+)/)?.[1];
+}
+api.interceptors.request.use((request) => {
+  const slug = datasetSlug(request.url);
+  if (slug && pinnedRevisions.has(slug)) request.headers["X-Viewer-Revision"] = pinnedRevisions.get(slug)!;
+  return request;
+});
+
+api.interceptors.response.use(response => {
+  const slug = datasetSlug(response.config.url);
+  const revision = response.headers["x-viewer-revision"];
+  if (slug && typeof revision === "string") {
+    const previous = pinnedRevisions.get(slug);
+    if (previous && previous !== revision) throw new Error("Dataset revision changed during a pinned browsing session");
+    pinnedRevisions.set(slug, revision);
+  }
+  return response;
+});
+
+export async function createUnknownFormatFromUpload(body: {
+  upload_id: string; data_type: string; format_name: string; format_details: string | null;
+  delivery_policy?: "manual" | "auto_test";
+}): Promise<UnknownFormatImportOut> {
+  const { data } = await api.post<UnknownFormatImportOut>("/agent-import-cases/from-upload", body);
+  return data;
+}
 
 /** 列表接口通用查询参数，字段名与后端 Query 一致。 */
 export interface ListParams {
@@ -210,6 +243,14 @@ export function uploadImportFile(
 /** 按 slug 获取单个数据集详情。 */
 export async function fetchDataset(slug: string): Promise<DatasetOut> {
   const { data } = await api.get<DatasetOut>(`/datasets/${slug}`);
+  return { ...data, revision_id: pinnedRevisions.get(encodeURIComponent(slug)) ?? "legacy" };
+}
+
+/** Return the verified entity and view availability report for one dataset. */
+export async function fetchDatasetCapabilityReport(slug: string): Promise<DatasetCapabilityReport> {
+  const { data } = await api.get<DatasetCapabilityReport>(
+    `/datasets/${encodeURIComponent(slug)}/capability-report`,
+  );
   return data;
 }
 

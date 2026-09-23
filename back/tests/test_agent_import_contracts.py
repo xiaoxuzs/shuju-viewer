@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from app.agent_import.contracts import AgentCandidatePlan
 from app.agent_import.model_provider import _normalize_candidate_protocol
-from app.agent_import.research_contracts import DatasetBlueprint
+from app.agent_import.research_contracts import BlueprintCapabilityAssessment, DatasetBlueprint
 
 
 def _candidate(**overrides: object) -> dict[str, object]:
@@ -59,10 +59,14 @@ def test_non_ready_candidate_requires_questions_and_cannot_execute() -> None:
 
 def test_agent_two_candidate_preserves_custom_analysis_category() -> None:
     plan = AgentCandidatePlan.model_validate(
-        _candidate(analysis_category="DIA-CLIP quantitative imaging")
+        _candidate(
+            analysis_category="DIA-CLIP quantitative imaging",
+            physical_analysis_mode="SPECTRA_ONLY",
+        )
     )
 
     assert plan.analysis_category == "DIA-CLIP quantitative imaging"
+    assert plan.physical_analysis_mode == "SPECTRA_ONLY"
 
 
 def test_agent_one_blueprint_schema_accepts_custom_analysis_category() -> None:
@@ -82,6 +86,19 @@ def test_declared_mapping_protocol_is_normalized_to_schema_version_two() -> None
     normalized = _normalize_candidate_protocol(payload)
 
     assert normalized["schema_version"] == 2
+    assert payload["schema_version"] == 1
+
+
+def test_format_neutral_mapping_protocol_is_normalized_to_schema_version_three() -> None:
+    payload = {
+        "schema_version": 1,
+        "binary_operation": "convert_declared_mapping_to_zp",
+        "zp_conversion_plan": {"declarative_plan": {"plan_id": "unknown-v1"}},
+    }
+
+    normalized = _normalize_candidate_protocol(payload)
+
+    assert normalized["schema_version"] == 3
     assert payload["schema_version"] == 1
 
 
@@ -106,3 +123,24 @@ def test_register_existing_zp_requires_a_zp_relative_source() -> None:
 
     with pytest.raises(ValidationError):
         AgentCandidatePlan.model_validate(payload)
+
+
+def test_blueprint_capability_assessment_requires_a_real_derivation_id() -> None:
+    derived = BlueprintCapabilityAssessment(
+        capability_id="protein.coverage",
+        level="view",
+        state="DERIVED",
+        reason="Exact subsequence mapping is available.",
+        evidence_ids=["evidence-1"],
+        derivation_id="viewer.peptide-position.exact-subsequence.v1",
+    )
+    assert derived.state == "DERIVED"
+
+    with pytest.raises(ValidationError):
+        BlueprintCapabilityAssessment(
+            capability_id="protein.coverage",
+            level="view",
+            state="DERIVED",
+            reason="Model-only inference is not executable.",
+            evidence_ids=["evidence-1"],
+        )

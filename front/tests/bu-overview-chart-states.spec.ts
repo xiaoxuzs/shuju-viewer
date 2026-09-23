@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import { advisoryCapabilityReport } from "./capability-fixtures";
+
 const dataset = {
   id: 40,
   slug: "demo",
@@ -55,6 +57,9 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 async function mockOverview(page: Page, chromatogramDetail: unknown, chromatogramStatus = 409) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/datasets/demo/capability-report") {
+      return fulfillJson(route, advisoryCapabilityReport(dataset.id));
+    }
     if (url.pathname === "/api/v1/datasets/demo") return fulfillJson(route, dataset);
     if (url.pathname === "/api/v1/datasets/demo/overview") return fulfillJson(route, overview);
     if (url.pathname.endsWith("/runs/39/chromatogram")) {
@@ -96,6 +101,33 @@ test("chromatogram stale state is distinct from missing", async ({ page }) => {
 
   await expect(page.getByText("Derived chromatogram data is stale.")).toBeVisible();
   await expect(page.getByText("Derived chromatogram data is not ready.")).toHaveCount(0);
+});
+
+test("empty RT-mz results hide the whole card and keep Runs visible", async ({ page }) => {
+  await mockOverview(page, "chromatogram_summary_missing");
+  await page.route("**/overview/rt-mz**", route => fulfillJson(route, {
+    unit_rt: "min", unit_mz: "Th", rt_edges: [], mz_edges: [], counts: [],
+    max_count: 0, total_points: 0, run_id: 39,
+  }));
+  await page.goto("/datasets/demo");
+
+  await expect(page.getByRole("heading", { name: "Runs", exact: true })).toBeVisible();
+  await expect(page.getByText("Loading RT-m/z heatmap...")).toHaveCount(0);
+  await expect(page.getByTestId("rt-mz-card")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "RT-m/z Identifications", exact: true })).toHaveCount(0);
+  await expect(page.getByText("No RT-m/z identifications available.")).toHaveCount(0);
+  await expect(page.getByText("Matches: 3", { exact: true })).toBeVisible();
+});
+
+test("RT-mz request failures are not silently hidden as empty data", async ({ page }) => {
+  await mockOverview(page, "chromatogram_summary_missing");
+  await page.route("**/overview/rt-mz**", route => fulfillJson(route, { detail: "query_failed" }, 500));
+  await page.goto("/datasets/demo");
+
+  await expect(page.getByRole("heading", { name: "Runs", exact: true })).toBeVisible();
+  await expect(page.getByText("Loading RT-m/z heatmap...")).toHaveCount(0);
+  await expect(page.getByTestId("rt-mz-card")).toBeVisible();
+  await expect(page.getByRole("img", { name: "RT by precursor m/z heatmap" })).toHaveCount(0);
 });
 
 test("chromatogram billion-scale ticks use a single y-axis scale label", async ({ page }) => {

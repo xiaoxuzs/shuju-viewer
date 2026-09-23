@@ -1,0 +1,282 @@
+[
+  {
+    "name": "annotated-doc",
+    "version": "0.0.4"
+  },
+  {
+    "name": "annotated-types",
+    "version": "0.7.0"
+  },
+  {
+    "name": "anyio",
+    "version": "4.13.0"
+  },
+  {
+    "name": "certifi",
+    "version": "2026.7.22"
+  },
+  {
+    "name": "charset-normalizer",
+    "version": "3.5.1"
+  },
+  {
+    "name": "click",
+    "version": "8.3.3"
+  },
+  {
+    "name": "colorama",
+    "version": "0.4.6"
+  },
+  {
+    "name": "distro",
+    "version": "1.9.0"
+  },
+  {
+    "name": "fastapi",
+    "version": "0.136.0"
+  },
+  {
+    "name": "greenlet",
+    "version": "3.4.0"
+  },
+  {
+    "name": "h11",
+    "version": "0.16.0"
+  },
+  {
+    "name": "httpcore",
+    "version": "1.0.9"
+  },
+  {
+    "name": "httpcore2",
+    "version": "2.12.0"
+  },
+  {
+    "name": "httptools",
+    "version": "0.7.1"
+  },
+  {
+    "name": "httpx",
+    "version": "0.28.1"
+  },
+  {
+    "name": "httpx2",
+    "version": "2.12.0"
+  },
+  {
+    "name": "idna",
+    "version": "3.19"
+  },
+  {
+    "name": "iniconfig",
+    "version": "2.3.0"
+  },
+  {
+    "name": "jsonpatch",
+    "version": "1.33"
+  },
+  {
+    "name": "jsonpointer",
+    "version": "3.1.1"
+  },
+  {
+    "name": "langchain-core",
+    "version": "1.6.1"
+  },
+  {
+    "name": "langchain-protocol",
+    "version": "0.0.19"
+  },
+  {
+    "name": "langgraph",
+    "version": "1.2.11"
+  },
+  {
+    "name": "langgraph-checkpoint",
+    "version": "4.2.0"
+  },
+  {
+    "name": "langgraph-checkpoint-postgres",
+    "version": "3.1.2"
+  },
+  {
+    "name": "langgraph-prebuilt",
+    "version": "1.1.0"
+  },
+  {
+    "name": "langgraph-sdk",
+    "version": "0.4.4"
+  },
+  {
+    "name": "langsmith",
+    "version": "0.12.1"
+  },
+  {
+    "name": "lxml",
+    "version": "6.1.0"
+  },
+  {
+    "name": "markdown-it-py",
+    "version": "4.0.0"
+  },
+  {
+    "name": "mdurl",
+    "version": "0.1.2"
+  },
+  {
+    "name": "numpy",
+    "version": "2.4.4"
+  },
+  {
+    "name": "orjson",
+    "version": "3.11.8"
+  },
+  {
+    "name": "ormsgpack",
+    "version": "1.12.2"
+  },
+  {
+    "name": "packaging",
+    "version": "26.2"
+  },
+  {
+    "name": "pluggy",
+    "version": "1.6.0"
+  },
+  {
+    "name": "psycopg",
+    "version": "3.3.3"
+  },
+  {
+    "name": "psycopg-binary",
+    "version": "3.3.3"
+  },
+  {
+    "name": "psycopg-pool",
+    "version": "3.3.1"
+  },
+  {
+    "name": "pyarrow",
+    "version": "24.0.0"
+  },
+  {
+    "name": "pydantic",
+    "version": "2.13.3"
+  },
+  {
+    "name": "pydantic-settings",
+    "version": "2.14.0"
+  },
+  {
+    "name": "pydantic_core",
+    "version": "2.46.3"
+  },
+  {
+    "name": "Pygments",
+    "version": "2.20.0"
+  },
+  {
+    "name": "pyteomics",
+    "version": "4.7.5"
+  },
+  {
+    "name": "pytest",
+    "version": "9.0.3"
+  },
+  {
+    "name": "python-dotenv",
+    "version": "1.2.2"
+  },
+  {
+    "name": "python-multipart",
+    "version": "0.0.27"
+  },
+  {
+    "name": "PyYAML",
+    "version": "6.0.3"
+  },
+  {
+    "name": "requests",
+    "version": "2.34.2"
+  },
+  {
+    "name": "requests-toolbelt",
+    "version": "1.0.0"
+  },
+  {
+    "name": "rich",
+    "version": "15.0.0"
+  },
+  {
+    "name": "shellingham",
+    "version": "1.5.4"
+  },
+  {
+    "name": "sniffio",
+    "version": "1.3.1"
+  },
+  {
+    "name": "SQLAlchemy",
+    "version": "2.0.49"
+  },
+  {
+    "name": "starlette",
+    "version": "1.0.0"
+  },
+  {
+    "name": "tenacity",
+    "version": "9.1.4"
+  },
+  {
+    "name": "tqdm",
+    "version": "4.67.3"
+  },
+  {
+    "name": "truststore",
+    "version": "0.10.4"
+  },
+  {
+    "name": "typer",
+    "version": "0.24.2"
+  },
+  {
+    "name": "typing-inspection",
+    "version": "0.4.2"
+  },
+  {
+    "name": "typing_extensions",
+    "version": "4.15.0"
+  },
+  {
+    "name": "tzdata",
+    "version": "2026.1"
+  },
+  {
+    "name": "urllib3",
+    "version": "2.7.0"
+  },
+  {
+    "name": "uuid_utils",
+    "version": "0.17.0"
+  },
+  {
+    "name": "uvicorn",
+    "version": "0.46.0"
+  },
+  {
+    "name": "watchfiles",
+    "version": "1.1.1"
+  },
+  {
+    "name": "websockets",
+    "version": "16.0"
+  },
+  {
+    "name": "xxhash",
+    "version": "4.0.1"
+  },
+  {
+    "name": "zstandard",
+    "version": "0.25.0"
+  }
+]

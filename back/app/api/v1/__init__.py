@@ -18,6 +18,8 @@ from app.api.v1 import (
 
 def build_api_router() -> APIRouter:
     router = APIRouter(prefix="/api/v1")
+    from app.agent_import.local_sessions import router as local_session_router
+    router.include_router(local_session_router)
     router.include_router(datasets.router)
     router.include_router(imports.router)
     router.include_router(import_uploads.router)
@@ -31,6 +33,9 @@ def build_api_router() -> APIRouter:
         from app.agent_import.api import router as agent_import_router
 
         router.include_router(agent_import_router)
+    elif settings.agent_delivery_reads_enabled:
+        from app.agent_import.api import delivery_read_router
+        router.include_router(delivery_read_router)
     if settings.zp_management_enabled:
         # ZP endpoints are part of the normal binary main path; the flag is an emergency fallback.
         from app.api.v1 import zp_conversions

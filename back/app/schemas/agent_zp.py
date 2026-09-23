@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -53,6 +53,7 @@ class AgentZpVerificationOut(BaseModel):
     scan_index_total: int
     readable_run_count: int
     runs: list[AgentZpRunVerificationOut]
+    business_checks: dict[str, int | bool] = Field(default_factory=dict)
 
 
 class AgentZpImportOut(BaseModel):
@@ -68,3 +69,4 @@ class AgentZpImportOut(BaseModel):
     zp_output_sha256: str
     validation_mode: str
     verification: AgentZpVerificationOut
+    capability_report: dict[str, Any] | None = None

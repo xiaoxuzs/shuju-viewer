@@ -12,6 +12,9 @@ import { ThemeProvider } from "./features/theme/theme";
 import { PageTransitionProvider } from "./features/page-transition";
 import "./styles/globals.css";
 
+document.documentElement.dataset.viewerBuildId = import.meta.env.VITE_VIEWER_BUILD_ID ?? "development";
+document.documentElement.dataset.viewerValidationId = import.meta.env.VITE_VIEWER_VALIDATION_ID ?? "";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -22,6 +25,11 @@ const queryClient = new QueryClient({
   },
 });
 
+// Shared workspace: no login/handoff is required to render or import.
+// Discard an obsolete handoff fragment without consuming or transmitting it.
+if (new URLSearchParams(window.location.hash.slice(1)).has("viewer-handoff")) {
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+}
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider>

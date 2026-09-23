@@ -17,6 +17,7 @@ class UploadState(str, Enum):
     READY = "READY"
     STARTED = "STARTED"
     FAILED = "FAILED"
+    CASE_PINNED = "CASE_PINNED"
 
 
 class UploadFileRecord(BaseModel):
@@ -37,6 +38,7 @@ class UploadManifest(BaseModel):
     created_at: datetime
     started_at: datetime | None = None
     job_id: str | None = None
+    case_id: str | None = None
     total_size_bytes: int = Field(default=0, ge=0)
     files: list[UploadFileRecord] = Field(default_factory=list)
 

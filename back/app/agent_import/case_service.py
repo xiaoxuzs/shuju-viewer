@@ -15,8 +15,10 @@ from sqlalchemy.engine import Engine
 
 from app.agent_import import AUTONOMOUS_ATTEMPT_LIMIT, DEFAULT_WORKSPACE_ID
 from app.agent_import.binary_executor import BinaryExecutionResult
-from app.agent_import.contracts import AgentCandidatePlan, AgentPlanReview
+from app.agent_import.contracts import AgentCandidatePlan, AgentPlanReview, CapabilityGap
 from app.agent_import.errors import AgentImportError
+from app.agent_import.execution_control import current_fence
+from app.agent_import.failure_policy import AgentFailureClass
 from app.agent_import.states import CaseStatus, InteractionMode, TERMINAL_STATUSES, assert_transition
 from app.core.db import engine as default_engine
 
@@ -66,6 +68,15 @@ class CaseRecord:
     dataset_slug: str | None
     created_at: str
     updated_at: str
+    lease_token: str | None = None
+    deadline_at: str | None = None
+    model_tokens_reserved: int = 0
+    delivery_policy: str = "manual"
+    ever_published: bool = False
+    progress_payload: dict[str, Any] | None = None
+    owner_id: str = "unowned"
+    source_content_sha256: str | None = None
+    authorization_wait_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +114,7 @@ class ArtifactRecord:
     sha256: str
     size_bytes: int
     media_type: str | None
+    structured_payload: dict[str, Any] | None
     created_at: str
 
 
@@ -144,6 +156,15 @@ def _case(row: Any) -> CaseRecord:
         dataset_slug=row["dataset_slug"],
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+        lease_token=row.get("lease_token"),
+        deadline_at=row.get("deadline_at"),
+        model_tokens_reserved=int(row.get("model_tokens_reserved", 0)),
+        delivery_policy=str(row.get("delivery_policy", "manual")),
+        ever_published=bool(row.get("ever_published", False)),
+        progress_payload=_object(row.get("progress_payload")),
+        owner_id=str(row.get("owner_id", "unowned")),
+        source_content_sha256=row.get("source_content_sha256"),
+        authorization_wait_reason=row.get("authorization_wait_reason"),
     )
 
 
@@ -161,10 +182,37 @@ class CaseService:
         format_details: str | None,
         workspace_id: str = DEFAULT_WORKSPACE_ID,
         source_mode: str = "LOCAL_PATH",
+        case_id: str | None = None,
+        delivery_policy: str = "manual",
+        owner_id: str = "unowned",
+        execution_mode: str = "product",
     ) -> CaseRecord:
-        case_id = str(uuid.uuid4())
+        if execution_mode not in {"product", "legacy_experiment"}:
+            raise ValueError("Unknown trusted execution mode")
+        if delivery_policy not in {"manual", "auto_test"}:
+            raise AgentImportError("AGENT_DELIVERY_POLICY_INVALID", "Unknown delivery policy.", status_code=422)
+        if delivery_policy == "auto_test":
+            from app.agent_import.delivery import require_auto_test_policy
+            require_auto_test_policy()
+        case_id = case_id or str(uuid.uuid4())
         now = _now()
+        from app.core.config import settings
+        deadline = (datetime.now(timezone.utc) + timedelta(seconds=settings.agent_case_deadline_seconds)).isoformat()
+        source_sha = None
+        request_key = None
+        if settings.agent_model_authorization_required:
+            from .input_assets import content_manifest
+            from .admission_policy import submission_identity
+            source_sha = content_manifest(Path(source_ref))["sha256"]
+            request_key = submission_identity(owner_id, workspace_id, source_sha, analysis_category, source_profile, format_details)
         with self.engine.begin() as connection:
+            if request_key is not None:
+                connection.execute(text("INSERT INTO agent_submission_keys VALUES (:key,:case) ON CONFLICT DO NOTHING"), {"key": request_key, "case": case_id})
+                chosen = connection.execute(text("SELECT case_id FROM agent_submission_keys WHERE submission_key=:key"), {"key": request_key}).scalar_one()
+                prior = connection.execute(text("SELECT * FROM agent_import_cases WHERE case_id=:id"), {"id": chosen}).mappings().first()
+                if prior is not None:
+                    return _case(prior)
+                case_id = chosen
             connection.execute(
                 text(
                     """
@@ -182,7 +230,7 @@ class CaseService:
                 {
                     "case_id": case_id,
                     "workspace_id": workspace_id,
-                    "status": CaseStatus.CREATED.value,
+                    "status": CaseStatus.WAITING_AUTHORIZATION.value if execution_mode == "legacy_experiment" else CaseStatus.CREATED.value,
                     "source_mode": source_mode,
                     "source_ref": source_ref,
                     "fingerprint": dataset_fingerprint,
@@ -199,10 +247,26 @@ class CaseService:
                 context_revision=1,
                 sender_type="SYSTEM",
                 message_kind="STATUS",
-                content="Agent Case created and queued for source analysis.",
+                content="Agent Case received; processing uses the recorded server task settings.",
                 payload={"event": "case_created"},
                 created_at=now,
             )
+            connection.execute(text("UPDATE agent_import_cases SET delivery_policy=:policy, deadline_at=:deadline WHERE case_id=:id"), {"policy": delivery_policy, "deadline": deadline, "id": case_id})
+            connection.execute(text("UPDATE agent_import_cases SET owner_id=:owner,source_content_sha256=:sha WHERE case_id=:id"), {"owner": owner_id, "sha": source_sha, "id": case_id})
+            if owner_id != "unowned":
+                connection.execute(text("INSERT INTO agent_resource_owners VALUES ('case',:case,:owner) ON CONFLICT DO NOTHING"), {"case": case_id, "owner": owner_id})
+            if execution_mode == "product":
+                from .task_runtime import create_task_tx
+                parent = connection.execute(text("""SELECT case_id FROM agent_import_cases WHERE case_id<>:id
+                    AND owner_id=:owner AND workspace_id=:workspace AND source_content_sha256=:sha AND ever_published=1
+                    ORDER BY created_at LIMIT 1"""), {"id": case_id, "owner": owner_id, "workspace": workspace_id, "sha": source_sha}).scalar()
+                create_task_tx(connection, case_id, parent_case_id=parent, deadline=datetime.fromisoformat(deadline).timestamp())
+            else:
+                from .admission_policy import bind_pending_tx
+                row = connection.execute(text("SELECT * FROM agent_import_cases WHERE case_id=:id"), {"id": case_id}).mappings().one()
+                reason = bind_pending_tx(connection, self.engine, row)
+                connection.execute(text("UPDATE agent_import_cases SET status=:state,authorization_wait_reason=:reason WHERE case_id=:id"),
+                    {"id": case_id, "state": "CREATED" if reason is None else "WAITING_AUTHORIZATION", "reason": reason})
         return self.get_case(case_id)
 
     def get_case(self, case_id: str) -> CaseRecord:
@@ -289,42 +353,85 @@ class CaseService:
                 sha256=str(row["sha256"]),
                 size_bytes=int(row["size_bytes"]),
                 media_type=row["media_type"],
+                structured_payload=_object(row.get("payload_json")),
                 created_at=str(row["created_at"]),
             )
             for row in rows
         ]
 
-    def claim_next(self, *, worker_id: str, lease_seconds: int = 9_000) -> CaseRecord | None:
+    def claim_next(self, *, worker_id: str, lease_seconds: int = 9_000, include_legacy: bool = False) -> CaseRecord | None:
+        from app.core.config import settings
+
         now = _now()
         expires = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat()
+        deadline = (datetime.now(timezone.utc) + timedelta(seconds=settings.agent_case_deadline_seconds)).isoformat()
+        lease_token = str(uuid.uuid4())
         with self.engine.begin() as connection:
             lock = " FOR UPDATE SKIP LOCKED" if connection.dialect.name != "sqlite" else ""
             row = connection.execute(
                 text(
                     """
                     SELECT * FROM agent_import_cases
-                    WHERE status IN ('CREATED', 'ANALYZING', 'STOPPING')
+                    WHERE (status IN (
+                        'CREATED', 'ANALYZING', 'STRATEGY_READY',
+                        'BUILDING', 'VERIFYING', 'ENGINEERING', 'STOPPING'
+                    ) OR (:auto_enabled AND delivery_policy='auto_test' AND status IN ('READY_FOR_REVIEW', 'DELIVERING')))
                       AND (lease_owner IS NULL OR lease_expires_at < :now)
+                      AND (status='STOPPING' OR :offline OR EXISTS (SELECT 1 FROM agent_task_runs t WHERE t.task_id=agent_import_cases.case_id)
+                           OR (:legacy AND EXISTS (SELECT 1 FROM agent_case_authority a WHERE a.case_id=agent_import_cases.case_id)))
                     ORDER BY created_at
                     LIMIT 1
                     """ + lock
                 ),
-                {"now": now},
+                {"now": now, "auto_enabled": settings.agent_auto_delivery_enabled, "offline": not settings.agent_model_authorization_required, "legacy": include_legacy},
             ).mappings().first()
             if row is None:
                 return None
-            connection.execute(
+            claimed = connection.execute(
                 text(
                     """
                     UPDATE agent_import_cases
                     SET lease_owner = :worker_id, lease_expires_at = :expires,
+                        lease_token = :lease_token, deadline_at = COALESCE(deadline_at, :deadline),
                         version = version + 1, updated_at = :now
                     WHERE case_id = :case_id
+                      AND version = :expected_version
+                      AND (lease_owner IS NULL OR lease_expires_at < :now)
                     """
                 ),
-                {"worker_id": worker_id, "expires": expires, "now": now, "case_id": row["case_id"]},
+                {"worker_id": worker_id, "expires": expires, "now": now, "case_id": row["case_id"],
+                 "lease_token": lease_token, "deadline": deadline, "expected_version": row["version"]},
             )
+            if claimed.rowcount != 1:
+                return None
         return self.get_case(str(row["case_id"]))
+
+    def renew_lease(self, case_id: str, *, worker_id: str, lease_seconds: int, lease_token: str | None = None) -> bool:
+        now = _now()
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat()
+        with self.engine.begin() as connection:
+            result = connection.execute(
+                text(
+                    """
+                    UPDATE agent_import_cases
+                    SET lease_expires_at = :expires, updated_at = :now
+                    WHERE case_id = :case_id AND lease_owner = :worker_id
+                      AND (CAST(:lease_token AS text) IS NULL OR lease_token = :lease_token)
+                      AND status IN (
+                          'CREATED', 'ANALYZING', 'STRATEGY_READY',
+                          'BUILDING', 'VERIFYING', 'ENGINEERING', 'STOPPING', 'READY_FOR_REVIEW', 'DELIVERING'
+                      )
+                    """
+                ),
+                {
+                    "case_id": case_id,
+                    "worker_id": worker_id,
+                    "lease_token": lease_token,
+                    "expires": expires,
+                    "now": now,
+                },
+            )
+        return result.rowcount == 1
 
     def start_analysis(self, case_id: str) -> CaseRecord:
         case = self.get_case(case_id)
@@ -373,6 +480,14 @@ class CaseService:
     def record_candidate_needs_user(self, case_id: str, plan: AgentCandidatePlan) -> CaseRecord:
         if plan.status == "READY":
             raise ValueError("record_candidate_needs_user requires a non-ready decision")
+        if plan.status == "UNSUPPORTED":
+            current = self.get_case(case_id)
+            gap = CapabilityGap(analysis_category=plan.analysis_category, source_profile=plan.source_profile,
+                                requirements=plan.questions, candidate_context_revision=current.context_revision)
+            self._record_json_artifact(case_id, "capability_gap", gap.model_dump(mode="json"))
+            return self.record_failure(case_id, code="CAPABILITY_GAP",
+                                       summary="A required implementation capability is missing. Engineering execution remains blocked until its sandbox is verified.",
+                                       failure_class=AgentFailureClass.ENGINEERING_REVIEW)
         payload = plan.model_dump(mode="json")
         content = "\n".join(plan.questions)
         current = self.get_case(case_id)
@@ -390,9 +505,50 @@ class CaseService:
             self._create_notification(connection, updated, content, _now())
         return updated
 
+    def queue_engineering_gap(self, case_id: str, plan: AgentCandidatePlan) -> CaseRecord:
+        if current_fence() is None:
+            raise AgentImportError("WORKER_LEASE_REQUIRED", "Engineering is an internal Worker operation", status_code=403)
+        current = self.get_case(case_id)
+        if current.ever_published or current.dataset_id is not None:
+            raise AgentImportError("PUBLISHED_CASE_ROLE_FORBIDDEN", "Initial engineering cannot handle published history", status_code=409)
+        gap = CapabilityGap(analysis_category=plan.analysis_category, source_profile=plan.source_profile,
+            requirements=plan.questions, candidate_context_revision=current.context_revision)
+        updated = self._transition(current, CaseStatus.ENGINEERING, content="Required implementation gap queued to the existing Worker engineering gate.",
+            payload={"event": "engineering_queued"}, sender_type="SYSTEM", updates={"candidate_payload": _json(plan.model_dump(mode="json"))}, release_lease=False)
+        self._record_json_artifact(case_id, "capability_gap", gap.model_dump(mode="json"))
+        return updated
+
     def save_review(self, case_id: str, review: AgentPlanReview) -> CaseRecord:
         payload = review.model_dump(mode="json")
         current = self.get_case(case_id)
+        if review.status == "REJECTED":
+            with self.engine.begin() as connection:
+                current = self._locked_case(connection, case_id)
+                if current.status != CaseStatus.BUILDING or current.ever_published:
+                    raise AgentImportError("AGENT_CASE_STATE_CONFLICT", "Review cannot re-enter initial implementation from this state", status_code=409)
+                previous = [_object(row[0]) for row in connection.execute(text("SELECT payload_json FROM agent_artifacts WHERE case_id=:id AND artifact_type='review_feedback'"), {"id": case_id})]
+                previous = [row for row in previous if row.get("context_revision") == current.context_revision]
+                fingerprint = hashlib.sha256(_json({"candidate": current.candidate_payload, "issues": review.issues}).encode()).hexdigest()
+                repeated = any(row.get("fingerprint") == fingerprint for row in previous)
+                exhausted = repeated or len(previous) >= 2
+                now = _now()
+                feedback = {"context_revision": current.context_revision, "fingerprint": fingerprint, "attempt": len(previous) + 1,
+                    "kind": "review_rejected", "issues": review.issues, "previous_candidate": current.candidate_payload}
+                self._insert_json_artifact_tx(connection, current, None, "agent_1_review", payload, now)
+                self._insert_json_artifact_tx(connection, current, None, "review_feedback", feedback, now)
+                target = CaseStatus.FAILED if exhausted else CaseStatus.STRATEGY_READY
+                assert_transition(current.status, target)
+                verification = ({"failure_code": "REVIEW_NO_PROGRESS" if repeated else "REVIEW_REPAIR_LIMIT_REACHED",
+                    "failure_class": "ENGINEERING_REVIEW", "passed": False, "issues": review.issues} if exhausted else
+                    {"candidate_repair_feedback": feedback})
+                connection.execute(text("""UPDATE agent_import_cases SET status=:status,verification_payload=:verification,
+                    version=version+1,updated_at=:now,lease_owner=CASE WHEN :end THEN NULL ELSE lease_owner END,
+                    lease_expires_at=CASE WHEN :end THEN NULL ELSE lease_expires_at END WHERE case_id=:id"""),
+                    {"id": case_id, "status": target.value, "verification": _json(verification), "now": now, "end": exhausted})
+                self._append_message(connection, case_id=case_id, context_revision=current.context_revision, sender_type="AGENT_1", message_kind="EVIDENCE",
+                    content=("Review repair stopped after no progress or the finite repair limit." if exhausted else "Review requested bounded automatic plan correction; no user fact or new model grant is required."),
+                    payload={"event": "review_repair_stopped" if exhausted else "review_repair_requested", "review": payload}, created_at=now)
+            return self.get_case(case_id)
         if review.status == "APPROVED":
             self._record_json_artifact(case_id, "agent_1_review", payload)
             with self.engine.begin() as connection:
@@ -408,6 +564,7 @@ class CaseService:
                 )
             return self.get_case(case_id)
         content = "\n".join(review.questions or review.issues)
+        self._record_json_artifact(case_id, "agent_1_review", payload)
         updated = self._transition(
             current,
             CaseStatus.NEEDS_USER,
@@ -416,7 +573,6 @@ class CaseService:
             sender_type="AGENT_1",
             release_lease=True,
         )
-        self._record_json_artifact(case_id, "agent_1_review", payload)
         with self.engine.begin() as connection:
             self._create_notification(connection, updated, content, _now())
         return updated
@@ -442,6 +598,12 @@ class CaseService:
             "deep_validation_certificate": bool(result.validation_certificate_path),
             "semantic_reconciliation": result.semantic_verification or None,
         }
+        if result.semantic_verification.get("viewer_staging") is not None:
+            verification["viewer_staging"] = result.semantic_verification["viewer_staging"]
+        if result.semantic_verification.get("dataset_capability_report") is not None:
+            verification["dataset_capability_report"] = result.semantic_verification[
+                "dataset_capability_report"
+            ]
         now = _now()
         with self.engine.begin() as connection:
             current = self._locked_case(connection, case_id)
@@ -490,13 +652,50 @@ class CaseService:
             )
         return self.get_case(case_id)
 
-    def record_failure(self, case_id: str, *, code: str, summary: str) -> CaseRecord:
+    def record_failure(
+        self,
+        case_id: str,
+        *,
+        code: str,
+        summary: str,
+        failure_class: AgentFailureClass = AgentFailureClass.SCIENTIFIC,
+        diagnostics: dict[str, Any] | None = None,
+    ) -> CaseRecord:
         now = _now()
         with self.engine.begin() as connection:
             current = self._locked_case(connection, case_id)
-            if current.status == CaseStatus.STOPPING:
+            from .failure_progress import failure_fingerprint
+            fingerprint = failure_fingerprint(current, code, diagnostics)
+            previous = connection.execute(text("SELECT payload_json FROM agent_artifacts WHERE case_id=:case AND artifact_type='failure_progress' ORDER BY created_at DESC,artifact_id DESC LIMIT 1"), {"case": case_id}).scalar()
+            repeated = bool(previous and _object(previous).get("fingerprint") == fingerprint)
+            self._insert_json_artifact_tx(connection, current, None, "failure_progress", {"fingerprint": fingerprint, "code": code, "repeated_without_progress": repeated}, now)
+            if repeated and failure_class == AgentFailureClass.SCIENTIFIC:
+                code = "ENGINEERING_NO_PROGRESS"
+                summary = "The same failure recurred with unchanged candidate/evidence; deterministic diagnosis is required before another model attempt."
+                failure_class = AgentFailureClass.ENGINEERING_REVIEW
+            ordinary = connection.execute(text("SELECT 1 FROM agent_task_runs WHERE task_id=:id"), {"id": case_id}).first()
+            if not ordinary and code.startswith(("MODEL_AUTHORIZATION_", "MODEL_STAGE_BUDGET_", "AUTHORIZATION_", "EXPERIMENT_")) and current.status != CaseStatus.STOPPING:
+                target = CaseStatus.WAITING_AUTHORIZATION
+                used = current.autonomous_attempt_used
+                connection.execute(text("UPDATE agent_import_cases SET authorization_wait_reason=:reason,authorization_resume_status=:resume WHERE case_id=:id"),
+                                   {"id": case_id, "reason": code, "resume": current.status.value})
+            elif current.status == CaseStatus.STOPPING:
                 target = CaseStatus.STOPPED
                 used = current.autonomous_attempt_used
+            elif current.status == CaseStatus.DELIVERING:
+                # Commit/projection errors are not a reason to re-run Agent2.
+                # Keep publication reconciliation separate from scientific retries.
+                target = CaseStatus.FAILED
+                used = current.autonomous_attempt_used
+            elif failure_class == AgentFailureClass.USER_INPUT:
+                used = current.autonomous_attempt_used
+                target = CaseStatus.NEEDS_USER
+            elif failure_class in {
+                AgentFailureClass.INFRASTRUCTURE,
+                AgentFailureClass.ENGINEERING_REVIEW,
+            }:
+                used = current.autonomous_attempt_used
+                target = CaseStatus.FAILED
             elif current.interaction_mode == InteractionMode.AUTONOMOUS:
                 used = current.autonomous_attempt_used + 1
                 target = CaseStatus.ANALYZING if used < AUTONOMOUS_ATTEMPT_LIMIT else CaseStatus.NEEDS_USER
@@ -519,7 +718,15 @@ class CaseService:
                 {
                     "status": target.value,
                     "used": used,
-                    "verification": _json({"passed": False, "failure_code": code, "summary": summary}),
+                    "verification": _json(
+                        {
+                            "passed": False,
+                            "failure_code": code,
+                            "failure_class": failure_class.value,
+                            "summary": summary,
+                            **({"diagnostics": diagnostics} if diagnostics is not None else {}),
+                        }
+                    ),
                     "now": now,
                     "case_id": case_id,
                 },
@@ -531,11 +738,18 @@ class CaseService:
                 sender_type="SYSTEM",
                 message_kind="QUESTION" if target == CaseStatus.NEEDS_USER else "EVIDENCE",
                 content=summary,
-                payload={"event": "verification_failed", "failure_code": code, "next_status": target.value},
+                payload={
+                    "event": "verification_failed",
+                    "failure_code": code,
+                    "failure_class": failure_class.value,
+                    "next_status": target.value,
+                },
                 created_at=now,
             )
             if target == CaseStatus.NEEDS_USER:
                 self._create_notification(connection, current, summary, now)
+            elif target == CaseStatus.FAILED:
+                self._create_notification(connection, current, summary, now, kind="FAILED")
         return self.get_case(case_id)
 
     def submit_user_answer(
@@ -628,14 +842,30 @@ class CaseService:
             message_context_revision=revision,
         )
 
-    def mark_success(self, case_id: str, *, dataset_id: int, dataset_slug: str) -> CaseRecord:
+    def mark_success(
+        self,
+        case_id: str,
+        *,
+        dataset_id: int,
+        dataset_slug: str,
+        capability_report: dict[str, Any] | None = None,
+    ) -> CaseRecord:
+        current = self.get_case(case_id)
+        verification = dict(current.verification_payload or {})
+        if capability_report is not None:
+            verification["dataset_capability_report"] = capability_report
         return self._transition(
-            self.get_case(case_id),
+            current,
             CaseStatus.SUCCESS,
             content="Approved ZP candidate was imported and verified by Viewer.",
             payload={"event": "import_success", "dataset_id": dataset_id, "dataset_slug": dataset_slug},
             sender_type="SYSTEM",
-            updates={"dataset_id": dataset_id, "dataset_slug": dataset_slug},
+            updates={
+                "ever_published": 1,
+                "dataset_id": dataset_id,
+                "dataset_slug": dataset_slug,
+                "verification_payload": _json(verification),
+            },
             release_lease=True,
         )
 
@@ -645,7 +875,7 @@ class CaseService:
             return current
         target = (
             CaseStatus.STOPPED
-            if current.status in {CaseStatus.CREATED, CaseStatus.NEEDS_USER, CaseStatus.READY_FOR_REVIEW}
+            if current.status in {CaseStatus.CREATED, CaseStatus.WAITING_AUTHORIZATION, CaseStatus.NEEDS_USER, CaseStatus.READY_FOR_REVIEW}
             else CaseStatus.STOPPING
         )
         return self._transition(
@@ -708,7 +938,6 @@ class CaseService:
         release_lease: bool,
         message_context_revision: int | None = None,
     ) -> CaseRecord:
-        assert_transition(current.status, target)
         now = _now()
         fields = {"status": target.value, "updated_at": now, **(updates or {})}
         if release_lease:
@@ -729,11 +958,16 @@ class CaseService:
             "stop_requested_at",
             "lease_owner",
             "lease_expires_at",
+            "ever_published",
         }
         if not set(fields).issubset(allowed):
             raise ValueError("unsupported Agent Case update field")
+        if "ever_published" in fields and fields["ever_published"] != 1:
+            raise ValueError("Publication history is monotonic")
         assignments = ", ".join(f"{name} = :{name}" for name in fields)
         with self.engine.begin() as connection:
+            self._guard_execution(connection, current.case_id, allow_stop=target == CaseStatus.STOPPED)
+            assert_transition(current.status, target)
             result = connection.execute(
                 text(
                     f"""
@@ -750,6 +984,8 @@ class CaseService:
                     "Agent Case changed concurrently.",
                     status_code=409,
                 )
+            if fields.get("ever_published") == 1:
+                self._mark_legacy_published(connection, current.case_id)
             self._append_message(
                 connection,
                 case_id=current.case_id,
@@ -762,7 +998,73 @@ class CaseService:
             )
         return self.get_case(current.case_id)
 
+    def start_delivery(self, case_id: str) -> CaseRecord:
+        current = self.get_case(case_id)
+        if current.status == CaseStatus.DELIVERING:
+            return current
+        return self._transition(current, CaseStatus.DELIVERING, content="Verified local/test delivery is committing.",
+                                payload={"event": "delivery_started"}, sender_type="SYSTEM", release_lease=False)
+
+    def _mark_legacy_published(self, connection: Any, case_id: str) -> None:
+        if connection.execute(text("SELECT 1 FROM agent_task_runs WHERE task_id=:id"), {"id": case_id}).first() is None:
+            connection.execute(text("UPDATE agent_authorized_lineages SET published=1 WHERE case_id=:case"), {"case": case_id})
+
+    def finalize_delivery_transaction(self, connection: Any, case: CaseRecord, imported: Any, handover: dict) -> None:
+        # Same transaction as dataset projection: cancellation/lease takeover and
+        # business visibility cannot race an unrelated Case SUCCESS write.
+        self._guard_execution(connection, case.case_id)
+        current = self._locked_case(connection, case.case_id)
+        if current.status != CaseStatus.DELIVERING or current.stop_requested_at or current.version != case.version:
+            raise AgentImportError("AGENT_CASE_VERSION_CONFLICT", "Delivery baseline changed before commit.", status_code=409)
+        now = _now()
+        connection.execute(text("UPDATE agent_task_runs SET ended_at=COALESCE(ended_at,:now) WHERE task_id=:id"),
+                           {"id": case.case_id, "now": datetime.now(timezone.utc).timestamp()})
+        connection.execute(text("""INSERT INTO agent_deliveries
+            (case_id, operation_key, dataset_id, candidate_sha256, handover_sha256, published_at)
+            VALUES (:case_id, :operation, :dataset, :candidate, :handover, :now)"""),
+            {"case_id": case.case_id, "operation": handover["verification_operation"], "dataset": imported.dataset_id,
+             "candidate": case.candidate_zp_sha256, "handover": handover["sha256"], "now": now})
+        self._insert_json_artifact_tx(connection, current, None, "handover", handover, now)
+        from .asset_retention import retain_delivery
+        retain_delivery(connection, case)
+        self._mark_legacy_published(connection, case.case_id)
+        verification = dict(current.verification_payload or {})
+        if getattr(imported, "capability_report", None) is not None:
+            verification["dataset_capability_report"] = imported.capability_report
+        connection.execute(text("""UPDATE agent_import_cases SET status='SUCCESS', ever_published=1,
+            dataset_id=:dataset, dataset_slug=:slug, lease_owner=NULL, lease_expires_at=NULL,
+            verification_payload=:verification, version=version+1, updated_at=:now WHERE case_id=:id"""),
+            {"dataset": imported.dataset_id, "slug": imported.dataset_slug, "verification": _json(verification), "now": now, "id": case.case_id})
+        self._append_message(connection, case_id=case.case_id, context_revision=case.context_revision,
+                             sender_type="SYSTEM", message_kind="EVIDENCE", content="Verified automatic test delivery committed with HANDOVER.md.",
+                             payload={"event": "auto_delivery_committed", "dataset_id": imported.dataset_id,
+                                      "handover_sha256": handover["sha256"]}, created_at=now)
+
+    def finalize_reviewed_import_transaction(self, connection: Any, case: CaseRecord, imported: Any, handover: dict | None) -> None:
+        current = self._locked_case(connection, case.case_id)
+        if current.status != CaseStatus.READY_FOR_REVIEW or current.version != case.version or current.stop_requested_at:
+            raise AgentImportError("AGENT_CASE_VERSION_CONFLICT", "Approval was cancelled or changed before import commit.", status_code=409)
+        now = _now()
+        connection.execute(text("UPDATE agent_task_runs SET ended_at=COALESCE(ended_at,:now) WHERE task_id=:id"),
+                           {"id": case.case_id, "now": datetime.now(timezone.utc).timestamp()})
+        from .asset_retention import retain_delivery
+        retain_delivery(connection, case)
+        self._mark_legacy_published(connection, case.case_id)
+        verification = dict(current.verification_payload or {})
+        if getattr(imported, "capability_report", None) is not None:
+            verification["dataset_capability_report"] = imported.capability_report
+        if handover is not None:
+            self._insert_json_artifact_tx(connection, current, None, "handover", handover, now)
+        connection.execute(text("""UPDATE agent_import_cases SET status='SUCCESS', ever_published=1,
+            dataset_id=:dataset, dataset_slug=:slug, verification_payload=:verification,
+            lease_owner=NULL, lease_expires_at=NULL, version=version+1, updated_at=:now WHERE case_id=:id"""),
+            {"dataset": imported.dataset_id, "slug": imported.dataset_slug, "verification": _json(verification), "now": now, "id": case.case_id})
+        self._append_message(connection, case_id=case.case_id, context_revision=case.context_revision,
+                             sender_type="SYSTEM", message_kind="EVIDENCE", content="Approved import and Case success committed together.",
+                             payload={"event": "import_success", "dataset_id": imported.dataset_id, "dataset_slug": imported.dataset_slug}, created_at=now)
+
     def _locked_case(self, connection: Any, case_id: str) -> CaseRecord:
+        self._guard_execution(connection, case_id, allow_stop=True)
         lock = " FOR UPDATE" if connection.dialect.name != "sqlite" else ""
         row = connection.execute(
             text("SELECT * FROM agent_import_cases WHERE case_id = :case_id" + lock),
@@ -771,6 +1073,57 @@ class CaseService:
         if row is None:
             raise AgentImportError("AGENT_CASE_NOT_FOUND", "Agent Case not found.", status_code=404)
         return _case(row)
+
+    def _guard_execution(self, connection: Any, case_id: str, *, allow_stop: bool = False) -> None:
+        fence = current_fence()
+        if fence is None:
+            return
+        lock = " FOR UPDATE" if connection.dialect.name == "postgresql" else ""
+        row = connection.execute(text(
+            "SELECT lease_token, lease_owner, lease_expires_at, stop_requested_at FROM agent_import_cases "
+            "WHERE case_id = :case_id" + lock,
+        ), {"case_id": case_id}).mappings().one()
+        if fence.case_id != case_id or row["lease_token"] != fence.token or not row["lease_owner"] or (
+            row["lease_expires_at"] is None or row["lease_expires_at"] < _now()
+        ):
+            raise AgentImportError("WORKER_LEASE_LOST", "Execution lease is no longer valid.", status_code=409)
+        if row["stop_requested_at"] is not None and not allow_stop:
+            raise AgentImportError("AGENT_CANCELLED", "Case cancellation is pending.", status_code=409)
+
+    def check_execution(self, case_id: str, lease_token: str, reserve_tokens: int = 0) -> float:
+        from app.core.config import settings
+        with self.engine.connect() as db:
+            policy_json = db.execute(text("SELECT policy_json FROM agent_task_runs WHERE task_id=:id"), {"id": case_id}).scalar()
+        policy = _object(policy_json) if policy_json else {}
+        memory_limit = policy.get("memory_bytes", settings.agent_case_process_memory_budget_bytes)
+        reservation_limit = policy.get("reservation_units", settings.agent_case_token_budget)
+        if memory_limit:
+            from app.agent_import.verification_metrics import peak_rss_bytes
+            observed = peak_rss_bytes(current=True)
+            if observed is None or observed > memory_limit:
+                raise AgentImportError("AGENT_MEMORY_BUDGET_EXCEEDED", "Worker process memory budget exceeded at an execution checkpoint", status_code=409)
+
+        with self.engine.begin() as connection:
+            lock = " FOR UPDATE" if connection.dialect.name == "postgresql" else ""
+            row = connection.execute(text(
+                "SELECT lease_token, lease_expires_at, stop_requested_at, deadline_at, model_tokens_reserved "
+                "FROM agent_import_cases WHERE case_id = :case_id" + lock,
+            ), {"case_id": case_id}).mappings().one()
+            if row["lease_token"] != lease_token or not row["lease_expires_at"] or row["lease_expires_at"] < _now():
+                raise AgentImportError("WORKER_LEASE_LOST", "Execution lease is no longer valid.", status_code=409)
+            if row["stop_requested_at"]:
+                raise AgentImportError("AGENT_CANCELLED", "Case cancellation is pending.", status_code=409)
+            remaining = (datetime.fromisoformat(row["deadline_at"]) - datetime.now(timezone.utc)).total_seconds()
+            if remaining <= 0:
+                raise AgentImportError("AGENT_DEADLINE_EXCEEDED", "The Case deadline has expired.", status_code=409)
+            if reserve_tokens < 0 or row["model_tokens_reserved"] + reserve_tokens > reservation_limit:
+                raise AgentImportError("TASK_RUN_LIMIT_REACHED" if policy else "AGENT_BUDGET_EXCEEDED", "达到任务运行上限；请求预留量超过任务设置（不是已计费token）。", status_code=409)
+            if reserve_tokens:
+                connection.execute(text(
+                    "UPDATE agent_import_cases SET model_tokens_reserved = model_tokens_reserved + :amount "
+                    "WHERE case_id = :case_id",
+                ), {"amount": reserve_tokens, "case_id": case_id})
+            return remaining
 
     def _append_message(
         self,
@@ -861,6 +1214,51 @@ class CaseService:
         with self.engine.begin() as connection:
             self._insert_json_artifact_tx(connection, case, None, artifact_type, payload, _now())
 
+    def record_candidate_diagnostic(self, case_id: str, *, context_revision: int, payload: dict[str, Any]) -> None:
+        """Persist each rejected proposal before the provider makes its next request."""
+        with self.engine.begin() as connection:
+            case = self._locked_case(connection, case_id)
+            if case.context_revision != context_revision or case.status != CaseStatus.STRATEGY_READY:
+                raise AgentImportError(
+                    "AGENT_DIAGNOSTIC_WRITE_FAILED", "Case changed while recording candidate diagnostics.", status_code=409,
+                )
+            self._insert_json_artifact_tx(connection, case, None, "candidate_diagnostic", payload, _now())
+
+    def record_research_diagnostic(self, case_id: str, *, context_revision: int, payload: dict[str, Any]) -> None:
+        with self.engine.begin() as connection:
+            case = self._locked_case(connection, case_id)
+            if case.context_revision != context_revision or case.status != CaseStatus.ANALYZING:
+                raise AgentImportError("AGENT_DIAGNOSTIC_WRITE_FAILED", "Case changed while recording research diagnostics", status_code=409)
+            self._insert_json_artifact_tx(connection, case, None, "research_diagnostic", payload, _now())
+
+    def record_model_repair(self, case_id: str, *, context_revision: int, payload: dict[str, Any]) -> None:
+        with self.engine.begin() as connection:
+            case = self._locked_case(connection, case_id)
+            if case.context_revision != context_revision or case.status != CaseStatus.STRATEGY_READY:
+                raise AgentImportError("AGENT_DIAGNOSTIC_WRITE_FAILED", "Case changed while recording model repair", status_code=409)
+            self._insert_json_artifact_tx(connection, case, None, "model_repair", payload, _now())
+
+    def record_model_request(self, case_id: str, payload: dict[str, Any]) -> None:
+        """Trusted body-free transport metadata. Stale/cancelled workers cannot register receipts."""
+        if current_fence() is None:
+            raise AgentImportError("WORKER_LEASE_REQUIRED", "Model audit requires a claimed Worker execution", status_code=403)
+        with self.engine.begin() as connection:
+            self._guard_execution(connection, case_id)
+            case = self._locked_case(connection, case_id)
+            from app.core.config import settings
+            self._insert_json_artifact_tx(connection, case, None, "model_request", {
+                **payload, "context_revision": case.context_revision, "build_id": settings.viewer_build_id,
+                "model_profile": "single-openai-v1",
+            }, _now())
+
+    def record_progress(self, case_id: str, payload: dict[str, Any]) -> None:
+        if current_fence() is None:
+            raise AgentImportError("WORKER_LEASE_REQUIRED", "Progress requires a claimed Worker", status_code=403)
+        with self.engine.begin() as connection:
+            self._guard_execution(connection, case_id)
+            connection.execute(text("UPDATE agent_import_cases SET progress_payload=:progress WHERE case_id=:id"),
+                {"id": case_id, "progress": _json({**payload, "updated_at": _now()})})
+
     def _insert_json_artifact_tx(
         self,
         connection: Any,
@@ -882,6 +1280,7 @@ class CaseService:
             sha256=hashlib.sha256(content).hexdigest(),
             size_bytes=len(content),
             media_type="application/json",
+            payload_json=content.decode("utf-8"),
             now=now,
         )
 
@@ -908,11 +1307,12 @@ class CaseService:
             sha256=digest.hexdigest(),
             size_bytes=path.stat().st_size,
             media_type="application/octet-stream" if path.suffix.casefold() == ".zp" else "application/json",
+            payload_json=None,
             now=now,
         )
 
-    @staticmethod
     def _insert_artifact(
+        self,
         connection: Any,
         *,
         artifact_id: str,
@@ -923,17 +1323,19 @@ class CaseService:
         sha256: str,
         size_bytes: int,
         media_type: str,
+        payload_json: str | None,
         now: str,
     ) -> None:
+        self._guard_execution(connection, case_id)
         connection.execute(
             text(
                 """
                 INSERT INTO agent_artifacts (
                     artifact_id, case_id, attempt_id, artifact_type,
-                    storage_ref, sha256, size_bytes, media_type, created_at
+                    storage_ref, sha256, size_bytes, media_type, payload_json, created_at
                 ) VALUES (
                     :artifact_id, :case_id, :attempt_id, :artifact_type,
-                    :storage_ref, :sha256, :size_bytes, :media_type, :now
+                    :storage_ref, :sha256, :size_bytes, :media_type, :payload_json, :now
                 )
                 """
             ),
@@ -946,25 +1348,39 @@ class CaseService:
                 "sha256": sha256,
                 "size_bytes": size_bytes,
                 "media_type": media_type,
+                "payload_json": payload_json,
                 "now": now,
             },
         )
 
-    def _create_notification(self, connection: Any, case: CaseRecord, summary: str, now: str) -> None:
+    def _create_notification(
+        self,
+        connection: Any,
+        case: CaseRecord,
+        summary: str,
+        now: str,
+        *,
+        kind: str = "NEEDS_USER",
+    ) -> None:
         connection.execute(
             text(
                 """
                 INSERT INTO agent_notifications (
                     notification_id, case_id, kind, active, title, summary, created_at
                 ) VALUES (
-                    :notification_id, :case_id, 'NEEDS_USER', 1, :title, :summary, :now
+                    :notification_id, :case_id, :kind, 1, :title, :summary, :now
                 )
                 """
             ),
             {
                 "notification_id": str(uuid.uuid4()),
                 "case_id": case.case_id,
-                "title": f"Agent Case {case.case_id[:8]} needs input",
+                "kind": kind,
+                "title": (
+                    f"Agent Case {case.case_id[:8]} failed"
+                    if kind == "FAILED"
+                    else f"Agent Case {case.case_id[:8]} needs input"
+                ),
                 "summary": summary,
                 "now": now,
             },

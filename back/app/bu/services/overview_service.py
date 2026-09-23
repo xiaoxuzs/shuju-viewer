@@ -8,8 +8,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.bu.decoy_truth import confirmed_decoy_sql
 from app.schemas import BuOverviewOut, BuOverviewCounts, BuQcBlock, BuRtMzHeatmapOut, BuRunSummary
 from app.zp_runtime import ZpBottomUpOverview, get_binary_bottom_up_overview
+
+
+_CONFIRMED_MATCH_DECOY_SQL = confirmed_decoy_sql("im.is_decoy_match", "im.extra_metadata")
+_CONFIRMED_PROTEIN_DECOY_SQL = confirmed_decoy_sql("p.is_decoy", "p.extra_metadata")
+_CONFIRMED_UNALIASED_MATCH_DECOY_SQL = confirmed_decoy_sql("is_decoy_match", "extra_metadata")
 
 
 def _json_object(raw: Any) -> dict[str, Any]:
@@ -133,20 +139,22 @@ def get_overview(session: Session, dataset: dict[str, Any]) -> BuOverviewOut:
     try:
         counts_row = session.execute(
             text(
-                """
+                f"""
                 SELECT
                     (SELECT count(*) FROM identification_matches im
                       WHERE im.dataset_id = :dataset_id AND im.entity_type = 'PEPTIDE') AS matches,
                     (SELECT count(*) FROM peptides p WHERE p.dataset_id = :dataset_id) AS peptides,
                     (SELECT count(*) FROM proteins p
-                      WHERE p.dataset_id = :dataset_id AND p.is_decoy = false) AS proteins,
+                      WHERE p.dataset_id = :dataset_id
+                        AND NOT {_CONFIRMED_PROTEIN_DECOY_SQL}) AS proteins,
                     (SELECT count(DISTINCT jsonb_extract_path_text(p.extra_metadata, 'protein_group'))
                        FROM proteins p
                       WHERE p.dataset_id = :dataset_id
                         AND jsonb_extract_path_text(p.extra_metadata, 'protein_group') IS NOT NULL) AS protein_groups,
                     (SELECT count(*) FROM runs r WHERE r.dataset_id = :dataset_id) AS runs,
                     (SELECT count(*) FROM identification_matches im
-                      WHERE im.dataset_id = :dataset_id AND im.is_decoy_match = true) AS decoy_matches
+                      WHERE im.dataset_id = :dataset_id
+                        AND {_CONFIRMED_MATCH_DECOY_SQL}) AS decoy_matches
                 """
             ),
             {"dataset_id": dataset_id},
@@ -242,7 +250,7 @@ def get_rt_mz_heatmap(
     dataset: dict[str, Any],
     *,
     run_id: int | None,
-    q_max: float,
+    q_max: float | None,
     bins_rt: int,
     bins_mz: int,
     decoy: bool,
@@ -254,16 +262,18 @@ def get_rt_mz_heatmap(
     clauses = [
         "dataset_id = :dataset_id",
         "entity_type = 'PEPTIDE'",
-        "q_value <= :q_max",
         "retention_time IS NOT NULL",
         "precursor_mz IS NOT NULL",
     ]
-    params: dict[str, Any] = {"dataset_id": dataset_id, "q_max": q_max}
+    params: dict[str, Any] = {"dataset_id": dataset_id}
+    if q_max is not None:
+        clauses.append("q_value <= :q_max")
+        params["q_max"] = q_max
     if run_id is not None:
         clauses.append("run_id = :run_id")
         params["run_id"] = run_id
     if not decoy:
-        clauses.append("COALESCE(is_decoy_match, false) = false")
+        clauses.append(f"NOT {_CONFIRMED_UNALIASED_MATCH_DECOY_SQL}")
 
     where_sql = " AND ".join(clauses)
     bounds = session.execute(

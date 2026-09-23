@@ -39,7 +39,7 @@ export function BuOverviewPage() {
   });
   const defaultRun = data?.runs.find((run) => run.raw_format === "mzml") ?? data?.runs[0];
   const selectedRun = data?.runs.find((run) => run.run_id === selectedRunId) ?? defaultRun;
-  const qMax = data?.q_value_cutoff ?? 0.01;
+  const qMax = data?.q_value_cutoff ?? undefined;
   const chromatogram = useQuery({
     queryKey: ["bu", dataset.slug, "chromatogram", selectedRun?.run_id, chromType],
     queryFn: () => fetchBuRunChromatogram(dataset.slug, selectedRun!.run_id, chromType),
@@ -58,6 +58,7 @@ export function BuOverviewPage() {
       fetchBuRtMzHeatmap(dataset.slug, {
         run_id: selectedRun?.run_id,
         q_max: qMax,
+        q_filter: qMax !== undefined,
         bins_rt: 80,
         bins_mz: 80,
         decoy: false,

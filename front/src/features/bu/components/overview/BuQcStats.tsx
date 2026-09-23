@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BuOverviewOut } from "@/features/bu/types";
-import { DIACLIP_DISPLAY_NAME, formatCount, formatDecimal, isDiaclipSourceSoftware } from "@/features/bu/utils";
+import { DIACLIP_DISPLAY_NAME, formatCount, formatDecimal, formatSourceSoftwareName, isDiaclipSourceSoftware } from "@/features/bu/utils";
 
 const QC_FIELDS: { key: string; label: string; unit?: string }[] = [
   { key: "precursors_identified", label: "Precursors" },
@@ -23,7 +23,7 @@ export function BuQcStats({ overview }: { overview: BuOverviewOut }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{isDiaclip ? `${DIACLIP_DISPLAY_NAME} QC` : "DIA-NN QC"}</CardTitle>
+        <CardTitle className="text-base">{formatSourceSoftwareName(overview.source_software) ?? "Dataset"} QC</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">

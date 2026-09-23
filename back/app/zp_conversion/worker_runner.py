@@ -9,9 +9,11 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from app.agent_import.execution_control import checkpoint
 from typing import Protocol
 
 from app.core.config import settings
@@ -90,11 +92,24 @@ class SubprocessZpWorkerRunner:
         )
         process_control.register_process(request.job_id, process)
         try:
+            deadline = time.monotonic() + checkpoint(timeout=request.timeout_seconds)
             try:
-                stdout, stderr = process.communicate(timeout=request.timeout_seconds)
+                while True:
+                    checkpoint()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(command, request.timeout_seconds)
+                    try:
+                        stdout, stderr = process.communicate(timeout=min(0.5, remaining))
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
             except subprocess.TimeoutExpired as exc:
                 process_control.terminate_process_tree(process)
                 raise WorkerExecutionError("ZP_WORKER_TIMEOUT") from exc
+            except BaseException:
+                process_control.terminate_process_tree(process)
+                raise
         finally:
             process_control.unregister_process(request.job_id, process)
 
@@ -142,11 +157,10 @@ def _request_payload(request: WorkerRequest) -> dict[str, object]:
 
 
 def _worker_env() -> dict[str, str]:
-    env = os.environ.copy()
+    env = {name: os.environ[name] for name in ("SystemRoot", "WINDIR", "PATH", "PATHEXT", "TEMP", "TMP") if name in os.environ}
     entries = [str(settings.resolved_zp_engine_path()), *settings.zp_worker_pythonpath_list]
     if entries:
-        existing = env.get("PYTHONPATH")
-        env["PYTHONPATH"] = os.pathsep.join(entries + ([existing] if existing else []))
+        env["PYTHONPATH"] = os.pathsep.join(entries)
     return env
 
 

@@ -69,6 +69,9 @@ def test_mapping_preflight_accepts_only_canonical_physical_contract(tmp_path: Pa
     assert result["status"] == "PASSED"
     assert result["mapping_adapter"] == "maxquant_mzml_v1"
 
+    with pytest.raises(AgentBinaryPlanError, match="not executable from an unknown-format Agent Case"):
+        preflight_mapping_plan(source_root=tmp_path, plan=plan, allow_legacy_mapping=False)
+
     payload = plan.model_dump(mode="json")
     payload["zp_conversion_plan"]["mapping_plan"]["source_files"][0]["required"] = False
     weakened = AgentCandidatePlan.model_validate(payload)

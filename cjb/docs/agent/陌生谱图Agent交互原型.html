@@ -1,0 +1,1698 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unknown Spectra Agent Interaction Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fd;
+      --surface: rgba(255, 255, 255, 0.94);
+      --surface-strong: #ffffff;
+      --surface-soft: #f7f9fc;
+      --ink: #172033;
+      --muted: #6f7b92;
+      --line: #e4e8f0;
+      --line-strong: #d7ddeb;
+      --blue: #5f72f4;
+      --blue-dark: #465bd6;
+      --blue-soft: #eef1ff;
+      --green: #1d9b68;
+      --green-soft: #e8f8f1;
+      --amber: #c67a16;
+      --amber-soft: #fff4df;
+      --red: #df3d50;
+      --red-soft: #fff0f2;
+      --shadow: 0 18px 50px rgba(43, 55, 96, 0.12);
+      --shadow-soft: 0 8px 28px rgba(43, 55, 96, 0.08);
+      --radius: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: var(--bg);
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 75% 12%, rgba(226, 213, 255, 0.56), transparent 27rem),
+        radial-gradient(circle at 15% 8%, rgba(215, 227, 255, 0.78), transparent 24rem),
+        linear-gradient(180deg, #fafbff 0%, #f7f8fd 55%, #fbfbfe 100%);
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      padding: 0 22px;
+      border-bottom: 1px solid rgba(224, 228, 239, 0.9);
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: max-content;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      border: 1px solid #dfe4ff;
+    }
+
+    .brand-name {
+      font-size: 13px;
+      font-weight: 720;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-subtitle {
+      margin-top: 1px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 650;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .header-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .nav-pill,
+    .system-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      color: #48546b;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .nav-pill.active {
+      border-color: #e5e9f2;
+      background: #f0f3f8;
+    }
+
+    .system-pill {
+      margin-left: auto;
+      border-color: #e2e6ef;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .icon {
+      width: 17px;
+      height: 17px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    .info-fab {
+      position: fixed;
+      top: 82px;
+      left: 22px;
+      z-index: 70;
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #dbe1ef;
+      border-radius: 15px;
+      color: var(--blue-dark);
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: var(--shadow-soft);
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .info-fab:hover {
+      transform: translateY(-2px);
+      border-color: #cbd3f5;
+      box-shadow: 0 12px 34px rgba(55, 66, 124, 0.16);
+    }
+
+    .info-fab:focus-visible,
+    .button:focus-visible,
+    .scenario-button:focus-visible,
+    .drawer-close:focus-visible,
+    .notification-card:focus-visible,
+    textarea:focus-visible {
+      outline: 3px solid rgba(95, 114, 244, 0.25);
+      outline-offset: 2px;
+    }
+
+    .info-fab .icon {
+      width: 22px;
+      height: 22px;
+      stroke-width: 2;
+    }
+
+    .count-badge {
+      position: absolute;
+      top: -7px;
+      right: -7px;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      display: grid;
+      place-items: center;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--red);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1;
+      box-shadow: 0 4px 10px rgba(223, 61, 80, 0.28);
+    }
+
+    .count-badge[hidden] {
+      display: none;
+    }
+
+    .page {
+      width: min(1240px, calc(100% - 150px));
+      margin: 0 auto;
+      padding: 34px 0 80px;
+    }
+
+    .page[hidden] {
+      display: none;
+    }
+
+    .page-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 22px;
+      margin-bottom: 22px;
+    }
+
+    .page-kicker {
+      margin: 0 0 5px;
+      color: var(--blue-dark);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 4px;
+      font-size: clamp(25px, 3vw, 34px);
+      letter-spacing: -0.04em;
+    }
+
+    .page-description {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .button {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 14px;
+      border: 1px solid #dfe4ee;
+      border-radius: 10px;
+      background: #fff;
+      color: #38445b;
+      font-size: 12px;
+      font-weight: 720;
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+    }
+
+    .button:hover {
+      border-color: #cad2e2;
+      background: #f9faff;
+      transform: translateY(-1px);
+    }
+
+    .button.primary {
+      border-color: var(--blue);
+      color: #fff;
+      background: var(--blue);
+    }
+
+    .button.primary:hover {
+      border-color: var(--blue-dark);
+      background: var(--blue-dark);
+    }
+
+    .button.danger {
+      border-color: #f2c6ce;
+      color: #bb3043;
+      background: var(--red-soft);
+    }
+
+    .dataset-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .dataset-card {
+      min-height: 210px;
+      display: flex;
+      flex-direction: column;
+      padding: 18px;
+      border: 1px solid rgba(224, 228, 238, 0.92);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 4px 16px rgba(51, 62, 103, 0.035);
+    }
+
+    .dataset-card.agent-pending {
+      border-color: #f1bdc7;
+      background:
+        linear-gradient(135deg, rgba(255, 240, 242, 0.8), rgba(255, 255, 255, 0.96) 48%);
+    }
+
+    .card-topline,
+    .badge-row,
+    .meta-row,
+    .case-meta,
+    .case-actions,
+    .drawer-title-row,
+    .notification-topline,
+    .section-heading,
+    .composer-actions,
+    .prototype-note {
+      display: flex;
+      align-items: center;
+    }
+
+    .card-topline {
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .badge-row {
+      min-width: 0;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .data-icon {
+      width: 29px;
+      height: 29px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .mini-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 23px;
+      padding: 0 8px;
+      border: 1px solid #e1e5ed;
+      border-radius: 999px;
+      color: #5d6980;
+      background: #fafbfe;
+      font-size: 10px;
+      font-weight: 740;
+      white-space: nowrap;
+    }
+
+    .mini-badge.blue {
+      border-color: #d9deff;
+      color: #5165e4;
+      background: #f0f2ff;
+    }
+
+    .mini-badge.green {
+      border-color: #cef0e1;
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .mini-badge.red {
+      border-color: #f3cbd2;
+      color: var(--red);
+      background: var(--red-soft);
+    }
+
+    .dataset-title {
+      margin-bottom: 5px;
+      font-size: 16px;
+      letter-spacing: -0.02em;
+    }
+
+    .dataset-description {
+      min-height: 40px;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .meta-row {
+      align-items: stretch;
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .meta-box {
+      min-width: 0;
+      flex: 1 1 0;
+      padding: 9px 10px;
+      border: 1px solid #e7eaf1;
+      border-radius: 9px;
+      background: #f8f9fc;
+    }
+
+    .meta-label {
+      color: #8993a7;
+      font-size: 9px;
+      font-weight: 760;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .meta-value {
+      margin-top: 3px;
+      overflow: hidden;
+      color: #3b465c;
+      font-size: 11px;
+      font-weight: 720;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .prototype-note {
+      gap: 8px;
+      margin-top: 22px;
+      padding: 12px 14px;
+      border: 1px dashed #d7ddef;
+      border-radius: 12px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.62);
+      font-size: 11px;
+    }
+
+    .backdrop {
+      position: fixed;
+      inset: 64px 0 0;
+      z-index: 58;
+      background: rgba(24, 30, 48, 0.2);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+
+    .backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .drawer {
+      position: fixed;
+      top: 64px;
+      right: 0;
+      bottom: 0;
+      z-index: 60;
+      width: min(440px, 94vw);
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid #e0e4ee;
+      background: rgba(251, 252, 255, 0.98);
+      box-shadow: -24px 0 60px rgba(35, 45, 79, 0.16);
+      transform: translateX(104%);
+      transition: transform 220ms ease;
+    }
+
+    .drawer.open {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      padding: 22px 22px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .drawer-title-row {
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .drawer h2 {
+      margin-bottom: 3px;
+      font-size: 20px;
+      letter-spacing: -0.03em;
+    }
+
+    .drawer-subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .drawer-close {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .drawer-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .drawer-section-label {
+      margin: 2px 4px 10px;
+      color: #8590a5;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .notification-list {
+      display: grid;
+      gap: 11px;
+    }
+
+    .notification-card {
+      width: 100%;
+      padding: 15px;
+      border: 1px solid #e0e5ef;
+      border-radius: 13px;
+      text-align: left;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(44, 55, 92, 0.04);
+      cursor: pointer;
+    }
+
+    .notification-card.urgent {
+      border-color: #f0c3cb;
+      background: linear-gradient(140deg, #fff5f6, #fff 45%);
+    }
+
+    .notification-card:hover {
+      border-color: #cbd3e5;
+    }
+
+    .notification-topline {
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 9px;
+    }
+
+    .notification-title {
+      margin-bottom: 5px;
+      font-size: 13px;
+      font-weight: 790;
+    }
+
+    .notification-copy {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .notification-time {
+      color: #9aa3b4;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .drawer-footer {
+      padding: 14px 18px 18px;
+      border-top: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .shared-warning {
+      padding: 11px 12px;
+      border: 1px solid #ecd7ad;
+      border-radius: 10px;
+      color: #875d1b;
+      background: #fff8e8;
+      font-size: 10px;
+      line-height: 1.5;
+    }
+
+    .case-page {
+      width: min(1260px, calc(100% - 120px));
+    }
+
+    .case-header-card {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .case-headline {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .back-link {
+      margin-bottom: 12px;
+      padding: 0;
+      border: 0;
+      color: var(--blue-dark);
+      background: none;
+      font-size: 11px;
+      font-weight: 760;
+      cursor: pointer;
+    }
+
+    .case-title {
+      margin-bottom: 5px;
+      font-size: 24px;
+      letter-spacing: -0.035em;
+    }
+
+    .case-meta {
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .case-actions {
+      gap: 8px;
+    }
+
+    .case-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(330px, 0.75fr);
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 4px 18px rgba(44, 55, 92, 0.04);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(250, 251, 254, 0.84);
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 790;
+    }
+
+    .panel-subtitle {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .conversation {
+      height: 540px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .messages {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 18px;
+    }
+
+    .message {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .message.user {
+      grid-template-columns: minmax(0, 1fr) 34px;
+    }
+
+    .message.user .avatar {
+      grid-column: 2;
+      color: #fff;
+      background: #7280a2;
+    }
+
+    .message.user .bubble {
+      grid-column: 1;
+      grid-row: 1;
+      justify-self: end;
+      border-color: #dce1ff;
+      background: #f0f2ff;
+    }
+
+    .avatar {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      color: var(--blue-dark);
+      background: var(--blue-soft);
+      font-size: 10px;
+      font-weight: 820;
+    }
+
+    .avatar.agent2 {
+      color: #8d5b0e;
+      background: var(--amber-soft);
+    }
+
+    .avatar.system {
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .bubble {
+      max-width: 92%;
+      padding: 12px 13px;
+      border: 1px solid #e3e7ef;
+      border-radius: 5px 13px 13px 13px;
+      background: #fff;
+    }
+
+    .message-name {
+      margin-bottom: 4px;
+      color: #49556c;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .message-text {
+      margin: 0;
+      color: #4f5b71;
+      font-size: 11px;
+      line-height: 1.65;
+    }
+
+    .message-time {
+      margin-top: 6px;
+      color: #a0a8b7;
+      font-size: 9px;
+    }
+
+    .composer {
+      padding: 14px;
+      border-top: 1px solid var(--line);
+      background: #fafbfe;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 78px;
+      resize: vertical;
+      padding: 11px 12px;
+      border: 1px solid #dce1eb;
+      border-radius: 11px;
+      color: var(--ink);
+      background: #fff;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    textarea:disabled {
+      color: #8c95a7;
+      background: #f1f3f7;
+      cursor: not-allowed;
+    }
+
+    .composer-actions {
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 9px;
+    }
+
+    .composer-hint {
+      color: var(--muted);
+      font-size: 9px;
+    }
+
+    .side-stack {
+      display: grid;
+      align-content: start;
+      gap: 18px;
+    }
+
+    .panel-body {
+      padding: 16px 18px;
+    }
+
+    .section-heading {
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 13px;
+    }
+
+    .section-heading h3 {
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .timeline {
+      position: relative;
+      display: grid;
+      gap: 14px;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      top: 10px;
+      bottom: 10px;
+      left: 8px;
+      width: 1px;
+      background: #dde2ec;
+    }
+
+    .timeline-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 10px;
+    }
+
+    .timeline-dot {
+      z-index: 1;
+      width: 17px;
+      height: 17px;
+      display: grid;
+      place-items: center;
+      border: 3px solid #fff;
+      border-radius: 50%;
+      background: #a8b0c2;
+      box-shadow: 0 0 0 1px #d7ddea;
+    }
+
+    .timeline-dot.fail {
+      background: var(--red);
+    }
+
+    .timeline-dot.run {
+      background: var(--blue);
+    }
+
+    .timeline-dot.pass {
+      background: var(--green);
+    }
+
+    .timeline-title {
+      font-size: 10px;
+      font-weight: 780;
+    }
+
+    .timeline-copy {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1.5;
+    }
+
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .evidence-item {
+      padding: 10px;
+      border: 1px solid #e5e8ef;
+      border-radius: 10px;
+      background: #f9fafc;
+    }
+
+    .evidence-label {
+      color: #8a94a7;
+      font-size: 8px;
+      font-weight: 780;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .evidence-value {
+      margin-top: 4px;
+      color: #465268;
+      font-size: 10px;
+      font-weight: 730;
+    }
+
+    .scenario-dock {
+      position: fixed;
+      right: 22px;
+      bottom: 20px;
+      z-index: 45;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px;
+      border: 1px solid #dce1ea;
+      border-radius: 13px;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: var(--shadow-soft);
+      backdrop-filter: blur(12px);
+    }
+
+    .scenario-label {
+      padding: 0 7px;
+      color: #8993a6;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .scenario-button {
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: #657086;
+      background: transparent;
+      font-size: 9px;
+      font-weight: 740;
+      cursor: pointer;
+    }
+
+    .scenario-button:hover {
+      background: #f2f4f9;
+    }
+
+    .scenario-button.active {
+      border-color: #dce1ff;
+      color: var(--blue-dark);
+      background: var(--blue-soft);
+    }
+
+    .empty-notice {
+      padding: 34px 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    @media (max-width: 1080px) {
+      .dataset-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .case-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .conversation {
+        height: 500px;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .app-header {
+        gap: 12px;
+        padding: 0 14px;
+      }
+
+      .brand-subtitle,
+      .system-pill span,
+      .nav-pill span {
+        display: none;
+      }
+
+      .page,
+      .case-page {
+        width: calc(100% - 32px);
+        padding-top: 26px;
+      }
+
+      .page-heading,
+      .case-headline {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .dataset-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .info-fab {
+        top: auto;
+        bottom: 80px;
+        left: 16px;
+      }
+
+      .scenario-dock {
+        right: 12px;
+        bottom: 12px;
+        max-width: calc(100% - 24px);
+        overflow-x: auto;
+      }
+
+      .scenario-label {
+        display: none;
+      }
+
+      .evidence-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand" aria-label="proteo-viewer">
+      <div class="brand-mark" aria-hidden="true">
+        <svg class="icon" viewBox="0 0 24 24">
+          <path d="M7 3h10l1 4v11a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V7l1-4Z"></path>
+          <path d="M8 8h8M9 12h6M10 16h4"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">proteo-viewer</div>
+        <div class="brand-subtitle">Proteomics</div>
+      </div>
+    </div>
+
+    <nav class="header-nav" aria-label="Primary navigation">
+      <div class="nav-pill active">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
+          <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
+          <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+        </svg>
+        <span>Datasets</span>
+      </div>
+    </nav>
+
+    <div class="system-pill">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="13" rx="2"></rect>
+        <path d="M8 21h8M12 17v4"></path>
+      </svg>
+      <span>Shared workspace</span>
+    </div>
+  </header>
+
+  <button id="infoButton" class="info-fab" type="button" aria-label="Open items that need attention" aria-expanded="false">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"></circle>
+      <path d="M12 10v6"></path>
+      <path d="M12 7h.01"></path>
+    </svg>
+    <span id="notificationCount" class="count-badge">2</span>
+  </button>
+
+  <main id="datasetsPage" class="page">
+    <div class="page-heading">
+      <div>
+        <p class="page-kicker">Workspace overview</p>
+        <h1>Datasets</h1>
+        <p class="page-description">Select a dataset to explore proteins, proteoforms, PrSMs, and spectra.</p>
+      </div>
+      <button class="button" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 7h7l2 2h9v10H3V7Z"></path>
+          <path d="M12 12v5M9.5 14.5 12 12l2.5 2.5"></path>
+        </svg>
+        Upload local dataset
+      </button>
+    </div>
+
+    <section class="dataset-grid" aria-label="Dataset list">
+      <article class="dataset-card">
+        <div class="card-topline">
+          <div class="badge-row">
+            <div class="data-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24">
+                <ellipse cx="12" cy="5" rx="6.5" ry="2.7"></ellipse>
+                <path d="M5.5 5v6c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V5"></path>
+                <path d="M5.5 11v6c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7v-6"></path>
+              </svg>
+            </div>
+            <span class="mini-badge">xzx_pxd045330</span>
+            <span class="mini-badge">Top-Down</span>
+            <span class="mini-badge green">Ready</span>
+          </div>
+        </div>
+        <h2 class="dataset-title">xzx_PXD045330</h2>
+        <p class="dataset-description">Dataset imported from PrSM detail files and available for existing Viewer pages.</p>
+        <div class="meta-row">
+          <div class="meta-box">
+            <div class="meta-label">Proteins</div>
+            <div class="meta-value">1</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">Proteoforms</div>
+            <div class="meta-value">30</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">PrSMs</div>
+            <div class="meta-value">30</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="dataset-card">
+        <div class="card-topline">
+          <div class="badge-row">
+            <div class="data-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24">
+                <ellipse cx="12" cy="5" rx="6.5" ry="2.7"></ellipse>
+                <path d="M5.5 5v12c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V5"></path>
+              </svg>
+            </div>
+            <span class="mini-badge">histone49</span>
+            <span class="mini-badge">Top-Down</span>
+            <span class="mini-badge green">Ready</span>
+          </div>
+        </div>
+        <h2 class="dataset-title">MZ20160222DS_histone49</h2>
+        <p class="dataset-description">TopPIC and TopFD top-down dataset imported by the universal adapter.</p>
+        <div class="meta-row">
+          <div class="meta-box">
+            <div class="meta-label">Proteins</div>
+            <div class="meta-value">64</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">Proteoforms</div>
+            <div class="meta-value">2,404</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">PrSMs</div>
+            <div class="meta-value">17,682</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="dataset-card">
+        <div class="card-topline">
+          <div class="badge-row">
+            <div class="data-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24">
+                <path d="M3 12h4l2-7 4 14 2-7h6"></path>
+              </svg>
+            </div>
+            <span class="mini-badge">bu_pr1_dia</span>
+            <span class="mini-badge blue">Bottom-Up</span>
+            <span class="mini-badge green">Ready</span>
+          </div>
+        </div>
+        <h2 class="dataset-title">BU DIA Demo (HeLa mzML)</h2>
+        <p class="dataset-description">DIA-NN Bottom-Up dataset with mzML-backed spectra and reusable BU visualizations.</p>
+        <div class="meta-row">
+          <div class="meta-box">
+            <div class="meta-label">Runs</div>
+            <div class="meta-value">1</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">Q max</div>
+            <div class="meta-value">0.01</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">Software</div>
+            <div class="meta-value">DIA-NN 2.0</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="dataset-card agent-pending">
+        <div class="card-topline">
+          <div class="badge-row">
+            <div class="data-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24">
+                <path d="M12 3v3M12 18v3M3 12h3M18 12h3"></path>
+                <circle cx="12" cy="12" r="5"></circle>
+                <path d="m8.5 8.5-2-2M17.5 17.5l-2-2M15.5 8.5l2-2M6.5 17.5l2-2"></path>
+              </svg>
+            </div>
+            <span class="mini-badge">vendor-x-001</span>
+            <span class="mini-badge blue">Unknown</span>
+            <span class="mini-badge red">Needs user</span>
+          </div>
+        </div>
+        <h2 class="dataset-title">Vendor X DIA package</h2>
+        <p class="dataset-description">Three autonomous conversion rounds could not confirm the retention time unit; the agent is waiting for your answer.</p>
+        <div class="meta-row">
+          <div class="meta-box">
+            <div class="meta-label">Case</div>
+            <div class="meta-value">AG-2407-018</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">Attempts</div>
+            <div class="meta-value">3 / 3</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">Mode</div>
+            <div class="meta-value">Server upload</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="dataset-card">
+        <div class="card-topline">
+          <div class="badge-row">
+            <div class="data-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24">
+                <path d="M3 12h4l2-7 4 14 2-7h6"></path>
+              </svg>
+            </div>
+            <span class="mini-badge">raw1</span>
+            <span class="mini-badge">Spectra</span>
+            <span class="mini-badge green">Ready</span>
+          </div>
+        </div>
+        <h2 class="dataset-title">raw1</h2>
+        <p class="dataset-description">Standalone mzML spectra dataset imported for basic spectra viewing.</p>
+        <div class="meta-row">
+          <div class="meta-box">
+            <div class="meta-label">Runs</div>
+            <div class="meta-value">1</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">Format</div>
+            <div class="meta-value">mzML</div>
+          </div>
+          <div class="meta-box">
+            <div class="meta-label">Source</div>
+            <div class="meta-value">mzML only</div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <div class="prototype-note">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M12 10v6M12 7h.01"></path>
+      </svg>
+      This is a standalone static prototype and is not connected to the Viewer API. Switch demo states at the bottom right; the info button on the left opens the agent cases that need your attention.
+    </div>
+  </main>
+
+  <main id="casePage" class="page case-page" hidden>
+    <button id="backToDatasets" class="back-link" type="button">← Back to datasets</button>
+    <section class="case-header-card">
+      <div class="case-headline">
+        <div>
+          <p class="page-kicker">Agent import case</p>
+          <h1 class="case-title">Vendor X DIA package</h1>
+          <div class="case-meta">
+            <span class="mini-badge">AG-2407-018</span>
+            <span class="mini-badge blue">Bottom-Up / Unknown format</span>
+            <span id="caseStatusBadge" class="mini-badge red">Needs user</span>
+            <span class="mini-badge">Server upload</span>
+            <span class="mini-badge">Shared workspace</span>
+          </div>
+        </div>
+        <div class="case-actions">
+          <button class="button" type="button">Export evidence</button>
+          <button id="stopButton" class="button danger" type="button">Stop task</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="case-grid">
+      <section class="panel conversation" aria-label="Agent conversation">
+        <div class="panel-header">
+          <h2 class="panel-title">Analysis conversation</h2>
+          <p class="panel-subtitle">Messages are stored per case with a server sequence number and do not depend on the current computer.</p>
+        </div>
+
+        <div id="messages" class="messages">
+          <div class="message">
+            <div class="avatar">A1</div>
+            <div class="bubble">
+              <div class="message-name">Agent 1 · Analysis</div>
+              <p class="message-text">
+                Identified one single-run mzML and one identification result table. The RT field in the
+                result table has no declared unit, and the documentation mentions both seconds and minutes.
+                I will first produce a conservative strategy based on the available evidence.
+              </p>
+              <div class="message-time">Seq 12 · 14:05</div>
+            </div>
+          </div>
+
+          <div class="message">
+            <div class="avatar agent2">A2</div>
+            <div class="bubble">
+              <div class="message-name">Agent 2 · Conversion</div>
+              <p class="message-text">
+                Third candidate complete: reused RealMzmlParseTool, ZpWriter, and the deep validator;
+                the new Extension does not change any core block. The sample association test failed
+                with an RT deviation of about 60x.
+              </p>
+              <div class="message-time">Seq 13 · 14:12</div>
+            </div>
+          </div>
+
+          <div class="message">
+            <div class="avatar system">SYS</div>
+            <div class="bubble">
+              <div class="message-name">Deterministic validator</div>
+              <p class="message-text">
+                Attempt 3 failed: RUN_ASSOCIATION_AMBIGUOUS. All three autonomous attempts are used up;
+                the case is paused and nothing was written to a production dataset.
+              </p>
+              <div class="message-time">Seq 14 · 14:14</div>
+            </div>
+          </div>
+
+          <div id="questionMessage" class="message">
+            <div class="avatar">A1</div>
+            <div class="bubble">
+              <div class="message-name">Agent 1 · Needs your answer</div>
+              <p id="questionText" class="message-text">
+                Please confirm whether `RT` and `RT.Start` in the result table are in minutes or seconds.
+                If there is any export documentation, also tell me the software name and version.
+                After your answer the system will run only one more round.
+              </p>
+              <div class="message-time">Seq 15 · 14:15</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="composer">
+          <label class="sr-only" for="replyInput">Answer the agent question</label>
+          <textarea id="replyInput" placeholder="For example: RT is in minutes; the files were exported by Vendor X Studio 4.2."></textarea>
+          <div class="composer-actions">
+            <span id="composerHint" class="composer-hint">After you answer, only one round runs; on failure you will be asked again.</span>
+            <button id="sendReply" class="button primary" type="button">Submit answer and continue</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="side-stack">
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Attempt timeline</h2>
+            <p class="panel-subtitle">Up to three rounds initially; after each user answer only one round runs.</p>
+          </div>
+          <div class="panel-body">
+            <div id="timeline" class="timeline">
+              <div class="timeline-item">
+                <div class="timeline-dot fail"></div>
+                <div>
+                  <div class="timeline-title">Autonomous attempt 1 · Failed</div>
+                  <div class="timeline-copy">Primary result field mapping incomplete; no production `.zp` was generated.</div>
+                </div>
+              </div>
+              <div class="timeline-item">
+                <div class="timeline-dot fail"></div>
+                <div>
+                  <div class="timeline-title">Autonomous attempt 2 · Failed</div>
+                  <div class="timeline-copy">Spectrum association exceeded the allowed RT range.</div>
+                </div>
+              </div>
+              <div class="timeline-item">
+                <div class="timeline-dot fail"></div>
+                <div>
+                  <div class="timeline-title">Autonomous attempt 3 · Failed</div>
+                  <div class="timeline-copy">Detected an ~60x unit discrepancy; user confirmation required.</div>
+                </div>
+              </div>
+              <div id="guidedTimelineItem" class="timeline-item">
+                <div id="guidedTimelineDot" class="timeline-dot"></div>
+                <div>
+                  <div id="guidedTimelineTitle" class="timeline-title">Waiting for user answer</div>
+                  <div id="guidedTimelineCopy" class="timeline-copy">No new automatic rounds.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Conversion evidence</h2>
+            <p class="panel-subtitle">Large files keep only references, hashes, and summaries.</p>
+          </div>
+          <div class="panel-body">
+            <div class="evidence-grid">
+              <div class="evidence-item">
+                <div class="evidence-label">Source profile</div>
+                <div class="evidence-value">candidate_vendor_x_dia</div>
+              </div>
+              <div class="evidence-item">
+                <div class="evidence-label">Base commit</div>
+                <div class="evidence-value">68802a8…</div>
+              </div>
+              <div class="evidence-item">
+                <div class="evidence-label">ZP format</div>
+                <div class="evidence-value">Explicit approved version</div>
+              </div>
+              <div class="evidence-item">
+                <div class="evidence-label">Validation</div>
+                <div id="validationValue" class="evidence-value">Blocked before deep pass</div>
+              </div>
+              <div class="evidence-item">
+                <div class="evidence-label">Dataset fingerprint</div>
+                <div class="evidence-value">5f9d…a20c</div>
+              </div>
+              <div class="evidence-item">
+                <div class="evidence-label">Context revision</div>
+                <div id="contextRevision" class="evidence-value">1</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <div id="backdrop" class="backdrop"></div>
+
+  <aside id="notificationDrawer" class="drawer" aria-hidden="true" aria-label="Items that need attention">
+    <div class="drawer-header">
+      <div class="drawer-title-row">
+        <div>
+          <h2>Needs your attention</h2>
+          <p id="drawerSubtitle" class="drawer-subtitle">2 agent cases are waiting for your answer.</p>
+        </div>
+        <button id="closeDrawer" class="drawer-close" type="button" aria-label="Close">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="drawer-body">
+      <div class="drawer-section-label">Needs user</div>
+      <div id="notificationList" class="notification-list">
+        <button class="notification-card urgent" type="button" data-open-case>
+          <div class="notification-topline">
+            <span class="mini-badge red">Needs answer</span>
+            <span class="notification-time">Waiting 18 min</span>
+          </div>
+          <div class="notification-title">Vendor X DIA package</div>
+          <p class="notification-copy">Please confirm the RT unit in the result table. The initial three autonomous attempts are finished; after your answer only one round runs.</p>
+        </button>
+
+        <button class="notification-card urgent" type="button">
+          <div class="notification-topline">
+            <span class="mini-badge red">Needs confirmation</span>
+            <span class="notification-time">Waiting 1 hr</span>
+          </div>
+          <div class="notification-title">Orbitrap legacy export</div>
+          <p class="notification-copy">Two possible primary result files were detected; please confirm which one is the final export.</p>
+        </button>
+      </div>
+      <div id="emptyNotice" class="empty-notice" hidden>Nothing needs your attention right now.</div>
+    </div>
+
+    <div class="drawer-footer">
+      <div class="shared-warning">
+        This demo is designed as a "shared workspace". Without a login system, cases can be isolated, but user-level privacy and personal unread state are not provided.
+      </div>
+    </div>
+  </aside>
+
+  <div class="scenario-dock" aria-label="Prototype state switcher">
+    <span class="scenario-label">Demo state</span>
+    <button class="scenario-button" type="button" data-scenario="running">Running</button>
+    <button class="scenario-button active" type="button" data-scenario="needs-user">Three rounds failed</button>
+    <button class="scenario-button" type="button" data-scenario="guided">User answered</button>
+    <button class="scenario-button" type="button" data-scenario="success">Acceptance passed</button>
+  </div>
+
+  <script>
+    const infoButton = document.getElementById("infoButton");
+    const notificationCount = document.getElementById("notificationCount");
+    const drawer = document.getElementById("notificationDrawer");
+    const backdrop = document.getElementById("backdrop");
+    const closeDrawerButton = document.getElementById("closeDrawer");
+    const datasetsPage = document.getElementById("datasetsPage");
+    const casePage = document.getElementById("casePage");
+    const backToDatasets = document.getElementById("backToDatasets");
+    const replyInput = document.getElementById("replyInput");
+    const sendReply = document.getElementById("sendReply");
+    const messages = document.getElementById("messages");
+    const caseStatusBadge = document.getElementById("caseStatusBadge");
+    const composerHint = document.getElementById("composerHint");
+    const validationValue = document.getElementById("validationValue");
+    const contextRevision = document.getElementById("contextRevision");
+    const notificationList = document.getElementById("notificationList");
+    const emptyNotice = document.getElementById("emptyNotice");
+    const drawerSubtitle = document.getElementById("drawerSubtitle");
+    const guidedTimelineDot = document.getElementById("guidedTimelineDot");
+    const guidedTimelineTitle = document.getElementById("guidedTimelineTitle");
+    const guidedTimelineCopy = document.getElementById("guidedTimelineCopy");
+    const stopButton = document.getElementById("stopButton");
+
+    const state = {
+      scenario: "needs-user",
+      page: "datasets",
+      drawerOpen: false
+    };
+
+    // The demo has one other independent case (Orbitrap legacy export) that always
+    // needs the user, so switching the Vendor X case never drops the global badge to 0.
+    const OTHER_NEEDS_USER = 1;
+
+    function setDrawer(open) {
+      state.drawerOpen = open;
+      drawer.classList.toggle("open", open);
+      backdrop.classList.toggle("open", open);
+      drawer.setAttribute("aria-hidden", String(!open));
+      infoButton.setAttribute("aria-expanded", String(open));
+    }
+
+    function showCase() {
+      state.page = "case";
+      datasetsPage.hidden = true;
+      casePage.hidden = false;
+      setDrawer(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function showDatasets() {
+      state.page = "datasets";
+      datasetsPage.hidden = false;
+      casePage.hidden = true;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function setBadge(count) {
+      notificationCount.textContent = String(count);
+      notificationCount.hidden = count === 0;
+      drawerSubtitle.textContent = count === 0
+        ? "No agent cases are waiting for your answer."
+        : `${count} agent case(s) are waiting for your answer.`;
+      notificationList.hidden = count === 0;
+      emptyNotice.hidden = count !== 0;
+    }
+
+    function setStatusBadge(text, tone) {
+      caseStatusBadge.textContent = text;
+      caseStatusBadge.className = `mini-badge ${tone}`;
+    }
+
+    function setComposer(enabled, hint) {
+      replyInput.disabled = !enabled;
+      sendReply.disabled = !enabled;
+      sendReply.style.opacity = enabled ? "1" : ".55";
+      composerHint.textContent = hint;
+    }
+
+    function renderScenario(scenario) {
+      state.scenario = scenario;
+      document.querySelectorAll("[data-scenario]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.scenario === scenario);
+      });
+
+      guidedTimelineDot.className = "timeline-dot";
+
+      if (scenario === "running") {
+        setBadge(OTHER_NEEDS_USER);
+        setStatusBadge("Analyzing", "blue");
+        setComposer(false, "The agent is analyzing autonomously; no user input is needed right now.");
+        validationValue.textContent = "Pending";
+        contextRevision.textContent = "1";
+        guidedTimelineDot.classList.add("run");
+        guidedTimelineTitle.textContent = "Autonomous attempt 2 · Running";
+        guidedTimelineCopy.textContent = "Generating a candidate conversion strategy.";
+      }
+
+      if (scenario === "needs-user") {
+        setBadge(OTHER_NEEDS_USER + 1);
+        setStatusBadge("Needs user", "red");
+        setComposer(true, "After you answer, only one round runs; on failure you will be asked again.");
+        validationValue.textContent = "Blocked before deep pass";
+        contextRevision.textContent = "1";
+        guidedTimelineTitle.textContent = "Waiting for user answer";
+        guidedTimelineCopy.textContent = "No new automatic rounds.";
+      }
+
+      if (scenario === "guided") {
+        setBadge(OTHER_NEEDS_USER);
+        setStatusBadge("Guided attempt", "blue");
+        setComposer(false, "Answer accepted; running the single guided attempt.");
+        validationValue.textContent = "Running deep validation";
+        contextRevision.textContent = "2";
+        guidedTimelineDot.classList.add("run");
+        guidedTimelineTitle.textContent = "Guided attempt 1 · Running";
+        guidedTimelineCopy.textContent = "Using context revision 2; only one round this time.";
+      }
+
+      if (scenario === "success") {
+        setBadge(OTHER_NEEDS_USER);
+        setStatusBadge("Success", "green");
+        setComposer(false, "Conversion and Viewer staging import passed; no more answers needed.");
+        validationValue.textContent = "Deep pass + staging pass";
+        contextRevision.textContent = "2";
+        guidedTimelineDot.classList.add("pass");
+        guidedTimelineTitle.textContent = "Guided attempt 1 · Passed";
+        guidedTimelineCopy.textContent = "Deep validation, Viewer API, and spectrum data checks all passed.";
+      }
+    }
+
+    function appendUserReply(text) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "message user";
+
+      const avatar = document.createElement("div");
+      avatar.className = "avatar";
+      avatar.textContent = "YOU";
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+
+      const name = document.createElement("div");
+      name.className = "message-name";
+      name.textContent = "You";
+
+      const copy = document.createElement("p");
+      copy.className = "message-text";
+      copy.textContent = text;
+
+      const time = document.createElement("div");
+      time.className = "message-time";
+      time.textContent = "Seq 16 · just now";
+
+      bubble.append(name, copy, time);
+      wrapper.append(avatar, bubble);
+      messages.append(wrapper);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    infoButton.addEventListener("click", () => setDrawer(!state.drawerOpen));
+    closeDrawerButton.addEventListener("click", () => setDrawer(false));
+    backdrop.addEventListener("click", () => setDrawer(false));
+    backToDatasets.addEventListener("click", showDatasets);
+
+    document.querySelectorAll("[data-open-case]").forEach((button) => {
+      button.addEventListener("click", showCase);
+    });
+
+    document.querySelectorAll("[data-scenario]").forEach((button) => {
+      button.addEventListener("click", () => renderScenario(button.dataset.scenario));
+    });
+
+    sendReply.addEventListener("click", () => {
+      const text = replyInput.value.trim();
+      if (!text) {
+        replyInput.focus();
+        return;
+      }
+      appendUserReply(text);
+      replyInput.value = "";
+      renderScenario("guided");
+    });
+
+    stopButton.addEventListener("click", () => {
+      setStatusBadge("Stopped", "red");
+      setComposer(false, "Task stopped; source files were not deleted and the case audit record is preserved.");
+      guidedTimelineDot.className = "timeline-dot fail";
+      guidedTimelineTitle.textContent = "User stopped";
+      guidedTimelineCopy.textContent = "Ended at a safe point; conversion will not continue.";
+      setBadge(OTHER_NEEDS_USER);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.drawerOpen) setDrawer(false);
+    });
+
+    renderScenario("needs-user");
+  </script>
+</body>
+</html>

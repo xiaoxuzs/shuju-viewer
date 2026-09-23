@@ -26,6 +26,13 @@ def test_unknown_import_rejects_blank_analysis_category() -> None:
         _analysis_category("   ")
 
 
+def test_unknown_import_defaults_to_agent_detection() -> None:
+    body = AgentCaseFromPathIn(source_path="C:/dataset")
+
+    assert body.data_type == "AUTO"
+    assert body.format_name == "Unknown format"
+
+
 @pytest.mark.parametrize("value", ["DIA\nCLIP", "x" * 81])
 def test_unknown_import_schema_rejects_unsafe_analysis_category(value: str) -> None:
     with pytest.raises(ValidationError):
@@ -41,3 +48,16 @@ def test_agent_case_routes_are_registered() -> None:
 
     assert "/api/v1/agent-import-cases/from-path" in paths
     assert "/api/v1/agent-import-cases/{case_id}/review/approve" in paths
+
+
+def test_delivery_reads_do_not_enable_worker_or_mutations(monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "agent_import_enabled", False)
+    monkeypatch.setattr(settings, "agent_delivery_reads_enabled", True)
+    routes = [r for r in build_api_router().routes if "agent-import-cases" in r.path]
+    assert {r.path for r in routes} == {
+        "/api/v1/agent-import-cases/{case_id}/handover",
+        "/api/v1/agent-import-cases/{case_id}/source-assets",
+        "/api/v1/agent-import-cases/{case_id}/source-assets/{asset_id}",
+    }
+    assert all(r.methods <= {"GET", "HEAD"} for r in routes)

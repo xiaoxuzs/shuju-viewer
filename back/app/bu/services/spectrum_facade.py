@@ -86,8 +86,15 @@ def _explicit_ms2_scan(match: dict[str, Any], scan: int | None) -> int | None:
 
 
 def ensure_mzml_match(match: dict[str, Any]) -> None:
-    if _raw_format(match) != "mzml":
+    if _raw_format(match) not in {"mzml", "zp"}:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="unsupported_raw_format")
+
+
+def _live_fragment_annotation_allowed(dataset: dict[str, Any]) -> bool:
+    capabilities = _json_object(dataset.get("capabilities"))
+    if capabilities.get("import_mode") != "agent_declarative":
+        return True
+    return capabilities.get("has_fragment_annotations") is True
 
 
 def ensure_resident(session: Session, dataset_id: int) -> None:
@@ -288,7 +295,13 @@ def get_match_ms2(
     )
     annotation_warnings: list[str] = []
     annotation_status: _SpectrumAnnotationStatus
-    if not modified_sequence:
+    if not _live_fragment_annotation_allowed(dataset):
+        matched_ions = []
+        annotation_status = "not_requested"
+        annotation_warnings.append(
+            "Fragment annotations were not supplied or approved for this Agent dataset; raw peaks only."
+        )
+    elif not modified_sequence:
         annotation_status = "modification_data_missing"
         annotation_warnings.append(
             "Modified.Sequence is unavailable; live b/y masses were calculated "
@@ -298,20 +311,21 @@ def get_match_ms2(
         annotation_status = "modified"
     else:
         annotation_status = "unmodified"
-    try:
-        matched_ions = match_by_ions(
-            sequence=sequence,
-            modified_sequence=modified_sequence,
-            mz=mz,
-            intensity=intensity,
-            ppm=ppm,
-        )
-    except ModifiedSequenceError as exc:
-        matched_ions = []
-        annotation_status = "unsupported_modification"
-        annotation_warnings = [
-            f"Live b/y annotation was skipped ({exc.code}): {exc}"
-        ]
+    if _live_fragment_annotation_allowed(dataset):
+        try:
+            matched_ions = match_by_ions(
+                sequence=sequence,
+                modified_sequence=modified_sequence,
+                mz=mz,
+                intensity=intensity,
+                ppm=ppm,
+            )
+        except ModifiedSequenceError as exc:
+            matched_ions = []
+            annotation_status = "unsupported_modification"
+            annotation_warnings = [
+                f"Live b/y annotation was skipped ({exc.code}): {exc}"
+            ]
     return spectrum_v1(
         spec,
         matched_ions=matched_ions,

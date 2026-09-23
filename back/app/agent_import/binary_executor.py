@@ -6,10 +6,15 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
+from collections.abc import Mapping
 
 from app.agent_import.contracts import AgentCandidatePlan
 from app.agent_import.errors import AgentBinaryPlanError
+from app.agent_import.execution_control import checkpoint
 from app.agent_import.mapping_preflight import preflight_mapping_plan
+from app.core.config import settings
+from app.declarative_ingest import build_declarative_zp_artifact, read_semantic_zp
+from app.declarative_ingest.zp_artifact import semantic_verification_summary
 
 
 PrepareZp = Callable[..., Any]
@@ -33,10 +38,59 @@ def execute_binary_plan(
     source_fingerprint: str,
     plan: AgentCandidatePlan,
     prepare: PrepareZp | None = None,
+    trusted_observations: Mapping[str, dict[str, Any]] | None = None,
 ) -> BinaryExecutionResult:
     if plan.status != "READY" or plan.binary_operation is None or plan.zp_conversion_plan is None:
         raise AgentBinaryPlanError("only a READY Agent plan can execute")
     root = Path(source_root).expanduser().resolve(strict=True)
+    declarative = plan.zp_conversion_plan.declarative_plan
+    if declarative is not None:
+        preflight_mapping_plan(
+            source_root=root,
+            plan=plan,
+            allow_legacy_mapping=False,
+            trusted_observations=trusted_observations,
+        )
+        serialized_plan = declarative.model_dump_json()
+        target = _declarative_output_path(case_id, declarative.plan_id, serialized_plan)
+        if target.is_file():
+            semantic = read_semantic_zp(target)
+            if semantic.source_fingerprint != source_fingerprint:
+                raise AgentBinaryPlanError("existing declarative artifact belongs to a different source fingerprint")
+            if semantic.plan_sha256 != _sha256_text(serialized_plan):
+                raise AgentBinaryPlanError("existing declarative artifact belongs to a different mapping plan")
+            certificate = target.with_name(f"{target.stem}.deep-validation.json")
+            return BinaryExecutionResult(
+                zp_path=target,
+                output_sha256=_sha256_file(target),
+                format_version=3,
+                validation_mode="deep",
+                validation_certificate_path=certificate if certificate.is_file() else None,
+                source_fingerprint=source_fingerprint,
+                semantic_verification=semantic_verification_summary(semantic),
+            )
+        try:
+            artifact = build_declarative_zp_artifact(
+                source_root=root,
+                source_fingerprint=source_fingerprint,
+                plan=declarative,
+                output_path=target,
+                check_cancel=checkpoint,
+            )
+        except (OSError, ValueError) as exc:
+            raise AgentBinaryPlanError(
+                str(exc),
+                code=str(getattr(exc, "code", "AGENT_BINARY_PLAN_INVALID")),
+            ) from exc
+        return BinaryExecutionResult(
+            zp_path=artifact.path,
+            output_sha256=artifact.output_sha256,
+            format_version=artifact.format_version,
+            validation_mode=artifact.validation_mode,
+            validation_certificate_path=artifact.certificate_path,
+            source_fingerprint=source_fingerprint,
+            semantic_verification=artifact.semantic_verification,
+        )
     relative = PurePosixPath(plan.zp_conversion_plan.relative_source)
     selected = root.joinpath(*relative.parts).resolve(strict=True)
     try:
@@ -44,7 +98,12 @@ def execute_binary_plan(
     except ValueError as exc:
         raise AgentBinaryPlanError("relative_source escapes the Case source root") from exc
 
-    preflight = preflight_mapping_plan(source_root=root, plan=plan)
+    preflight = preflight_mapping_plan(
+        source_root=root,
+        plan=plan,
+        allow_legacy_mapping=False,
+        trusted_observations=trusted_observations,
+    )
 
     prepare_zp = prepare or _default_prepare
     prepared = prepare_zp(
@@ -80,6 +139,28 @@ def _default_prepare(**kwargs: object) -> Any:
     from app.agent_zp.service import prepare_agent_zp_artifact
 
     return prepare_agent_zp_artifact(**kwargs)
+
+
+def _declarative_output_path(case_id: str, plan_id: str, serialized_plan: str) -> Path:
+    digest = _sha256_text(serialized_plan)[:16]
+    safe_plan_id = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "-" for ch in plan_id)
+    return settings.resolved_zp_output_root / "agent-cases" / case_id / f"{safe_plan_id}-{digest}.zp"
+
+
+def _sha256_file(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sha256_text(value: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _verify_declared_mapping(

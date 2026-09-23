@@ -9,12 +9,15 @@ from typing import Any
 import pytest
 from sqlalchemy import text
 
-from app.agent_zp.service import AgentZpError, import_agent_zp_candidate
+from app.agent_zp import service as agent_zp_service
+from app.agent_zp.service import AgentZpError, import_agent_zp_candidate, stage_agent_zp_candidate
 from app.api.v1 import build_api_router
 from app.core.config import settings
 from app.core.db import SessionLocal, engine
+from app.declarative_ingest import DeclarativeImportPlan, build_declarative_zp_artifact
+from app.declarative_ingest.semantic_schema import SemanticDataset, SemanticProtein
 from app.schemas.agent_zp import AgentZpImportCreateIn
-from app.services.mzml_scan_index import load_scan_index
+from app.services.mzml_scan_index import ScanIndexError, load_scan_index
 from app.services.mzml_scan_reader import get_spectrum_by_scan
 from app.zp_conversion import repository
 from app.zp_runtime import clear_zp_runtime_caches
@@ -164,6 +167,40 @@ def test_import_rejects_a_candidate_changed_after_review() -> None:
         ).scalar_one() == 0
 
 
+def test_semantic_verification_rejects_an_unreadable_advertised_spectrum_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    semantic = SemanticDataset(
+        plan_id="unreadable-spectrum",
+        plan_sha256="a" * 64,
+        source_fingerprint="b" * 32,
+        core_spectrum_count=1,
+        source_files=[],
+        proteins=[
+            SemanticProtein(
+                protein_id="protein:1",
+                accession="P1",
+                sequence_state="MISSING",
+            )
+        ],
+    )
+
+    def unreadable_run(*_args: object, **_kwargs: object) -> object:
+        raise ScanIndexError("unreadable staged run")
+
+    monkeypatch.setattr(agent_zp_service, "load_scan_index", unreadable_run)
+    with SessionLocal() as session, pytest.raises(AgentZpError) as exc_info:
+        agent_zp_service._verify_dataset(
+            session,
+            dataset_id=1,
+            run_ids=[1],
+            validation_mode="deep",
+            semantic=semantic,
+        )
+
+    assert exc_info.value.code == "AGENT_ZP_NO_READABLE_SCAN"
+
+
 def test_agent_zp_route_is_registered_only_when_import_guard_is_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "zp_management_enabled", True)
     monkeypatch.setattr(settings, "zp_import_conversion_enabled", True)
@@ -174,6 +211,178 @@ def test_agent_zp_route_is_registered_only_when_import_guard_is_enabled(monkeypa
 
     assert "/api/v1/agent-zp/imports" in enabled_paths
     assert "/api/v1/agent-zp/imports" not in disabled_paths
+
+
+def test_import_semantic_zp_projects_bottom_up_entities_and_capability_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = settings.resolved_data_root / "unknown-source"
+    source_root.mkdir()
+    (source_root / "renamed.tsv").write_text(
+        "record\tsample\tpeptide\tprotein\tintensity\n"
+        "p1\trun-a\tPEPTIDE\tP1\t0\n",
+        encoding="utf-8",
+    )
+    plan = DeclarativeImportPlan.model_validate(
+        {
+            "schema_version": 1,
+            "plan_id": "unknown-bottom-up-v1",
+            "analysis_mode": "BOTTOM_UP",
+            "sources": [
+                {
+                    "source_id": "ids",
+                    "relative_path": "renamed.tsv",
+                    "role": "identification_table",
+                    "reader": "delimited",
+                    "delimiter": "\t",
+                    "required": True,
+                    "required_fields": ["record", "sample", "peptide", "protein", "intensity"],
+                }
+            ],
+            "field_mappings": [
+                {
+                    "mapping_id": mapping_id,
+                    "source_id": "ids",
+                    "source_field": source_field,
+                    "target_entity": entity,
+                    "target_field": target_field,
+                    "value_kind": value_kind,
+                    "required": source_field != "intensity",
+                    "transform": transform,
+                    "unit": unit,
+                    "evidence_refs": [f"observation:{source_field}"],
+                }
+                for mapping_id, source_field, entity, target_field, value_kind, transform, unit in (
+                    ("psm-id", "record", "identification", "source_id", "string", "identity", None),
+                    ("run", "sample", "run", "name", "string", "identity", None),
+                    ("peptide", "peptide", "peptide", "sequence", "string", "identity", None),
+                    (
+                        "protein",
+                        "protein",
+                        "identification",
+                        "protein_accessions",
+                        "string",
+                        "semicolon_split",
+                        None,
+                    ),
+                    (
+                        "intensity",
+                        "intensity",
+                        "quantification",
+                        "value",
+                        "float",
+                        "identity",
+                        "source_intensity",
+                    ),
+                )
+            ],
+            "unmapped_fields": {"ids": []},
+            "requested_views": [
+                {"view_id": "bu.matches"},
+                {"view_id": "bu.peptides"},
+                {"view_id": "bu.proteins"},
+                {"view_id": "bu.protein_coverage"},
+            ],
+        }
+    )
+    incoming = settings.resolved_data_root / "incoming"
+    incoming.mkdir()
+    artifact = build_declarative_zp_artifact(
+        source_root=source_root,
+        source_fingerprint="1" * 32,
+        plan=plan,
+        output_path=incoming / "semantic-candidate.zp",
+    )
+    body = AgentZpImportCreateIn(
+        source_path=str(artifact.path),
+        slug="semantic-agent-sample",
+        name="Semantic Agent Sample",
+        analysis_category="BOTTOM_UP",
+        source_profile="agent-discovered-table",
+        binary_operation="register_existing_zp",
+    )
+
+    with SessionLocal() as session:
+        staged = stage_agent_zp_candidate(
+            session,
+            body,
+            case_id="semantic-case",
+            expected_sha256=artifact.output_sha256,
+            source_fingerprint="1" * 32,
+        )
+    assert staged.verification["readable_run_count"] == 0
+    assert staged.verification["business_checks"]["match_detail_probe"] is True
+    assert staged.verification["business_checks"]["service_probes"] is False
+    assert staged.capability_report is not None
+    with SessionLocal() as session:
+        assert session.scalar(text("SELECT count(*) FROM datasets")) == 0
+        assert session.scalar(text("SELECT count(*) FROM identification_matches")) == 0
+
+    def reject_match_detail(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        raise RuntimeError("staged match join is unreadable")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr("app.bu.deps.require_bu_match", reject_match_detail)
+        with SessionLocal() as session, pytest.raises(AgentZpError) as exc_info:
+            stage_agent_zp_candidate(
+                session,
+                body,
+                case_id="semantic-case",
+                expected_sha256=artifact.output_sha256,
+                source_fingerprint="1" * 32,
+            )
+        assert exc_info.value.code == "AGENT_ZP_VALIDATION_FAILED"
+
+    with SessionLocal() as session:
+        assert session.scalar(text("SELECT count(*) FROM datasets")) == 0
+        assert session.scalar(text("SELECT count(*) FROM identification_matches")) == 0
+
+    with SessionLocal() as session:
+        result = import_agent_zp_candidate(
+            session,
+            body,
+            case_id="semantic-case",
+            expected_sha256=artifact.output_sha256,
+            source_fingerprint="1" * 32,
+        )
+    with SessionLocal() as session:
+        recovered = import_agent_zp_candidate(
+            session,
+            body,
+            case_id="semantic-case",
+            expected_sha256=artifact.output_sha256,
+            source_fingerprint="1" * 32,
+        )
+
+    assert result.status == "success"
+    assert recovered.dataset_id == result.dataset_id
+    assert result.verification.readable_run_count == 0
+    with SessionLocal() as session:
+        dataset = session.execute(
+            text("SELECT capabilities, extra_metadata FROM datasets WHERE dataset_id = :dataset_id"),
+            {"dataset_id": result.dataset_id},
+        ).mappings().one()
+        assert session.scalar(
+            text("SELECT count(*) FROM identification_matches WHERE dataset_id = :dataset_id"),
+            {"dataset_id": result.dataset_id},
+        ) == 1
+        assert session.scalar(
+            text("SELECT count(*) FROM proteins WHERE dataset_id = :dataset_id"),
+            {"dataset_id": result.dataset_id},
+        ) == 1
+        assert session.scalar(text("SELECT count(*) FROM datasets")) == 1
+
+    caps = _json_object(dataset["capabilities"])
+    extra = _json_object(dataset["extra_metadata"])
+    assert caps["analysis_shape"] == "bottom_up_agent"
+    assert caps["has_identifications"] is True
+    assert caps["has_spectrum_files"] is False
+    assert caps["list_routes"] == ["proteins", "peptides", "matches"]
+    report = extra["dataset_capability_report"]
+    by_view = {item["view_id"]: item for item in report["views"]}
+    assert by_view["bu.matches"]["availability"] == "AVAILABLE"
+    assert by_view["bu.protein_coverage"]["availability"] == "DISABLED"
+    assert report["missing_inputs"][0]["input_id"] == "fasta"
 
 
 def _ensure_universal_tables() -> None:
@@ -200,6 +409,43 @@ def _ensure_universal_tables() -> None:
                 """
             )
         )
+        for ddl in (
+            """
+            CREATE TABLE IF NOT EXISTS proteins (
+                protein_id INTEGER PRIMARY KEY AUTOINCREMENT, dataset_id INTEGER NOT NULL,
+                accession TEXT NOT NULL, gene_name TEXT, description TEXT, base_sequence TEXT,
+                is_decoy INTEGER NOT NULL DEFAULT 0, extra_metadata TEXT NOT NULL DEFAULT '{}'
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS peptides (
+                peptide_id INTEGER PRIMARY KEY AUTOINCREMENT, dataset_id INTEGER NOT NULL,
+                sequence TEXT NOT NULL, theoretical_mass REAL, length INTEGER,
+                extra_metadata TEXT NOT NULL DEFAULT '{}'
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS identification_matches (
+                match_id INTEGER PRIMARY KEY AUTOINCREMENT, dataset_id INTEGER NOT NULL,
+                run_id INTEGER NOT NULL, scan_number INTEGER NOT NULL, spectrum_native_id TEXT,
+                retention_time REAL, ms_level INTEGER NOT NULL DEFAULT 2, entity_type TEXT NOT NULL,
+                entity_id INTEGER NOT NULL, modified_sequence TEXT, experimental_mass REAL,
+                precursor_mz REAL, precursor_charge INTEGER, intensity REAL, score REAL,
+                e_value REAL, q_value REAL, pep REAL, is_decoy_match INTEGER NOT NULL DEFAULT 0,
+                search_engine TEXT, detail_path TEXT, detail_cache TEXT,
+                extra_metadata TEXT NOT NULL DEFAULT '{}'
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS protein_relation_mapping (
+                mapping_id INTEGER PRIMARY KEY AUTOINCREMENT, dataset_id INTEGER NOT NULL,
+                protein_id INTEGER NOT NULL, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,
+                start_position INTEGER, end_position INTEGER, is_unique INTEGER NOT NULL DEFAULT 0,
+                extra_metadata TEXT NOT NULL DEFAULT '{}'
+            )
+            """,
+        ):
+            conn.execute(text(ddl))
         conn.execute(
             text(
                 """
@@ -223,6 +469,10 @@ def _clear_rows() -> None:
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM dataset_zp_assets"))
         conn.execute(text("DELETE FROM zp_conversion_jobs"))
+        conn.execute(text("DELETE FROM protein_relation_mapping"))
+        conn.execute(text("DELETE FROM identification_matches"))
+        conn.execute(text("DELETE FROM peptides"))
+        conn.execute(text("DELETE FROM proteins"))
         conn.execute(text("DELETE FROM runs"))
         conn.execute(text("DELETE FROM datasets"))
 

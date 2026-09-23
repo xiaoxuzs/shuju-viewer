@@ -54,6 +54,8 @@ export function BuListFilters({
             min="0"
             step="0.001"
             value={qMax ?? ""}
+            aria-label="Q max"
+            placeholder="No filter"
             onChange={(e) => onQMaxChange(e.target.value)}
           />
         </div>
@@ -83,7 +85,7 @@ export function BuListFilters({
             onChange={(e) => onHideDecoyChange(e.target.checked)}
             className="h-4 w-4 rounded border-border"
           />
-          Hide decoy
+          Hide confirmed decoys
         </label>
       )}
       <Button

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>proteo-viewer</title>
+    <style>
+      :root {
+        --background: 210 40% 99%;
+        background-color: hsl(var(--background));
+      }
+      :root.dark {
+        --background: 222 47% 7%;
+      }
+      html,
+      body,
+      #root {
+        min-height: 100%;
+        background-color: hsl(var(--background));
+      }
+    </style>
+    <script>
+      (() => {
+        const storageKey = "viewer.theme";
+        let stored = null;
+        try {
+          stored = localStorage.getItem(storageKey);
+        } catch {
+          stored = null;
+        }
+        const mode = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+        const resolved = mode === "system"
+          ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : mode;
+        const root = document.documentElement;
+        root.classList.toggle("dark", resolved === "dark");
+        root.dataset.theme = mode;
+        root.dataset.resolvedTheme = resolved;
+        root.style.colorScheme = resolved;
+      })();
+    </script>
+    <link rel="preconnect" href="https://rsms.me/" />
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

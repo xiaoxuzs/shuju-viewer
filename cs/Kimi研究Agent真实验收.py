@@ -32,24 +32,21 @@ def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--user-message", action="append", default=[])
     return parser.parse_args()
 
 
 def _base_urls(configured: str) -> tuple[str, ...]:
-    primary = configured.rstrip("/")
-    if primary == "https://api.moonshot.ai/v1":
-        return primary, "https://api.moonshot.cn/v1"
-    if primary == "https://api.moonshot.cn/v1":
-        return primary, "https://api.moonshot.ai/v1"
-    return (primary,)
+    # Historical filename only: every role now uses the one configured API.
+    return (configured.rstrip("/"),)
 
 
 def main() -> None:
     args = _arguments()
     source = args.source.expanduser().resolve(strict=True)
-    key = (settings.moonshot_api_key or "").strip()
+    key = (settings.openai_api_key or "").strip()
     if not key:
-        raise SystemExit("MOONSHOT_API_KEY is not configured")
+        raise SystemExit("OPENAI_API_KEY is not configured")
     output = args.output.expanduser().resolve(strict=False) if args.output else None
     trace_output = output.with_suffix(".trace.jsonl") if output else None
     if trace_output:
@@ -68,25 +65,25 @@ def main() -> None:
 
     result = None
     last_error = None
-    for base_url in _base_urls(settings.moonshot_base_url):
+    for base_url in _base_urls(settings.openai_base_url):
         try:
             result = KimiResearchRuntime(
                 base_url=base_url,
                 api_key=key,
-                model=settings.agent_read_model,
-                timeout=settings.moonshot_request_timeout_seconds,
+                model=settings.openai_model,
+                timeout=settings.openai_request_timeout_seconds,
             ).run(
                 source_root=str(source),
                 case_id="live-agent1-single-sample",
-                analysis_category="BOTTOM_UP",
+                analysis_category="AUTO",
                 requested_source_profile="unknown scientific dataset",
                 format_details=(
                     "Independently inspect all available spectra, tables, metadata, FASTA, vendor provenance, "
                     "cross-file relationships, established visualization practices, and missing data."
                 ),
-                user_messages=[],
+                user_messages=list(args.user_message),
                 source_manifest=summarize_source_root(source),
-                zp_capabilities=build_zp_capabilities(),
+                zp_capabilities=build_zp_capabilities(include_legacy_mapping_adapters=False),
                 trace_callback=record_trace,
             )
             break
@@ -104,19 +101,28 @@ def main() -> None:
         output.write_text(encoded, encoding="utf-8")
     used = {item.tool_name for item in result.trace if item.status == "SUCCEEDED"}
     required = {
-        "inspect_source_tree",
-        "inspect_tabular_file",
+        "list_source_inventory",
+        "inspect_source_file",
+        "inspect_viewer_capabilities",
         "inspect_mzml",
         "inspect_fasta",
-        "validate_scan_relation",
     }
     missing = sorted(required - used)
     if missing:
         raise AssertionError(f"Agent 1 did not use required research tools: {', '.join(missing)}")
+    if result.blueprint.analysis_category != "BOTTOM_UP":
+        raise AssertionError("Agent 1 did not infer the evidence-backed BOTTOM_UP category from AUTO")
     normalized = encoded.casefold().replace(",", "")
-    for expected in ("7534", "1431", "6103", "msms.txt"):
+    for expected in ("7534", "1431", "6103"):
         if expected not in normalized:
             raise AssertionError(f"DatasetBlueprint omitted required discovered fact: {expected}")
+    fragment_gaps = [
+        item
+        for item in result.blueprint.gaps
+        if "fragment" in f"{item.gap} {item.consequence}".casefold()
+    ]
+    if not fragment_gaps:
+        raise AssertionError("DatasetBlueprint did not explicitly report missing fragment annotations")
     print(
         json.dumps(
             {

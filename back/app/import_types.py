@@ -6,6 +6,7 @@ from enum import Enum
 
 
 class ImportType(str, Enum):
+    AGENT_UNKNOWN = "AGENT_UNKNOWN"
     TD_RAW = "TD_RAW"
     TD_MZML = "TD_MZML"
     TD_TOPPIC_HTML = "TD_TOPPIC_HTML"

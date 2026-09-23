@@ -15,22 +15,23 @@ import { clearListParams, setListParam } from "@/features/bu/utils/listParams";
 import { formatModifiedSequenceForDisplay } from "@/features/bu/utils/modifiedSequenceFormatting";
 
 export function BuPeptidesPage() {
-  const { dataset } = useOutletContext<BuDatasetContext>();
+  const { dataset, defaultQMax } = useOutletContext<BuDatasetContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = Number(searchParams.get("page") ?? "1") || 1;
   const search = searchParams.get("search") ?? "";
-  const qMaxText = searchParams.get("q_max") ?? "";
+  const qMaxText = searchParams.get("q_max") ?? String(defaultQMax ?? "");
   const qMax = Number(qMaxText);
   const pageSize = 50;
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["bu", dataset.slug, "peptides", page, search, qMaxText],
+    queryKey: ["bu", dataset.slug, dataset.revision_id ?? "legacy", "peptides", page, search, qMaxText],
     queryFn: () =>
       fetchBuPeptides(dataset.slug, {
         page,
         page_size: pageSize,
         search: search || undefined,
         q_max: qMaxText && Number.isFinite(qMax) ? qMax : undefined,
+        q_filter: !!qMaxText.trim() && Number.isFinite(qMax),
         sort: "best_q_value",
         order: "asc",
       }),

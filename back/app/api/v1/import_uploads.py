@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from app.agent_import.local_sessions import claim_resource
+from app.agent_import.authorization import guard_workspace_request
 
 from app.import_uploads import service
 from app.import_uploads.errors import UploadError
@@ -15,7 +17,7 @@ from app.import_uploads.models import (
 )
 from app.schemas.imports import ImportJobCreatedOut
 
-router = APIRouter(tags=["import-uploads"])
+router = APIRouter(tags=["import-uploads"], dependencies=[Depends(guard_workspace_request)])
 
 
 def _http_error(exc: UploadError) -> HTTPException:
@@ -26,9 +28,11 @@ def _http_error(exc: UploadError) -> HTTPException:
 
 
 @router.post("/import-uploads", response_model=ImportUploadCreatedOut, status_code=status.HTTP_201_CREATED)
-def create_import_upload(body: ImportUploadCreateIn) -> ImportUploadCreatedOut:
+def create_import_upload(body: ImportUploadCreateIn, request: Request = None) -> ImportUploadCreatedOut:
     try:
-        return service.create_upload(body.import_type)
+        result = service.create_upload(body.import_type)
+        claim_resource(request, "upload", result.upload_id)
+        return result
     except UploadError as exc:
         raise _http_error(exc) from exc
 

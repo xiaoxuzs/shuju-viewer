@@ -14,11 +14,11 @@ import { clearListParams, setListParam } from "@/features/bu-viewer/utils/listPa
 import { formatModifiedSequenceForDisplay } from "@/features/bu-viewer/utils/modifiedSequenceFormatting";
 
 export function BuPeptidesPage() {
-  const { dataset } = useOutletContext<BuDatasetContext>();
+  const { dataset, defaultQMax } = useOutletContext<BuDatasetContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const page = Number(searchParams.get("page") ?? "1") || 1;
   const search = searchParams.get("search") ?? "";
-  const qMaxText = searchParams.get("q_max") ?? "";
+  const qMaxText = searchParams.get("q_max") ?? String(defaultQMax ?? "");
   const qMax = Number(qMaxText);
   const pageSize = 50;
 
@@ -30,6 +30,7 @@ export function BuPeptidesPage() {
         page_size: pageSize,
         search: search || undefined,
         q_max: qMaxText && Number.isFinite(qMax) ? qMax : undefined,
+        q_filter: !!qMaxText.trim() && Number.isFinite(qMax),
         sort: "best_q_value",
         order: "asc",
       }),

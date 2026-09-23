@@ -1,0 +1,316 @@
+from __future__ import annotations
+
+import builtins
+import hashlib
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi import HTTPException
+from sqlalchemy import text
+from starlette.routing import Match
+
+from app import main as app_main
+from app.api.v1 import build_api_router
+from app.api.v1 import zp_conversions as api
+from app.core.config import settings
+from app.core.db import engine
+from app.schemas.zp_conversions import ZpConversionCreateIn
+from app.zp_conversion import repository, service
+from app.zp_conversion.contracts import ZpConversionError, ZpConversionJob
+from app.zp_conversion.worker_runner import WorkerRequest, WorkerResult
+
+
+@pytest.fixture(autouse=True)
+def isolated_zp_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    monkeypatch.setattr(settings, "data_root", data_root)
+    monkeypatch.setattr(settings, "zp_output_root", tmp_path / "zp-output")
+    monkeypatch.setattr(settings, "zp_temp_root", Path(".tmp"))
+    monkeypatch.setattr(settings, "zp_allowed_source_roots", "")
+    monkeypatch.setattr(settings, "zp_worker_python", None)
+    monkeypatch.setattr(settings, "zp_worker_pythonpath", "")
+    monkeypatch.setattr(settings, "zp_engine_path", tmp_path / "zp-engine")
+    monkeypatch.setattr(settings, "zp_default_format_version", 1)
+    monkeypatch.setattr(settings, "zp_conversion_timeout_seconds", 60)
+    monkeypatch.setattr(settings, "zp_conversion_worker_threads", 2)
+    monkeypatch.setattr(settings, "zp_binary_layer_commit", "test-commit")
+    monkeypatch.setattr(settings, "zp_management_enabled", True)
+    monkeypatch.setattr(settings, "zp_import_conversion_enabled", True)
+    repository.ensure_zp_conversion_schema()
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM dataset_zp_assets"))
+        conn.execute(text("DELETE FROM zp_conversion_jobs"))
+
+
+def test_enqueue_rejects_source_outside_allowed_roots(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.mzML"
+    outside.write_text("<mzML />", encoding="utf-8")
+
+    with pytest.raises(ZpConversionError) as exc_info:
+        service.enqueue_conversion(source_path=outside, start_background=False)
+
+    assert exc_info.value.code == "ZP_SOURCE_OUTSIDE_ALLOWED_ROOT"
+
+
+def test_enqueue_creates_job_paths_under_output_root_without_starting_worker() -> None:
+    source = settings.resolved_data_root / "sample.mzML"
+    source.write_bytes(b"mzml")
+
+    job = service.enqueue_conversion(
+        source_path=source,
+        dataset_slug="sample-dataset",
+        start_background=False,
+    )
+
+    assert job.status == "queued"
+    assert job.stage == "queued"
+    assert job.input_bytes == 4
+    assert job.dataset_slug == "sample-dataset"
+    assert job.zp_final_path is not None
+    assert str(job.zp_final_path).startswith(str(settings.resolved_zp_output_root))
+    assert job.zp_temp_path is not None
+    assert job.zp_temp_path.parent.is_dir()
+
+
+def test_run_conversion_with_injected_runner_marks_success_and_cleans_temp() -> None:
+    source = settings.resolved_data_root / "sample.mzML"
+    source.write_bytes(b"mzml")
+    queued = service.enqueue_conversion(source_path=source, dataset_slug="sample-dataset", start_background=False)
+    progress: list[tuple[str, float]] = []
+
+    class SuccessfulRunner:
+        def run(self, request: WorkerRequest, report_progress):  # type: ignore[no-untyped-def]
+            report_progress("convert", 50.0, None)
+            progress.append(("convert", 50.0))
+            payload = b"fake-zp-artifact"
+            request.final_path.write_bytes(payload)
+            request.certificate_path.write_text('{"valid": true}', encoding="utf-8")
+            return WorkerResult(
+                output_bytes=len(payload),
+                output_sha256=hashlib.sha256(payload).hexdigest(),
+                validation_mode="deep",
+                validation_certificate_path=request.certificate_path,
+                format_version=request.format_version,
+                binary_layer_version="test-commit",
+            )
+
+    finished = service.run_conversion_job(queued.job_id, runner=SuccessfulRunner())
+
+    assert finished is not None
+    assert finished.status == "success"
+    assert finished.progress == 100.0
+    assert finished.output_sha256 == hashlib.sha256(b"fake-zp-artifact").hexdigest()
+    assert finished.validation_mode == "deep"
+    assert progress == [("convert", 50.0)]
+    assert finished.zp_temp_path is not None
+    assert not finished.zp_temp_path.parent.exists()
+    assert finished.zp_final_path is not None
+    assert finished.zp_final_path.read_bytes() == b"fake-zp-artifact"
+
+
+def test_successful_conversion_marks_dataset_as_zp_main_path() -> None:
+    _ensure_minimal_datasets_table()
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM datasets WHERE slug = 'sample-dataset'"))
+        conn.execute(
+            text(
+                """
+                INSERT INTO datasets (dataset_id, slug, capabilities)
+                VALUES (77, 'sample-dataset', :capabilities)
+                """
+            ),
+            {"capabilities": json.dumps({"spectra_source": "mzml_memory", "has_spectrum_files": True})},
+        )
+
+    source = settings.resolved_data_root / "sample.mzML"
+    source.write_bytes(b"mzml")
+    queued = service.enqueue_conversion(source_path=source, dataset_slug="sample-dataset", start_background=False)
+
+    class SuccessfulRunner:
+        def run(self, request: WorkerRequest, report_progress):  # type: ignore[no-untyped-def]
+            report_progress("convert", 50.0, None)
+            payload = b"fake-zp-artifact"
+            request.final_path.write_bytes(payload)
+            request.certificate_path.write_text('{"valid": true}', encoding="utf-8")
+            return WorkerResult(
+                output_bytes=len(payload),
+                output_sha256=hashlib.sha256(payload).hexdigest(),
+                validation_mode="deep",
+                validation_certificate_path=request.certificate_path,
+                format_version=request.format_version,
+                binary_layer_version="test-commit",
+            )
+
+    finished = service.run_conversion_job(queued.job_id, runner=SuccessfulRunner())
+
+    assert finished is not None
+    assert finished.status == "success"
+    with engine.begin() as conn:
+        dataset = conn.execute(
+            text("SELECT capabilities FROM datasets WHERE dataset_id = 77"),
+        ).mappings().one()
+        asset_count = conn.scalar(
+            text("SELECT count(1) FROM dataset_zp_assets WHERE dataset_id = 77 AND status = 'active'")
+        )
+
+    capabilities = json.loads(str(dataset["capabilities"]))
+    assert capabilities["spectra_source"] == "zp"
+    assert capabilities["has_spectrum_files"] is True
+    assert capabilities["binary_layer"] == {"spectra": True}
+    assert asset_count == 1
+
+
+def test_default_unconfigured_worker_fails_closed_without_exposing_paths() -> None:
+    source = settings.resolved_data_root / "sample.mzML"
+    source.write_bytes(b"mzml")
+    settings.zp_worker_python = settings.resolved_data_root / "missing-python.exe"
+    queued = service.enqueue_conversion(source_path=source, start_background=False)
+
+    failed = service.run_conversion_job(queued.job_id)
+
+    assert failed is not None
+    assert failed.status == "failed"
+    assert failed.error_code == "ZP_WORKER_NOT_CONFIGURED"
+    out = api._job_out(failed).model_dump(mode="json")
+    assert out["error_message"] == "ZP worker is not configured on this server."
+    assert str(settings.resolved_data_root) not in json.dumps(out)
+    assert str(settings.resolved_zp_output_root) not in json.dumps(out)
+
+
+def test_cancel_queued_job_cleans_temporary_directory() -> None:
+    source = settings.resolved_data_root / "sample.mzML"
+    source.write_bytes(b"mzml")
+    queued = service.enqueue_conversion(source_path=source, start_background=False)
+    assert queued.zp_temp_path is not None
+    assert queued.zp_temp_path.parent.is_dir()
+
+    cancelled = service.cancel_conversion(queued.job_id)
+
+    assert cancelled is not None
+    assert cancelled.status == "cancelled"
+    assert not queued.zp_temp_path.parent.exists()
+
+
+def test_api_maps_path_errors_to_stable_code_without_absolute_path(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.mzML"
+    outside.write_text("<mzML />", encoding="utf-8")
+
+    with pytest.raises(HTTPException) as exc_info:
+        api.create_zp_conversion(ZpConversionCreateIn(source_path=str(outside)))
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["code"] == "ZP_SOURCE_OUTSIDE_ALLOWED_ROOT"
+    assert str(outside) not in json.dumps(exc_info.value.detail)
+
+
+def test_api_job_response_does_not_return_internal_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    fake_job = ZpConversionJob(
+        job_id="1cfca367-62b3-4721-bb11-d3acaa2bd117",
+        status="queued",
+        stage="queued",
+        progress=0.0,
+        dataset_slug="dataset-one",
+        input_root=tmp_path / "data" / "secret.mzML",
+        zp_temp_path=tmp_path / "zp" / ".tmp" / "secret.partial.zp",
+        zp_final_path=tmp_path / "zp" / "secret.zp",
+        format_version=1,
+    )
+    monkeypatch.setattr(api, "enqueue_conversion", lambda **_kwargs: fake_job)
+
+    out = api.create_zp_conversion(
+        ZpConversionCreateIn(source_path=str(fake_job.input_root), dataset_slug="dataset-one")
+    )
+
+    payload = out.model_dump(mode="json")
+    assert payload == {"job_id": fake_job.job_id, "status": "queued"}
+    assert str(tmp_path) not in json.dumps(payload)
+
+
+def _matched_router_route(routes: list[Any], path: str, method: str) -> str | None:
+    scope = {"type": "http", "method": method, "path": path, "headers": []}
+    for route in routes:
+        match, _child = route.matches(scope)
+        if match == Match.FULL:
+            return route.name
+    return None
+
+
+def _ensure_minimal_datasets_table() -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS datasets (
+                    dataset_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dataset_name TEXT NULL,
+                    name TEXT NULL,
+                    slug TEXT NOT NULL UNIQUE,
+                    analysis_mode TEXT NOT NULL DEFAULT 'TOP_DOWN',
+                    source_software TEXT NULL,
+                    source_root TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'IMPORTED',
+                    description TEXT NULL,
+                    capabilities TEXT NOT NULL DEFAULT '{}',
+                    extra_metadata TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    source_dataset_fingerprint TEXT NULL,
+                    source_import_kind TEXT NOT NULL DEFAULT 'LEGACY'
+                )
+                """
+            )
+        )
+
+
+def test_zp_routes_are_registered_by_default() -> None:
+    router = build_api_router()
+    paths = {route.path for route in router.routes}
+
+    assert "/api/v1/zp-conversions" in paths
+    assert "/api/v1/zp-conversions/{job_id}" in paths
+    assert "/api/v1/zp-conversions/{job_id}/cancel" in paths
+    assert "/api/v1/datasets/{dataset_id}/zp-status" in paths
+    assert "/api/v1/datasets/{dataset_id}/binary-extensions" in paths
+    assert "/api/v1/datasets/{dataset_id}/binary-extensions/{extension_type}" in paths
+    assert _matched_router_route(router.routes, "/api/v1/zp-conversions", "POST") == "create_zp_conversion"
+    assert _matched_router_route(router.routes, "/api/v1/imports", "POST") == "enqueue_import"
+
+
+def test_zp_routes_are_not_registered_when_management_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "zp_management_enabled", False)
+    router = build_api_router()
+    paths = {route.path for route in router.routes}
+
+    assert "/api/v1/zp-conversions" not in paths
+    assert "/api/v1/zp-conversions/{job_id}" not in paths
+    assert "/api/v1/zp-conversions/{job_id}/cancel" not in paths
+    assert "/api/v1/datasets/{dataset_id}/zp-status" not in paths
+    assert "/api/v1/datasets/{dataset_id}/binary-extensions" not in paths
+    assert "/api/v1/datasets/{dataset_id}/binary-extensions/{extension_type}" not in paths
+    assert _matched_router_route(router.routes, "/api/v1/zp-conversions", "POST") is None
+    assert _matched_router_route(router.routes, "/api/v1/imports", "POST") == "enqueue_import"
+
+
+def test_zp_schema_bootstrap_is_skipped_when_management_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "zp_management_enabled", False)
+    real_import = builtins.__import__
+
+    def fail_repository_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "app.zp_conversion.repository":
+            raise AssertionError("ZP schema bootstrap must stay disabled when management is disabled")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fail_repository_import)
+
+    app_main._ensure_zp_conversion_schema_if_enabled()
+
+
+def test_zp_schema_bootstrap_runs_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+    monkeypatch.setattr(repository, "ensure_zp_conversion_schema", lambda: calls.append(True))
+
+    app_main._ensure_zp_conversion_schema_if_enabled()
+
+    assert calls == [True]
