@@ -8,6 +8,47 @@ from app.declarative_ingest import DeclarativeImportPlan, preflight_declarative_
 from app.declarative_ingest.preflight import DeclarativePlanError
 
 
+@pytest.mark.parametrize("reader", ["delimited", "jsonl", "parquet"])
+def test_required_measurement_is_checked_beyond_bounded_preview_columns(tmp_path, reader):
+    import csv
+    import json
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from app.declarative_ingest import execute_plan_to_semantic_dataset
+    columns = ["id", "run", "sequence", *[f"extra-{index}" for index in range(70)], "intensity"]
+    rows = [{**dict.fromkeys(columns, ""), "id": "a", "run": "r1", "sequence": "PEPTIDE", "intensity": None},
+            {**dict.fromkeys(columns, ""), "id": "b", "run": "r1", "sequence": "OTHER", "intensity": 0}]
+    filename = {"delimited": "wide.tsv", "jsonl": "wide.jsonl", "parquet": "wide.parquet"}[reader]
+    path = tmp_path / filename
+    if reader == "delimited":
+        with path.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=columns, delimiter="\t")
+            writer.writeheader(); writer.writerows(rows)
+    elif reader == "jsonl":
+        path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    else:
+        pq.write_table(pa.Table.from_pylist(rows), path)
+    source = {"source_id": "rows", "relative_path": filename, "reader": reader, "role": "identifications", "required_fields": ["id", "run", "sequence", "intensity"]}
+    if reader == "delimited":
+        source["delimiter"] = "\t"
+    payload = {"plan_id": "nullable-wide", "sources": [source], "field_mappings": [
+        {"mapping_id": field, "source_id": "rows", "source_field": field, "target_entity": entity, "target_field": target,
+         "value_kind": kind, "required": True, "evidence_refs": ["source"]}
+        for field, entity, target, kind in [("id", "identification", "source_id", "string"), ("run", "run", "name", "string"),
+            ("sequence", "peptide", "sequence", "string"), ("intensity", "quantification", "value", "float")]],
+        "unmapped_fields": {"rows": columns[3:-1]}}
+    with pytest.raises(DeclarativePlanError, match="mapping intensity.*missing value") as failure:
+        preflight_declarative_plan(source_root=tmp_path, plan=DeclarativeImportPlan.model_validate(payload))
+    assert failure.value.code == "ADAPTER_FIELD_MAPPING_FAILED"
+    payload["field_mappings"][-1]["required"] = False
+    plan = DeclarativeImportPlan.model_validate(payload)
+    assert preflight_declarative_plan(source_root=tmp_path, plan=plan).status == "PASSED"
+    semantic = execute_plan_to_semantic_dataset(source_root=tmp_path, source_fingerprint="a" * 32, plan=plan)
+    values = [item.value for item in semantic.quantification]
+    assert len(semantic.identifications) == 2
+    assert None in values and 0 in values
+
+
 def test_companion_virtual_fields_are_not_tabular_field_mapping_inputs(tmp_path):
     payload = _plan(include_mzml=True).model_dump(mode="json")
     payload["field_mappings"].append({"mapping_id": "virtual-native", "source_id": "spectra", "source_field": "native_id",

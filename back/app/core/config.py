@@ -138,7 +138,7 @@ class Settings(BaseSettings):
     agent_browser_sessions_enabled: bool = False
     agent_browser_origin: str | None = None
     agent_browser_session_seconds: int = Field(default=1800, ge=60, le=3600)
-    agent_revision_reads_enabled: bool = False
+    agent_revision_reads_enabled: bool = True
     agent_auto_delivery_enabled: bool = Field(default=False)
     agent_engineering_enabled: bool = False
     agent_engineering_allowed_paths_json: str = "[]"

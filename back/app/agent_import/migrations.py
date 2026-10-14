@@ -141,6 +141,9 @@ def ensure_agent_import_schema(db_engine: Engine | None = None) -> None:
         from app.agent_import.revisions import DDL as revision_ddl
         for statement in revision_ddl:
             connection.execute(text(statement))
+        from app.agent_import.import_recipes import DDL as recipe_ddl
+        for statement in recipe_ddl:
+            connection.execute(text(statement))
         from app.agent_import.asset_retention import DDL as retention_ddl
         for statement in retention_ddl:
             connection.execute(text(statement))

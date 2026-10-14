@@ -17,15 +17,20 @@ from app.core.db import get_session
 def get_db(request: Request = None, response: Response = None) -> Session:  # type: ignore[return-value]
     from app.core.config import settings
     slug = request.path_params.get("slug") if request is not None else None
-    if settings.agent_revision_reads_enabled and slug:
-        if request.method not in {"GET", "HEAD"}:
-            raise HTTPException(409, detail={"code": "REVISION_WRITE_REQUIRES_CANDIDATE", "message": "Published revisions are immutable; prepare a new candidate."})
+    if settings.agent_revision_reads_enabled and request is not None and not slug and request.path_params.get("dataset_id"):
         from app.core.db import engine
-        from app.agent_import.revisions import RevisionStore
+        from sqlalchemy import text
+        with engine.connect() as db:
+            slug = db.execute(text("SELECT slug FROM datasets WHERE dataset_id=:id"), {"id": request.path_params["dataset_id"]}).scalar()
+    if settings.agent_revision_reads_enabled and slug:
+        from app.core.db import engine
+        from app.agent_import.maintenance_publication import revision_store
         from app.agent_import.errors import AgentImportError
-        store = RevisionStore(engine, settings.resolved_zp_output_root / "revisions", build_sha256=settings.viewer_build_id or "", signing_key=(settings.agent_verification_signing_key or "").encode())
+        store = revision_store(engine)
         try:
             revision = store.resolve(slug, request.headers.get("x-viewer-revision"))
+            if revision and request.method not in {"GET", "HEAD"}:
+                raise HTTPException(409, detail={"code": "REVISION_WRITE_REQUIRES_CANDIDATE", "message": "Published revisions are immutable; prepare a new candidate."})
             if response is not None:
                 response.headers["X-Viewer-Revision"] = revision or "legacy"
                 response.headers["Cache-Control"] = "private, no-store"

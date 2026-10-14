@@ -52,3 +52,36 @@ def test_new_zp_rebuild_preserves_logical_identity_and_independent_receipt(tmp_p
         db.execute(text("UPDATE identification_matches SET intensity=17 WHERE intensity=42"))
     with pytest.raises(FullVerificationError):
         verify_revision_projection(store, revision, contract=contract, input_root=replacement, ledger_path=tmp_path / "negative.sqlite")
+
+
+def test_revision_reconciliation_includes_extended_source_contract_fields(tmp_path):
+    from app.declarative_ingest import DeclarativeImportPlan
+    root = settings.resolved_data_root
+    source = root / "extended"
+    source.mkdir()
+    (source / "results.tsv").write_text("id\trun\tsequence\tproteins\tintensity\tpep\tmass\tscan\na\tr1\tPEPTIDE\tP1\t0\t0.03\t897.5\t\n")
+    payload = _plan(with_fasta=False).model_dump(mode="json")
+    payload["sources"][0]["required_fields"].extend(["pep", "mass", "scan"])
+    for field, target, kind in [("pep", "pep", "float"), ("mass", "neutral_mass", "float"), ("scan", "scan_number", "integer")]:
+        payload["field_mappings"].append({"mapping_id": "map-" + field, "source_id": "ids", "source_field": field,
+            "target_entity": "identification", "target_field": target, "value_kind": kind, "evidence_refs": ["source"]})
+    candidate = build_declarative_zp_artifact(source_root=source, source_fingerprint="a" * 32,
+        plan=DeclarativeImportPlan.model_validate(payload), output_path=root / "extended.zp")
+    with SessionLocal() as db:
+        imported = import_agent_zp_candidate(db, AgentZpImportCreateIn(source_path=str(candidate.path), slug="extended-revision", name="Extended fields",
+            analysis_category="BOTTOM_UP", source_profile="synthetic", binary_operation="register_existing_zp"), source_fingerprint="a" * 32)
+    store = RevisionStore(engine, tmp_path / "namespaces", build_sha256="b" * 64, signing_key=b"synthetic-extended-projection-test-key")
+    store.ensure_schema()
+    source_sha = content_manifest(source)["sha256"]
+    revision = store.prepare_from_zp(imported.dataset_id, imported.dataset_slug, source_sha256=source_sha, zp_path=candidate.path, environment_sha256="c" * 64)
+    contract = FullAcceptanceContract(schema_version=3, verifier_version="full-semantic-v2.1", source_identity=source_sha, source_evidence="Independent synthetic extended table",
+        scope="one row with PEP, neutral mass and missing scan", source_roles={"results.tsv": "identifications"},
+        table=TableExpectation(relative_path="results.tsv", reader="delimited", id_column="id", run_column="run", sequence_column="sequence",
+            proteins_column="proteins", quantity_column="intensity", quantity_unit="source_intensity", pep_column="pep", neutral_mass_column="mass", scan_column="scan",
+            semantics_evidence="Synthetic explicit identification fields; absent scan preserved, no inferred spectrum link."))
+    receipt = verify_revision_projection(store, revision, contract=contract, input_root=source, ledger_path=tmp_path / "extended-check.sqlite")
+    assert receipt["coverage"]["projection"]["errors"] == 0
+    with store.projection(revision, writable=True) as db:
+        db.execute(text("UPDATE identification_matches SET pep=0.5"))
+    with pytest.raises(FullVerificationError):
+        verify_revision_projection(store, revision, contract=contract, input_root=source, ledger_path=tmp_path / "extended-negative.sqlite")

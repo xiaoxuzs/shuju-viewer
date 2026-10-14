@@ -61,8 +61,8 @@ def cancel_zp_conversion(job_id: str) -> ZpConversionJobOut:
 
 
 @router.get("/datasets/{dataset_id}/zp-status", response_model=ZpDatasetStatusOut)
-def get_dataset_zp_status(dataset_id: int, dataset_slug: str | None = None) -> ZpDatasetStatusOut:
-    assets = list_dataset_assets(dataset_id)
+def get_dataset_zp_status(dataset_id: int, dataset_slug: str | None = None, session: Session = Depends(get_db)) -> ZpDatasetStatusOut:
+    assets = list_dataset_assets(dataset_id, session=session if getattr(session, "info", {}).get("dataset_revision") else None)
     latest_job = latest_dataset_job(dataset_slug)
     active_assets = [asset for asset in assets if asset.status == "active"]
     return ZpDatasetStatusOut(

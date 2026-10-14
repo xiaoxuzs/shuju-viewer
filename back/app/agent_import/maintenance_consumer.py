@@ -1,7 +1,7 @@
 """Existing Worker consumer for independent published-context planning/execution.
 
-Mapping candidates are compiled by the fixed executor, then parked at the real
-revision-publication boundary. Code requests never execute on the host.
+Mapping candidates are compiled, independently verified and published as revisions.
+Code requests never execute on the host.
 """
 import json
 import time
@@ -54,10 +54,20 @@ def consume_once(service):
             from .workflow import _assert_source_unchanged, _execution_source, _trusted_observations
             from .binary_executor import execute_binary_plan
             parent = service.get_case(task["parent_case_id"])
-            _assert_source_unchanged(parent)
             strategy = parent.strategy_payload or {}
+            if strategy.get("input_snapshot"):
+                from pathlib import Path
+                from .input_assets import content_manifest
+                if content_manifest(Path(_execution_source(parent))) != strategy["input_snapshot"]:
+                    raise AgentImportError("SOURCE_CHANGED", "Retained source content changed after publication.", status_code=409)
+            else:
+                _assert_source_unchanged(parent)
+            with service.engine.connect() as db:
+                previous = db.execute(text("SELECT candidate_json FROM agent_maintenance_tasks WHERE parent_case_id=:case AND published_revision_id=:revision AND state='PUBLISHED'"),
+                    {"case": parent.case_id, "revision": task["revision_id"]}).scalar()
             decision = propose_maintenance_plan({"ever_published": True, "feedback": json.loads(task["feedback_json"])["feedback"],
                 "published_context": {k: task[k] for k in ("parent_case_id", "dataset_id", "revision_id", "context_sha256")},
+                "candidate": json.loads(previous) if previous else parent.candidate_payload,
                 "blueprint": strategy.get("blueprint"), "observations": strategy.get("observations", [])})
             checkpoint()
             state = decision.status
@@ -65,15 +75,23 @@ def consume_once(service):
                 compiled = execute_binary_plan(case_id=task["task_id"], source_root=_execution_source(parent), source_fingerprint=parent.dataset_fingerprint,
                     plan=decision.candidate, trusted_observations=_trusted_observations(strategy))
                 candidate_path, candidate_sha = str(compiled.zp_path), compiled.output_sha256
-                state = "AWAITING_REVISION_VALIDATION"
+                if parent.strategy_payload and parent.strategy_payload.get("input_snapshot"):
+                    from .maintenance_publication import publish_repair
+                    publish_repair(service, task, parent, decision, compiled, fence)
+                    state = "PUBLISHED"
+                else:
+                    state = "AWAITING_REVISION_VALIDATION"
             elif state == "ENGINEERING_REQUIRED":
                 state = "ENGINEERING_BLOCKED"  # never invokes initial engineering or executes generated code
-            checkpoint()
+            if state != "PUBLISHED":
+                checkpoint()
     except Exception as exc:
         state = "FAILED"
-        error = str(getattr(exc, "code", type(exc).__name__))
+        error = str(getattr(exc, "code", None) or type(exc).__name__)
     finally:
         try:
+            if state == "PUBLISHED":
+                return True
             with service.engine.begin() as db:
                 try:
                     check_task_fence(db, task["task_id"], fence)

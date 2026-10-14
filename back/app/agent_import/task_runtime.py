@@ -108,9 +108,10 @@ class TaskRuntime:
         remaining = min(remaining, datetime.fromisoformat(case["deadline_at"]).timestamp()-now)
         if remaining <= 0:
             fail("TASK_RUN_LIMIT_REACHED", "达到任务运行上限；任务截止时间已到")
-        published = bool(case["ever_published"])
-        if row["parent_case_id"]:
-            published |= bool(db.execute(text("SELECT ever_published FROM agent_import_cases WHERE case_id=:id"), {"id": row["parent_case_id"]}).scalar())
+        # Only maintenance tasks inherit a parent's publication (checked above).
+        # Older initial tasks linked same-content copies to a published parent;
+        # that historical reference does not publish this independent dataset.
+        published = bool(case["ever_published"] or case["dataset_id"] is not None)
         return remaining, published
 
     def check(self):

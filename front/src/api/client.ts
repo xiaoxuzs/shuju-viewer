@@ -38,11 +38,16 @@ export const api = axios.create({
 });
 
 const pinnedRevisions = new Map<string, string>();
+const datasetIdSlugs = new Map<string, string>();
 export function pinnedDatasetRevision(slug: string): string {
   return pinnedRevisions.get(encodeURIComponent(slug)) ?? "legacy";
 }
+export function releaseDatasetRevision(slug: string): void {
+  pinnedRevisions.delete(encodeURIComponent(slug));
+}
 function datasetSlug(url?: string): string | undefined {
-  return url?.match(/^\/datasets\/([^/?]+)/)?.[1];
+  const value = url?.match(/^\/datasets\/([^/?]+)/)?.[1];
+  return value ? datasetIdSlugs.get(value) ?? value : undefined;
 }
 api.interceptors.request.use((request) => {
   const slug = datasetSlug(request.url);
@@ -51,6 +56,9 @@ api.interceptors.request.use((request) => {
 });
 
 api.interceptors.response.use(response => {
+  if (response.data?.id && response.data?.slug && response.config.url?.match(/^\/datasets\/[^/?]+$/)) {
+    datasetIdSlugs.set(String(response.data.id), encodeURIComponent(response.data.slug));
+  }
   const slug = datasetSlug(response.config.url);
   const revision = response.headers["x-viewer-revision"];
   if (slug && typeof revision === "string") {

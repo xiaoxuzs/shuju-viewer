@@ -129,8 +129,8 @@ def cancel_conversion(job_id: str) -> ZpConversionJob | None:
     return get_job(job_id)
 
 
-def list_dataset_assets(dataset_id: int) -> list[ZpArtifact]:
-    return list_assets_for_dataset(dataset_id)
+def list_dataset_assets(dataset_id: int, *, session=None) -> list[ZpArtifact]:
+    return list_assets_for_dataset(dataset_id, session=session)
 
 
 def latest_dataset_job(dataset_slug: str | None) -> ZpConversionJob | None:

@@ -14,6 +14,8 @@ from app.agent_import.authorization import require_internal_operator
 from app.agent_import.local_sessions import claim_resource, check_resource, owned_ids
 from app.agent_import.maintenance import MaintenanceFeedback, submit_feedback, list_feedback
 from app.agent_import.input_assets import retained_asset_catalog, retained_asset_path
+from app.agent_import.import_recipes import SaveRecipe, save_recipe, list_recipes, recipe_out, get_recipe_tx
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi.responses import FileResponse
 from app.agent_import.upload_admission import case_from_upload
 from app.import_uploads.errors import UploadError
@@ -40,6 +42,68 @@ from app.dataset_capabilities import validate_capability_report
 
 router = APIRouter(tags=["agent-import"], dependencies=[Depends(guard_workspace_request)])
 delivery_read_router = APIRouter(tags=["agent-delivery"], dependencies=[Depends(guard_workspace_request)])
+
+
+class RecipeImportIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_path: str = Field(min_length=1, max_length=2000)
+    version: int = Field(ge=1)
+
+
+class RevisionRollbackIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision_id: str = Field(min_length=1, max_length=80)
+    expected_base: str = Field(min_length=1, max_length=80)
+
+
+@router.get("/agent-import-cases/{case_id}/revisions")
+def get_case_revisions(case_id: str):
+    from .maintenance_publication import list_revisions
+    try:
+        return list_revisions(_service(), case_id)
+    except AgentImportError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/agent-import-cases/{case_id}/revisions/rollback")
+def rollback_case_revision(case_id: str, body: RevisionRollbackIn):
+    from .maintenance_publication import rollback_revision
+    try:
+        return rollback_revision(_service(), case_id, body.revision_id, body.expected_base)
+    except AgentImportError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get("/import-recipes")
+def get_import_recipes():
+    return list_recipes(_service())
+
+
+@router.post("/agent-import-cases/{case_id}/import-recipe")
+def save_case_import_recipe(case_id: str, body: SaveRecipe):
+    try:
+        return recipe_out(save_recipe(_service(), case_id, body))
+    except AgentImportError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/import-recipes/{recipe_id}/from-path", response_model=AgentCaseCreatedOut, status_code=201)
+def import_saved_recipe(recipe_id: str, body: RecipeImportIn, request: Request):
+    if not settings.agent_import_enabled:
+        raise HTTPException(403, detail={"code": "AGENT_IMPORT_DISABLED"})
+    try:
+        with _service().engine.connect() as db:
+            recipe = get_recipe_tx(db, recipe_id, body.version)
+        admission = admit_unknown_source_path(body.source_path, enforce_policy=True)
+        if getattr(request.state, "viewer_subject", None) and not admission.source_root.is_relative_to(settings.resolved_data_root):
+            raise HTTPException(403, detail={"code": "SOURCE_OUTSIDE_SESSION_SCOPE"})
+        case = _service().create_case(source_ref=str(admission.source_root), dataset_fingerprint=admission.dataset_fingerprint,
+            analysis_category=recipe["analysis_category"], source_profile=recipe["name"], format_details=None,
+            owner_id="shared-workspace", import_recipe=recipe, delivery_policy=_browser_delivery_policy("manual", request))
+        claim_resource(request, "case", case.case_id)
+        return AgentCaseCreatedOut(case_id=case.case_id, status=case.status.value, version=case.version)
+    except AgentImportError as exc:
+        raise _http_error(exc) from exc
 
 
 @router.get("/agent-retention/dry-run", dependencies=[Depends(require_internal_operator)])

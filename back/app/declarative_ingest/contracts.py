@@ -112,7 +112,7 @@ class FieldMapping(_StrictModel):
     target_entity: TargetEntity
     target_field: str = Field(..., min_length=1, max_length=160)
     value_kind: ValueKind
-    required: bool = False
+    required: bool = Field(default=False, description="True requires a non-missing value in EVERY source row and blocks conversion on null or empty/whitespace text. False still maps the field and preserves missing values as null. Column presence belongs in DeclarativeSource.required_fields; a required source file or scientific measurement does not make all its values non-null. Never discard rows or fill missing values with zero.")
     unit: str | None = Field(default=None, max_length=80)
     measurement_name: str | None = Field(default=None, min_length=1, max_length=120,
         description="Explicit labelled quantitative channel (for example an evidenced reporter channel), not a metric or display name. Omit for unlabelled source intensity; the source field is retained separately as metric.")

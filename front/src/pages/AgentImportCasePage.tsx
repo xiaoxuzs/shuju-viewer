@@ -22,10 +22,11 @@ import {
   stopAgentImportCase,
 } from "@/features/agent-import/api";
 import { CapabilityReportPanel } from "@/features/dataset-capabilities/CapabilityReportPanel";
-import { TransitionLink, usePageTransitionReady } from "@/features/page-transition";
+import { TransitionLink, usePageTransitionReady, useTransitionNavigate } from "@/features/page-transition";
 import { parseApiError } from "@/lib/apiError";
 import { cn } from "@/lib/utils";
 import { PublishedFeedback } from "@/features/agent-import/PublishedFeedback";
+import { SaveImportRecipe } from "@/features/agent-import/ImportRecipe";
 
 const TERMINAL_STATUSES = new Set(["SUCCESS", "FAILED", "STOPPED"]);
 
@@ -38,6 +39,7 @@ function statusVariant(status: string): "default" | "outline" | "secondary" | "s
 
 export function AgentImportCasePage() {
   const { caseId = "" } = useParams();
+  const navigate = useTransitionNavigate();
   const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState("");
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -83,6 +85,12 @@ export function AgentImportCasePage() {
 
   const item = caseQuery.data;
   const refreshCase = async (next?: AgentImportCaseOut) => {
+    if (next && next.case_id !== caseId) {
+      queryClient.setQueryData(["agent-import-case", next.case_id], next);
+      await queryClient.invalidateQueries({ queryKey: ["agent-import-cases"] });
+      navigate(`/agent-import-cases/${next.case_id}`);
+      return;
+    }
     if (next) queryClient.setQueryData(["agent-import-case", caseId], next);
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["agent-import-case", caseId] }),
@@ -329,7 +337,10 @@ export function AgentImportCasePage() {
             <p>Your source is retained. This is not a data error and does not require another model API key.</p>
             <p>This older experiment retains its original restrictions and is not resumed automatically. New ordinary imports and maintenance use server task settings without a separate model grant.</p>
           </section>}
-          {item.ever_published && <PublishedFeedback caseId={caseId} />}
+          {item.ever_published && <>
+            <SaveImportRecipe caseId={caseId} defaultName={item.source_profile} />
+            <PublishedFeedback caseId={caseId} datasetSlug={item.dataset_slug ?? undefined} />
+          </>}
           {item.status === "SUCCESS" && item.dataset_slug && (
             <Card className="border-[hsl(var(--success)/0.4)]">
               <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">

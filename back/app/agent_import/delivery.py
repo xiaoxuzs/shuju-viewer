@@ -38,7 +38,7 @@ def require_auto_test_policy() -> None:
         raise AgentImportError("AUTO_DELIVERY_NOT_AUTHORIZED", "Automatic publication requires the identified immutable source snapshot used by the running Worker, not an editable checkout.", status_code=403)
 
 
-def validate_candidate_application(case: Any, candidate: Path) -> dict:
+def validate_candidate_application(case: Any, candidate: Path, *, input_root: Path | None = None) -> dict:
     if settings.agent_api_worker_enabled:
         raise AgentImportError("APPLICATION_VERIFICATION_NOT_CONFIGURED", "Application validation requires the standalone Worker, not the API process.", status_code=409)
     snapshot = (case.strategy_payload or {}).get("input_snapshot")
@@ -70,7 +70,7 @@ def validate_candidate_application(case: Any, candidate: Path) -> dict:
     )
     try:
         return CandidateVerifier(runtime, signing_key=key).verify(candidate, oracle, case_id=case.case_id, context_revision=case.context_revision,
-            input_root=settings.resolved_zp_output_root / "agent-cases" / case.case_id / "source" / "files")
+            input_root=input_root or settings.resolved_zp_output_root / "agent-cases" / case.case_id / "source" / "files")
     except AgentImportError:
         raise
     except Exception as exc:

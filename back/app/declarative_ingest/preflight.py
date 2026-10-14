@@ -386,6 +386,7 @@ def preflight_declarative_plan(
         )
 
     _require_bottom_up_identity(plan, sources)
+    _validate_required_values(root, plan)
     return DeclarativePreflightReport(
         status="PASSED",
         source_fields=source_fields,
@@ -393,6 +394,47 @@ def preflight_declarative_plan(
         explicitly_unmapped_field_count=sum(len(value) for value in plan.unmapped_fields.values()),
         requested_view_ids=tuple(item.view_id for item in plan.requested_views),
     )
+
+
+def _validate_required_values(root: Path, plan: DeclarativeImportPlan) -> None:
+    """Check declared non-null values independently of bounded column previews."""
+    from app.agent_import.execution_control import checkpoint
+    for source in plan.sources:
+        mappings = [item for item in plan.field_mappings if item.source_id == source.source_id and item.required]
+        if not mappings:
+            continue
+        path = _resolve_source(root, source)
+        for row_number, row in enumerate(_required_value_rows(path, source, mappings), 1):
+            if row_number % 256 == 1:
+                checkpoint()
+            for mapping in mappings:
+                value = row.get(mapping.source_field)
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    raise DeclarativePlanError(
+                        f"mapping {mapping.mapping_id}: source field {mapping.source_field} has a missing value at row {row_number}, "
+                        "but mapping.required=true requires a non-missing value in every row. "
+                        "Use required=false when the source permits absence; keep the column in source.required_fields "
+                        "if its presence is necessary. Preserve every record, null and zero; do not invent a replacement value.",
+                        code="ADAPTER_FIELD_MAPPING_FAILED",
+                    )
+
+
+def _required_value_rows(path, source, mappings):
+    if source.reader == "delimited":
+        with path.open(encoding="utf-8-sig", newline="") as stream:
+            yield from csv.DictReader(stream, delimiter=source.delimiter)
+    elif source.reader == "jsonl":
+        with path.open(encoding="utf-8-sig") as stream:
+            for line in stream:
+                if line.strip():
+                    row = json.loads(line)
+                    if not isinstance(row, dict):
+                        raise DeclarativePlanError("JSONL source row must be an object")
+                    yield row
+    elif source.reader == "parquet":
+        columns = list(dict.fromkeys(item.source_field for item in mappings))
+        for batch in pq.ParquetFile(path).iter_batches(batch_size=4096, columns=columns):
+            yield from batch.to_pylist()
 
 
 def _resolve_source(root: Path, source: DeclarativeSource) -> Path:

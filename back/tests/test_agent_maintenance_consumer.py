@@ -54,6 +54,14 @@ def test_authorized_maintenance_consumes_and_never_calls_initial_role(tmp_path, 
         decision["candidate"] = {"schema_version": 3, "status": "READY", "analysis_category": "BOTTOM_UP", "source_profile": "fixture",
             "binary_operation": "convert_declared_mapping_to_zp", "zp_conversion_plan": {"relative_source": "results.tsv", "target_format_version": 3, "declarative_plan": plan}}
     def transport(encoded, **kwargs):
+        from app.agent_import.errors import AgentImportError
+        from app.agent_import.task_runtime import current_task
+        from app.agent_import.authorization_ledger import route_identity
+        with pytest.raises(AgentImportError) as failure:
+            current_task().reserve(role="implementation",
+                route_sha256=route_identity(settings.openai_base_url+"/chat/completions", settings.openai_model),
+                request_bytes=100, output_limit=50, request_sha256="f"*64)
+        assert failure.value.code == "PUBLISHED_CASE_ROLE_FORBIDDEN"
         body = json.loads(encoded)["body"]
         assert "independent published-dataset maintenance" in body["messages"][0]["content"]
         return {"model": "gpt-test-fixture", "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(decision)}}]}

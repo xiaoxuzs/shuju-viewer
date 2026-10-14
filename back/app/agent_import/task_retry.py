@@ -45,6 +45,12 @@ def retry_task(service, case_id, expected_version):
         current = db.execute(text("SELECT * FROM agent_import_cases WHERE case_id=:id"+lock), {"id": case_id}).mappings().one()
         if runtime["kind"] != "initial" or current["status"] not in {"FAILED", "NEEDS_USER"} or current["version"] != expected_version or current["ever_published"] or current["dataset_id"] is not None or current["lease_owner"]:
             raise AgentImportError("TASK_RETRY_STATE_CONFLICT", "Task changed or still has a Worker; retry was not applied", status_code=409)
+        published = service._published_source_tx(db, owner_id=current["owner_id"], workspace_id=current["workspace_id"],
+            dataset_fingerprint=current["dataset_fingerprint"], source_content_sha256=current["source_content_sha256"])
+        if published is not None:
+            # Preserve the failed task, its attempts and charged requests. There
+            # is already a delivery for this source, so no new model run is needed.
+            return published
         policy = effective_policy()
         # A newly requested run has normal server limits; previous consumption
         # stays charged and queryable, not reset or relabelled as unexecuted.

@@ -214,8 +214,20 @@ def list_datasets(session: Session = Depends(get_db)) -> list[DatasetOut]:
     bu_runs_by_dataset = _bu_runs_by_dataset(session, bu_dataset_ids)
     spectra_dataset_ids = [dataset_id for dataset_id, mode in dataset_modes.items() if mode == "spectra_only"]
     runs_by_dataset = _runs_by_dataset(session, spectra_dataset_ids)
-    return [
-        _dataset_out(
+    result = []
+    from app.core.config import settings
+    from app.agent_import.maintenance_publication import revision_store
+    store = revision_store(session.get_bind()) if settings.agent_revision_reads_enabled else None
+    for d in datasets:
+        revision = store.resolve(d["slug"]) if store else None
+        if revision:
+            with store.projection(revision) as current:
+                row = current.execute(text("SELECT * FROM datasets WHERE dataset_id=:id"), {"id": d["dataset_id"]}).mappings().one()
+                result.append(_dataset_out(row=row, cutoffs=_cutoffs_payload(current, row["dataset_id"], analysis_mode=row.get("analysis_mode")),
+                    bu_runs=_bu_runs_by_dataset(current, [row["dataset_id"]]).get(row["dataset_id"]) if _dataset_mode(row) == "bottom_up" else None,
+                    runs=_runs_by_dataset(current, [row["dataset_id"]]).get(row["dataset_id"]) if _dataset_mode(row) == "spectra_only" else None))
+            continue
+        result.append(_dataset_out(
             row=d,
             cutoffs=_cutoffs_payload(session, d["dataset_id"], analysis_mode=d.get("analysis_mode")),
             bu_runs=(
@@ -228,9 +240,8 @@ def list_datasets(session: Session = Depends(get_db)) -> list[DatasetOut]:
                 if dataset_modes[int(d["dataset_id"])] == "spectra_only"
                 else None
             ),
-        )
-        for d in datasets
-    ]
+        ))
+    return result
 
 
 @router.get("/datasets/{slug}", response_model=DatasetOut)

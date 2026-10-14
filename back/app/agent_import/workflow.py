@@ -37,6 +37,8 @@ CandidateStager = Callable[[CaseRecord, BinaryExecutionResult, AgentCandidatePla
 
 def _assert_model_routes(case: CaseRecord) -> None:
     from app.core.config import settings
+    if (case.strategy_payload or {}).get("provider") == "saved-import-recipe":
+        return
     previous = (case.strategy_payload or {}).get("model_route_identity")
     if previous is None and not settings.openai_api_key:
         return  # Preserve the existing manual compatibility boundary, never upgrade it to GPT evidence.
@@ -126,7 +128,9 @@ class AgentImportWorkflow:
             acceptance = ensure_registered_acceptance(Path(root), source_identity=retained["sha256"],
                 requirements_sha256=requirement_hash, oracle_root=settings.agent_verification_oracle_root)
         route_identity = model_route_identity()
-        strategy = self.provider.analyze_source(self._context(case, summary))
+        from .import_recipes import bound_recipe, build_recipe_strategy
+        recipe = bound_recipe(self.service, case_id)
+        strategy = build_recipe_strategy(recipe, root) if recipe else self.provider.analyze_source(self._context(case, summary))
         if route_identity != model_route_identity():
             raise AgentImportError("MODEL_ROUTE_CHANGED", "Role configuration changed during research", status_code=409)
         strategy["model_route_identity"] = route_identity
@@ -151,7 +155,8 @@ class AgentImportWorkflow:
         summary = summarize_source_root(case.source_ref)
         _assert_model_routes(case)
         context = self._context(case, summary)
-        plan = self.provider.build_candidate(context, case.strategy_payload)
+        saved = case.strategy_payload.get("saved_candidate")
+        plan = AgentCandidatePlan.model_validate(saved) if saved else self.provider.build_candidate(context, case.strategy_payload)
         if case.analysis_category != "AUTO" and plan.analysis_category != case.analysis_category:
             raise ValueError("Agent candidate cannot change the user-selected analysis_category")
         if plan.status != "READY":
@@ -198,12 +203,11 @@ class AgentImportWorkflow:
                 status_code=503,
             )
         summary = summarize_source_root(case.source_ref)
-        review = review_candidate(
-            self._context(case, summary),
-            case.strategy_payload,
-            plan,
-            preflight,
-        )
+        if case.strategy_payload.get("provider") == "saved-import-recipe":
+            from .import_recipes import recipe_review
+            review = recipe_review()
+        else:
+            review = review_candidate(self._context(case, summary), case.strategy_payload, plan, preflight)
         reviewed = self.service.save_review(case_id, review)
         if review.status != "APPROVED":
             return reviewed

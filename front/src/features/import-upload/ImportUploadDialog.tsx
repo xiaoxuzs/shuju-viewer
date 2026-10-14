@@ -45,6 +45,9 @@ import { parseApiError } from "@/lib/apiError";
 import { clampImportProgress, formatImportStageLabel } from "@/lib/importStages";
 import { cn } from "@/lib/utils";
 import { TransitionLink } from "@/features/page-transition";
+import { api } from "@/api/client";
+import type { ImportRecipe } from "@/features/agent-import/ImportRecipe";
+import { SavedRecipeImport } from "./SavedRecipeImport";
 
 type UploadUiState =
   | "idle"
@@ -182,6 +185,11 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
   const [unknownFormatBusy, setUnknownFormatBusy] = useState(false);
   const [unknownFormatResult, setUnknownFormatResult] = useState<UnknownFormatImportOut | null>(null);
   const [analysisType, setAnalysisType] = useState<AnalysisType | null>(null);
+  const [savedRecipes, setSavedRecipes] = useState<ImportRecipe[]>([]);
+  const [savedRecipe, setSavedRecipe] = useState<ImportRecipe | null>(null);
+  useEffect(() => {
+    if (open) void api.get<ImportRecipe[]>("/import-recipes").then(r => setSavedRecipes(r.data)).catch(() => setSavedRecipes([]));
+  }, [open]);
   const [importType, setImportType] = useState<ImportUploadType | null>(null);
   const [slug, setSlug] = useState("");
   const [datasetName, setDatasetName] = useState("");
@@ -216,6 +224,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
     cancelRequestedRef.current = false;
     speedSamplesRef.current = [];
     setImportWorkflow("supported-format");
+    setSavedRecipe(null);
     setUnknownAnalysisType("AUTO");
     setCustomDataType("");
     setFormatName("");
@@ -865,7 +874,8 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                 <div className="flex items-start gap-2 rounded-md border border-primary/40 bg-primary/5 p-3 text-sm" role="status">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold">Format analysis started</div>
+                    <div className="font-semibold">{unknownFormatResult.status === "SUCCESS" ? "Source already imported" : "Format analysis started"}</div>
+                    {unknownFormatResult.status === "SUCCESS" && <p>No new analysis was started. Open the existing published result below.</p>}
                     <div className="mt-1 font-mono text-xs text-muted-foreground">{unknownFormatResult.case_id}</div>
                     <Button asChild size="sm" className="mt-3">
                       <TransitionLink to={`/agent-import-cases/${unknownFormatResult.case_id}`}>Open Agent case</TransitionLink>
@@ -921,6 +931,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                   onClick={() => {
                     selectionTokenRef.current += 1;
                     setAnalysisType(option.value);
+                    setSavedRecipe(null);
                     setImportType(null);
                     setSelection(null);
                     setDiaclipCheck(null);
@@ -964,6 +975,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                     onClick={() => {
                       selectionTokenRef.current += 1;
                       setImportType(option.value);
+                      setSavedRecipe(null);
                       setSelection(null);
                       setDiaclipCheck(null);
                       setInputKey((value) => value + 1);
@@ -971,6 +983,13 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
                     }}
                   >
                     {option.label}
+                  </button>
+                ))}
+                {savedRecipes.filter(recipe => recipe.display_category === analysisType).map(recipe => (
+                  <button key={recipe.recipe_id} type="button" role="radio" aria-checked={savedRecipe?.recipe_id === recipe.recipe_id}
+                    disabled={controlsDisabled} className={cn("rounded-md border px-3 py-2 text-sm font-medium", savedRecipe?.recipe_id === recipe.recipe_id && "border-primary bg-primary/10")}
+                    onClick={() => { setSavedRecipe(recipe); setImportType(null); setSelection(null); }}>
+                    {recipe.name}
                   </button>
                 ))}
               </div>
@@ -989,6 +1008,7 @@ export function ImportUploadDialog({ open, onOpenChange }: ImportUploadDialogPro
             </section>
           )}
 
+          {savedRecipe && <SavedRecipeImport key={savedRecipe.recipe_id} recipe={savedRecipe} />}
           {importType && (
             <>
               <section className="grid gap-3 sm:grid-cols-2" aria-labelledby="dataset-info-title">

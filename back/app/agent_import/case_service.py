@@ -186,6 +186,7 @@ class CaseService:
         delivery_policy: str = "manual",
         owner_id: str = "unowned",
         execution_mode: str = "product",
+        import_recipe: dict[str, Any] | None = None,
     ) -> CaseRecord:
         if execution_mode not in {"product", "legacy_experiment"}:
             raise ValueError("Unknown trusted execution mode")
@@ -200,12 +201,38 @@ class CaseService:
         deadline = (datetime.now(timezone.utc) + timedelta(seconds=settings.agent_case_deadline_seconds)).isoformat()
         source_sha = None
         request_key = None
+        content_request_key = None
         if settings.agent_model_authorization_required:
             from .input_assets import content_manifest
             from .admission_policy import submission_identity
             source_sha = content_manifest(Path(source_ref))["sha256"]
-            request_key = submission_identity(owner_id, workspace_id, source_sha, analysis_category, source_profile, format_details)
+            # Content equality is not dataset identity: ordinary copied inputs
+            # with new metadata must retain their own task and business fingerprint.
+            source_identity = f"{dataset_fingerprint}:{source_sha}" if execution_mode == "product" else source_sha
+            request_key = submission_identity(owner_id, workspace_id, source_identity, analysis_category, source_profile, format_details)
+            if execution_mode == "product":
+                content_request_key = submission_identity(owner_id, workspace_id, source_sha, analysis_category, source_profile, format_details)
+            if import_recipe:
+                import hashlib
+                request_key = hashlib.sha256(f"{request_key}:{import_recipe['recipe_id']}:{import_recipe['version']}".encode()).hexdigest()
+                if content_request_key:
+                    content_request_key = hashlib.sha256(f"{content_request_key}:{import_recipe['recipe_id']}:{import_recipe['version']}".encode()).hexdigest()
         with self.engine.begin() as connection:
+            if execution_mode == "product":
+                published = self._published_source_tx(connection, owner_id=owner_id, workspace_id=workspace_id,
+                    dataset_fingerprint=dataset_fingerprint, source_content_sha256=source_sha)
+                if published is not None:
+                    return published
+                if content_request_key:
+                    # Preserve pre-fix ordinary task idempotency only for the
+                    # same metadata source, not another same-content copy.
+                    prior = connection.execute(text("""SELECT c.* FROM agent_submission_keys k
+                        JOIN agent_import_cases c ON c.case_id=k.case_id
+                        JOIN agent_task_runs r ON r.task_id=c.case_id AND r.kind='initial'
+                        WHERE k.submission_key=:key AND c.dataset_fingerprint=:fingerprint"""),
+                        {"key": content_request_key, "fingerprint": dataset_fingerprint}).mappings().first()
+                    if prior is not None:
+                        return _case(prior)
             if request_key is not None:
                 connection.execute(text("INSERT INTO agent_submission_keys VALUES (:key,:case) ON CONFLICT DO NOTHING"), {"key": request_key, "case": case_id})
                 chosen = connection.execute(text("SELECT case_id FROM agent_submission_keys WHERE submission_key=:key"), {"key": request_key}).scalar_one()
@@ -256,11 +283,11 @@ class CaseService:
             if owner_id != "unowned":
                 connection.execute(text("INSERT INTO agent_resource_owners VALUES ('case',:case,:owner) ON CONFLICT DO NOTHING"), {"case": case_id, "owner": owner_id})
             if execution_mode == "product":
+                if import_recipe:
+                    connection.execute(text("INSERT INTO agent_case_recipes VALUES (:case,:recipe,:version)"),
+                        {"case": case_id, "recipe": import_recipe["recipe_id"], "version": import_recipe["version"]})
                 from .task_runtime import create_task_tx
-                parent = connection.execute(text("""SELECT case_id FROM agent_import_cases WHERE case_id<>:id
-                    AND owner_id=:owner AND workspace_id=:workspace AND source_content_sha256=:sha AND ever_published=1
-                    ORDER BY created_at LIMIT 1"""), {"id": case_id, "owner": owner_id, "workspace": workspace_id, "sha": source_sha}).scalar()
-                create_task_tx(connection, case_id, parent_case_id=parent, deadline=datetime.fromisoformat(deadline).timestamp())
+                create_task_tx(connection, case_id, deadline=datetime.fromisoformat(deadline).timestamp())
             else:
                 from .admission_policy import bind_pending_tx
                 row = connection.execute(text("SELECT * FROM agent_import_cases WHERE case_id=:id"), {"id": case_id}).mappings().one()
@@ -268,6 +295,21 @@ class CaseService:
                 connection.execute(text("UPDATE agent_import_cases SET status=:state,authorization_wait_reason=:reason WHERE case_id=:id"),
                     {"id": case_id, "state": "CREATED" if reason is None else "WAITING_AUTHORIZATION", "reason": reason})
         return self.get_case(case_id)
+
+    def _published_source_tx(self, connection, *, owner_id, workspace_id, dataset_fingerprint, source_content_sha256):
+        """Reuse an existing Agent ZP delivery, never infer maintenance from bytes."""
+        row = connection.execute(text("""SELECT * FROM agent_import_cases
+            WHERE owner_id=:owner AND workspace_id=:workspace AND dataset_fingerprint=:fingerprint
+                AND ever_published=1 AND dataset_id IS NOT NULL
+            ORDER BY created_at,case_id LIMIT 1"""),
+            {"owner": owner_id, "workspace": workspace_id, "fingerprint": dataset_fingerprint}).mappings().first()
+        if row is None:
+            return None
+        if source_content_sha256 and row["source_content_sha256"] and source_content_sha256 != row["source_content_sha256"]:
+            raise AgentImportError("SOURCE_FINGERPRINT_CONFLICT",
+                "The metadata fingerprint belongs to a published source with different content; the existing dataset was not changed.",
+                status_code=409)
+        return _case(row)
 
     def get_case(self, case_id: str) -> CaseRecord:
         with self.engine.connect() as connection:

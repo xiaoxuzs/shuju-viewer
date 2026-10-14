@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from contextlib import nullcontext
 
 from sqlalchemy import text
 
@@ -213,8 +214,8 @@ def register_asset(
         _mark_dataset_zp_main_path(conn, dataset_id=dataset_id, asset_capabilities=capabilities or {"spectra": True})
 
 
-def list_assets_for_dataset(dataset_id: int) -> list[ZpArtifact]:
-    with _db_engine.begin() as conn:
+def list_assets_for_dataset(dataset_id: int, *, session=None) -> list[ZpArtifact]:
+    with (nullcontext(session) if session is not None else _db_engine.begin()) as conn:
         rows = conn.execute(
             text(
                 """

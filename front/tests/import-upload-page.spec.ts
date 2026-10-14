@@ -4,6 +4,7 @@ const ACTIVE_JOB_KEY = "viewer.activeImportJob";
 const NOW = "2026-07-17T00:00:00.000Z";
 
 test.beforeEach(async ({ page }) => {
+  await page.route("**/api/v1/import-recipes", async route => json(route, []));
   await page.route("**/api/v1/datasets", async (route) => {
     await json(route, []);
   });

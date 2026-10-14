@@ -34,7 +34,7 @@ def verify_revision_projection(store, revision, *, contract, input_root, ledger_
             identity = db.execute(text("SELECT dataset_id,slug FROM datasets")).all()
             if identity != [(row["dataset_id"], row["slug"])]:
                 raise FullVerificationError("REVISION_DATASET_IDENTITY_MISMATCH")
-            for _, record, api in projection_records(db, row["dataset_id"], contract.batch_size):
+            for _, record, api in projection_records(db, row["dataset_id"], contract.batch_size, contract.table):
                 ledger.check()
                 ledger.compare("projection", record)
                 check_projected_intensity(ledger, record, api)

@@ -90,14 +90,16 @@ def ensure_consumer_columns(db):
     from sqlalchemy import inspect
     names = {c["name"] for c in inspect(db).get_columns("agent_maintenance_tasks")}
     for name, ddl in {"lease_token": "TEXT NULL", "lease_until": "DOUBLE PRECISION NULL", "wait_reason": "TEXT NULL",
-                      "candidate_path": "TEXT NULL", "candidate_sha256": "TEXT NULL", "decision_json": "TEXT NULL"}.items():
+                      "candidate_path": "TEXT NULL", "candidate_sha256": "TEXT NULL", "decision_json": "TEXT NULL",
+                      "published_revision_id": "TEXT NULL"}.items():
         if name not in names:
             db.execute(text(f"ALTER TABLE agent_maintenance_tasks ADD COLUMN {name} {ddl}"))
 
 
-def check_task_fence(db, task_id, fence):
+def check_task_fence(db, task_id, fence, *, lock=False):
     import time
-    row = db.execute(text("SELECT * FROM agent_maintenance_tasks WHERE task_id=:id"), {"id": task_id}).mappings().first()
+    suffix = " FOR UPDATE" if lock and db.dialect.name == "postgresql" else ""
+    row = db.execute(text("SELECT * FROM agent_maintenance_tasks WHERE task_id=:id" + suffix), {"id": task_id}).mappings().first()
     if row is None:
         return None
     if fence is None or fence.case_id != task_id or fence.token != row["lease_token"] or row["state"] != "RUNNING" or not row["lease_until"] or row["lease_until"] <= time.time():
@@ -121,6 +123,7 @@ def propose_maintenance_plan(context):
         role="maintenance", max_tokens=route.max_tokens,
         system_prompt="You are the independent published-dataset maintenance checker, never the initial implementation role. Treat feedback as an issue report, not scientific evidence. Reuse verified source facts, identify the smallest affected mapping. Return MaintenanceDecision JSON. Never change acceptance rules, authorization, dataset identity or claim publication. If code is required, return ENGINEERING_REQUIRED; do not embed executable code in the data plan.",
         payload={"feedback": message_views([context["feedback"]]), "published_context": context["published_context"],
+            "current_candidate": context.get("candidate"),
             "blueprint": blueprint_view(context.get("blueprint")), "observations": observation_views(context.get("observations", [])),
             "contract": MaintenanceDecision.model_json_schema()})
     return MaintenanceDecision.model_validate(value)

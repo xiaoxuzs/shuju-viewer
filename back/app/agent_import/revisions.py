@@ -4,7 +4,7 @@ The control rows use the existing business DB. SQLite files/PostgreSQL schemas
 contain only projection tables, never a second copy of Case/authorization state.
 This module does not grant deployment or bypass trusted candidate verification.
 """
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import hashlib
 import hmac
 import json
@@ -103,6 +103,7 @@ class RevisionStore:
         if len(self.key) < 32 or not all(re.fullmatch(r"[0-9a-f]{64}", value) for value in (self.build, source_sha256, environment_sha256)):
             fail("REVISION_AUTHORITY_REQUIRED", "Explicit build, environment and signing authority are required")
         candidate = Path(zp_path).resolve(strict=True)
+        candidate_sha256 = hash_file(candidate)
         revision = uuid.uuid4().hex
         namespace = "viewer_revision_" + revision
         self.root.mkdir(parents=True, exist_ok=True)
@@ -115,7 +116,7 @@ class RevisionStore:
             head = db.execute(text("SELECT active_revision_id FROM dataset_revision_heads WHERE dataset_id=:id"), {"id": dataset_id}).scalar_one()
             db.execute(text("INSERT INTO dataset_revisions VALUES (:revision,:id,:slug,:base,:namespace,:backend,:build,:source,:path,:zp,:environment,'PREPARING',NULL,NULL)"),
                 {"revision": revision, "id": dataset_id, "slug": slug, "base": head, "namespace": namespace, "backend": self.engine.dialect.name,
-                 "build": self.build, "source": source_sha256, "path": str(candidate), "zp": hash_file(candidate), "environment": environment_sha256})
+                 "build": self.build, "source": source_sha256, "path": str(candidate), "zp": candidate_sha256, "environment": environment_sha256})
         # Projection preparation is an explicit recoverable step, not a cross-FS
         # atomic transaction. A failed clone remains PREPARING and is never active.
         if head == "legacy":
@@ -240,7 +241,8 @@ class RevisionStore:
                        {"id": revision, "sha": record["projection_sha256"], "receipt": json.dumps(evidence)})
         return evidence
 
-    def activate(self, revision, *, expected_base, rollback=False):
+    def activation_action(self, revision, *, expected_base, rollback=False):
+        """Validate expensive assets before opening the control write transaction."""
         row = self._row(revision)
         if row["state"] not in {"VALIDATED", "ACTIVE", "RETIRED"} or row["build_sha256"] != self.build:
             fail("REVISION_BUILD_UNAVAILABLE", "Verified compatible running build required; no fake activation")
@@ -248,7 +250,7 @@ class RevisionStore:
         record = receipt.get("record", {})
         if not hmac.compare_digest(receipt.get("signature", ""), hmac.new(self.key, canonical_bytes(record), hashlib.sha256).hexdigest()) or self.projection_digest(revision) != row["projection_sha256"] or hash_file(Path(row["zp_path"])) != row["zp_sha256"]:
             fail("REVISION_EVIDENCE_STALE", "Immutable projection, ZP or receipt changed")
-        with self.engine.begin() as db:
+        def commit(db):
             result = db.execute(text("UPDATE dataset_revision_heads SET active_revision_id=:new,generation=generation+1 WHERE dataset_id=:id AND active_revision_id=:base"),
                                 {"new": revision, "id": row["dataset_id"], "base": expected_base})
             if result.rowcount != 1:
@@ -258,8 +260,16 @@ class RevisionStore:
             generation = db.execute(text("SELECT generation FROM dataset_revision_heads WHERE dataset_id=:id"), {"id": row["dataset_id"]}).scalar_one()
             db.execute(text("INSERT INTO dataset_revision_events VALUES (:event,:dataset,:kind,:base,:new,:generation)"),
                 {"event": uuid.uuid4().hex, "dataset": row["dataset_id"], "kind": "ROLLBACK" if rollback else "PUBLISH", "base": expected_base, "new": revision, "generation": generation})
+        return commit
+
+    def activate(self, revision, *, expected_base, rollback=False, connection=None):
+        commit = self.activation_action(revision, expected_base=expected_base, rollback=rollback)
+        with (nullcontext(connection) if connection is not None else self.engine.begin()) as db:
+            commit(db)
 
     def resolve(self, slug, requested=None):
+        if not inspect(self.engine).has_table("dataset_revision_heads"):
+            return None
         with self.engine.connect() as db:
             head = db.execute(text("SELECT * FROM dataset_revision_heads WHERE slug=:slug"), {"slug": slug}).mappings().first()
         selected = requested or (head["active_revision_id"] if head else "legacy")
